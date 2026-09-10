@@ -162,8 +162,14 @@ table.grid td{padding:0 12px;height:var(--row-h);border-bottom:1px solid var(--r
  text-align:right;white-space:nowrap}
 /* The account column had 18.7px of headroom on the longest name and the table
    had zero horizontal slack. Cap it so one long name cannot start a scroll. */
-table.grid td:first-child{text-align:left;position:sticky;left:0;background:var(--surface);z-index:2;font-weight:530;
-  max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+table.grid td:first-child{text-align:left;position:sticky;left:0;background:var(--surface);z-index:2;font-weight:530}
+/* The cap goes on a block box inside the cell, never on the cell itself. A
+   max-width on a table cell is advisory — table-layout:auto sizes columns from
+   content and ignores it, so the column grows past the cap and never
+   ellipsises. Shipped once on the cell and it did nothing: a 28-character name
+   rendered at 221.8px against a 210px cap, untruncated. */
+table.grid td:first-child > .acct{display:block;max-width:210px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 table.grid tr:hover td{background:var(--surface-2)}
 table.grid tr:hover td:first-child{background:var(--surface-2)}
 tr.sect td{background:var(--plane)!important;color:var(--muted);font-size:var(--t-xs);
@@ -1156,7 +1162,7 @@ function rowHTML(r,dense,child){
   const after=`<td class="num ${a.kind==='card'&&r.after>n0(a.limit)?'neg':r.after<0?'neg':''}">${money(r.after)}</td>`;
   const cls=(r.isRollup?'rollup':'')+(child?' child':'');
   /* full name stays reachable when the column ellipsises it */
-  const name=`<td title="${esc(a.name)}">${esc(a.name)}</td>`;
+  const name=`<td title="${esc(a.name)}"><span class="acct">${esc(a.name)}</span></td>`;
   const intr=`<td class="num ${r.inGrace?'pos':'dim'}" ${r.inGrace?'title="In grace — no interest while the statement balance is paid in full"':''}>${
     KIND_DEBT(a.kind)?(r.inGrace?'grace':money(r.weekInterest)):'—'}</td>`;
   if(dense)return`<tr class="${cls}">${name}${bal}
