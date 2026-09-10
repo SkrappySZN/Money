@@ -419,6 +419,15 @@ tr.is-paid .acct{color:var(--ink-secondary)}
 .pulllist li.more{color:var(--ink-muted);justify-content:flex-start}
 .pulllist b{font-weight:var(--weight-medium)}
 
+/* Direction, in the month view. A debt falling and a bucket filling are
+   both good, so the class carries the judgement and the sign carries the
+   arithmetic — they do not always agree. */
+td.chg{font-variant-numeric:tabular-nums;font-weight:var(--weight-medium)}
+td.chg.is-good{color:var(--positive)}
+td.chg.is-bad{color:var(--negative)}
+td.chg.is-flat{color:var(--ink-muted);font-weight:var(--weight-regular)}
+td.chg.is-plain{color:var(--ink-secondary);font-weight:var(--weight-regular)}
+
 /* ── The allocation sheet ────────────────────────────────────────
    Its own density so all 27 rows clear the fold. 3px of padding on a
    13px/1.35 cell gives a ~25px step against the ~36px the rest of the
@@ -1953,6 +1962,175 @@ function usageBar(u){
   const w=clamp(u*100,0,100),c=u>0.9?'max':u>0.6?'hi':u>0.3?'mid':'';
   return`<span class="bar"><i class="${c}" style="width:${w}%"></i></span>`;
 }
+/* The month view is read-only on purpose: a month is five weeks of
+   decisions already made, and there is no cell here that maps to one
+   thing you could sensibly edit. Editing stays on the week. */
+function viewAllocationMonth(el){
+  const ym=currentMonth(),M=computeMonth(ym),ms=monthKeys(),i=ms.indexOf(ym);
+  const T=M.totals;
+  const dir=T.change<-0.005?'is-good':T.change>0.005?'is-bad':'is-flat';
+  const word=T.change<-0.005?'Down':T.change>0.005?'Up':'Flat';
+
+  el.innerHTML=`<main class="page sheet-page">
+  <header class="masthead sheet-masthead">
+    <div><h1 class="page-title">${monthLabel(ym)}</h1>
+      <div class="dateline">${M.weeks.length} weeks · ${weekLabel(M.weeks[0])} to ${weekLabel(M.weeks[M.weeks.length-1])}</div></div>
+    <div class="sheet-tally">
+      <span class="t-label">Card debt ${esc(word)}</span>
+      <span class="t-value ${dir}">${money(Math.abs(T.change))}</span>
+    </div>
+    <div class="controls">
+      <span class="seg">
+        <button data-mode="week" aria-pressed="false">Week</button>
+        <button data-mode="month" aria-pressed="true">Month</button>
+      </span>
+      <button class="ctl" data-mgo="prev" aria-label="Previous month" ${i<=0?'disabled':''}>←</button>
+      <span class="jump"><select id="monthPick" aria-label="Jump to month">
+        <option selected disabled>Jump to month</option>
+        ${ms.slice().reverse().map(x=>`<option value="${x}">${monthLabel(x)}</option>`).join('')}
+      </select><span class="caret"><svg width="9" height="9" viewBox="0 0 12 12" fill="none"
+        stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M2.5 4.5L6 8l3.5-3.5"/></svg></span></span>
+      <button class="ctl" data-mgo="next" aria-label="Next month" ${i>=ms.length-1?'disabled':''}>→</button>
+    </div>
+  </header>
+
+  <div class="gridwrap sheet-grid"><table class="grid">
+    <thead><tr>${MONTH_COLS.map((c,ci)=>`<th scope="col"${ci?' class="num"':''}>${c.label}</th>`).join('')}</tr></thead>
+    <tbody>${monthBody(M)}</tbody>
+  </table></div>
+</main>`;
+
+  $('#monthPick').onchange=e=>{UI.month=e.target.value;render()};
+}
+
+/* ── months ───────────────────────────────────────────────────────
+   A week belongs to the month its Friday falls in — the week is named
+   by its start everywhere else, so it is filed by its start here too.
+   September 2026 has five of them; the count is shown, because a
+   five-week month moves more money and the totals look wrong without it.
+
+   Opening is the first week's balance as recorded. Closing is the last
+   week's `after`, not the following week's balance, so a month reads as
+   what its own weeks did rather than depending on a week outside it. */
+const monthOf=k=>k.slice(0,7);
+const monthKeys=()=>[...new Set(weekKeys().map(monthOf))].sort();
+const MONTH_NAMES=['January','February','March','April','May','June','July',
+  'August','September','October','November','December'];
+const monthLabel=ym=>`${MONTH_NAMES[+ym.slice(5,7)-1]} ${ym.slice(0,4)}`;
+function currentMonth(){
+  const ms=monthKeys();
+  if(UI.month&&ms.includes(UI.month))return UI.month;
+  const m=monthOf(currentWeek());
+  return ms.includes(m)?m:(ms[ms.length-1]||m);
+}
+function computeMonth(ym){
+  const wks=weekKeys().filter(k=>monthOf(k)===ym);
+  if(!wks.length)return null;
+  const per=wks.map(computeWeek);
+  const first=per[0],last=per[per.length-1];
+  const byId={},rows=[];
+  for(const r of first.rows){
+    const m={a:r.a,isRollup:r.isRollup,opening:r.balance,
+             assigned:0,interest:0,closing:r.after};
+    byId[r.a.id]=m;rows.push(m);
+  }
+  for(const C of per)for(const r of C.rows){
+    const m=byId[r.a.id];if(!m)continue;
+    m.assigned=r2(m.assigned+n0(r.total));
+    m.interest=r2(m.interest+n0(r.weekInterest));
+  }
+  for(const r of last.rows){
+    const m=byId[r.a.id];if(!m)continue;
+    m.closing=r.after;
+  }
+  for(const m of rows){
+    m.change=r2(m.closing-m.opening);
+    /* What payments and interest predict the month should have ended at.
+       The gap to the real closing balance is everything the ledger did not
+       assign: new charges on a card, spending out of a bucket, or a balance
+       corrected against the bank. Without this column the row simply does
+       not add up, and the first instinct is to distrust the arithmetic. */
+    const modelled=m.a.passthrough?r2(m.opening)
+      :KIND_DEBT(m.a.kind)?r2(m.opening+m.interest-m.assigned)
+      :r2(m.opening+m.assigned);
+    m.drift=r2(m.closing-modelled);
+    if(m.a.kind==='card'&&m.a.limit>0){
+      m.usageOpen=m.opening/m.a.limit;
+      m.usageClose=m.closing/m.a.limit;
+    }
+  }
+  const cards=rows.filter(m=>m.a.kind==='card');
+  const sumOf=f=>r2(cards.reduce((s,m)=>s+n0(m[f]),0));
+  const limit=r2(cards.reduce((s,m)=>s+n0(m.a.limit),0));
+  const totals={weeks:wks.length,limit,
+    opening:sumOf('opening'),assigned:sumOf('assigned'),interest:sumOf('interest'),
+    closing:sumOf('closing'),change:r2(sumOf('closing')-sumOf('opening')),
+    drift:sumOf('drift'),
+    usageOpen:limit?sumOf('opening')/limit:0,usageClose:limit?sumOf('closing')/limit:0};
+  return {ym,weeks:wks,rows,byId,totals};
+}
+/* A debt falling is good news and a bucket filling is good news; the two
+   run in opposite directions, so direction alone cannot carry the colour. */
+function changeCell(m){
+  const v=m.change,flat=Math.abs(v)<0.005;
+  let cls='is-flat';
+  if(!flat){
+    if(KIND_DEBT(m.a.kind))cls=v<0?'is-good':'is-bad';
+    else cls=v>0?'is-good':'is-plain';
+  }
+  const sign=flat?'':(v>0?'+':'−');
+  return `<td class="num chg ${cls}">${flat?'—':sign+money(Math.abs(v)).replace('−','')}</td>`;
+}
+const MONTH_COLS=[
+  {label:'Account',cell:m=>`<th scope="row" title="${esc(m.a.name)}"><span class="acct">${esc(m.a.name)}</span></th>`},
+  {label:'Limit',cell:m=>`<td class="num dim">${m.a.limit?money0(m.a.limit):'—'}</td>`},
+  {label:'Opening',cell:m=>`<td class="num">${money(m.opening)}</td>`},
+  {label:'Usage open',cell:m=>`<td class="num dim">${m.usageOpen!=null?pct(m.usageOpen):'—'}</td>`},
+  {label:'Assigned',cell:m=>`<td class="num${n0(m.assigned)?'':' dim'}">${money(m.assigned)}</td>`},
+  {label:'Interest',cell:m=>`<td class="num dim">${KIND_DEBT(m.a.kind)?money(m.interest):'—'}</td>`},
+  {label:'Charges',cell:m=>`<td class="num ${Math.abs(n0(m.drift))<0.005?'dim':(m.drift>0&&KIND_DEBT(m.a.kind)?'neg':'')}"`
+    +` title="New charges, spending, or a balance corrected against the bank — whatever payments and interest do not explain">`
+    +`${Math.abs(n0(m.drift))<0.005?'—':(m.drift>0?'+':'−')+money(Math.abs(m.drift)).replace('−','')}</td>`},
+  {label:'Closing',cell:m=>`<td class="num">${money(m.closing)}</td>`},
+  {label:'Usage close',cell:m=>`<td class="num dim">${m.usageClose!=null?pct(m.usageClose):'—'}</td>`},
+  {label:'Change',cell:changeCell},
+];
+function monthBody(M){
+  const out=[],rendered=new Set();
+  for(const g of GROUPS){
+    const rows=M.rows.filter(m=>(m.a.group||'buckets')===g.id);
+    if(!rows.length)continue;
+    out.push(`<tr class="sect"><th scope="rowgroup" colspan="${MONTH_COLS.length}"><span>${esc(g.label)}</span></th></tr>`);
+    for(const m of rows){
+      if(rendered.has(m.a.id))continue;
+      out.push(monthRow(m,false));rendered.add(m.a.id);
+      if(m.a.rollup)for(const cid of m.a.rollup){
+        const c=M.byId[cid];if(!c||rendered.has(cid))continue;
+        out.push(monthRow(c,true));rendered.add(cid);
+      }
+    }
+    if(g.id==='cards'){
+      const T=M.totals;
+      out.push(`<tr class="tot"><th scope="row">Total</th>`
+        +`<td class="num">${money0(T.limit)}</td>`
+        +`<td class="num">${money(T.opening)}</td>`
+        +`<td class="num">${pct(T.usageOpen)}</td>`
+        +`<td class="num">${money(T.assigned)}</td>`
+        +`<td class="num">${money(T.interest)}</td>`
+        +`<td class="num">${Math.abs(T.drift)<0.005?'—':(T.drift>0?'+':'−')+money(Math.abs(T.drift)).replace('−','')}</td>`
+        +`<td class="num">${money(T.closing)}</td>`
+        +`<td class="num">${pct(T.usageClose)}</td>`
+        +changeCell({a:{kind:'card'},change:T.change})+`</tr>`);
+    }
+  }
+  return out.join('');
+}
+function monthRow(m,child){
+  const cls=(m.isRollup?'rollup':'')+(child?' child':'');
+  return `<tr class="${cls}">${MONTH_COLS.map(c=>c.cell(m)).join('')}</tr>`;
+}
+
 /* ── Allocation ───────────────────────────────────────────────────
    The sheet, alone on its own tab, replacing a spreadsheet where every
    line was visible at once. That is the whole brief: all 27 rows on
@@ -1964,6 +2142,7 @@ function usageBar(u){
    Week navigation rides in the masthead because this is now where the
    week is worked; This Week keeps its own copy for reading. */
 function viewAllocation(el){
+  if(UI.sheetMode==='month')return viewAllocationMonth(el);
   const k=currentWeek(),C=computeWeek(k),T=C.totals,ks=weekKeys();
   const i=ks.indexOf(k);
   const cols=sheetCols();
@@ -1980,6 +2159,10 @@ function viewAllocation(el){
       <span class="t-value ${state}">${money(off<0.005?0:off)}</span>
     </div>
     <div class="controls">
+      <span class="seg">
+        <button data-mode="week" aria-pressed="true">Week</button>
+        <button data-mode="month" aria-pressed="false">Month</button>
+      </span>
       <button class="ctl" data-act="pullfwd" title="Rewrite Balance from last week's After column">Pull forward</button>
       <button class="ctl" data-act="addacct">+ Account</button>
       <button class="ctl" data-act="undo" title="Undo last change (⌘Z)">Undo</button>
@@ -2832,6 +3015,11 @@ document.addEventListener('click',e=>{
     if(ks[j]){UI.week=ks[j];render()}return;
   }
   if(d.dense!=null){UI.dense=d.dense==='1';render();return}
+  if(d.mode){UI.sheetMode=d.mode;render();return}
+  if(d.mgo){
+    const ms=monthKeys(),j=ms.indexOf(currentMonth())+(d.mgo==='prev'?-1:1);
+    if(ms[j]){UI.month=ms[j];render()}return;
+  }
   if(d.strat){UI.strategy=d.strat;render();return}
   if(d.range){UI.histRange=d.range;render();return}
   if(d.porder){
