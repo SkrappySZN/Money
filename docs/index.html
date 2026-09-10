@@ -490,7 +490,7 @@ td.chg.is-plain{color:var(--ink-secondary);font-weight:var(--weight-regular)}
 .modal .fieldrow input:focus,.modal .fieldrow select:focus{outline:none;
   border-bottom-color:var(--accent)}
 
-/* A finalised week reads as settled rather than disabled: the figures stay
+/* A finalized week reads as settled rather than disabled: the figures stay
    at full strength because they are still the record, but nothing offers a
    hover or a caret, so there is no invitation to type. */
 .sealed{color:var(--positive);font-weight:var(--weight-medium)}
@@ -502,7 +502,7 @@ td.chg.is-plain{color:var(--ink-secondary);font-weight:var(--weight-regular)}
 .sheet-page input.cell[readonly]:hover,.sheet-page input.cell:disabled:hover{
   border-bottom-color:transparent!important}
 .sheet-page input.cell-date:disabled::-webkit-calendar-picker-indicator{display:none}
-/* An unset date keeps its em-dash when the week is finalised. The rule above
+/* An unset date keeps its em-dash when the week is finalized. The rule above
    forces text back to full strength so readonly figures stay legible, and
    that was overriding the transparent fill that hides "mm/dd/yyyy". */
 td.dcell.is-empty input:disabled{color:transparent;-webkit-text-fill-color:transparent}
@@ -1286,6 +1286,48 @@ function themeBtnHTML(){
 /* ── state ────────────────────────────────────────────────────────── */
 let S=null, UI={tab:'week', week:null, strategy:'avalanche', extra:null, histRange:'all', histMetric:'debt'};
 
+/* ── remembering where you were ───────────────────────────────────
+   UI lived only in memory, so every refresh dropped you back on This
+   Week — mid-entry on the sheet, that is the wrong page.
+
+   Split by how long each thing should outlive the tab. Which view you
+   prefer is a lasting preference and goes to localStorage. WHICH WEEK
+   you are on is a position in the data, and belongs to the sitting:
+   sessionStorage survives a refresh, which is what was asked for, and
+   clears when the tab closes — so opening the app next Friday lands on
+   the current week rather than the one you were last looking at.
+
+   Both are wrapped: storage throws outright in some privacy modes, and
+   a ledger that will not open is a worse failure than a forgotten tab. */
+const UI_KEY='ccb.ui', UI_LASTING=['tab','sheetMode','strategy','histRange','histMetric','dense','showOk','showArchived'];
+const UI_SESSION=['week','month'];
+let UI_LAST='';
+function saveUI(){
+  const keep={};for(const k of UI_LASTING)if(UI[k]!==undefined)keep[k]=UI[k];
+  const pos={};for(const k of UI_SESSION)if(UI[k]!=null)pos[k]=UI[k];
+  /* render() runs on every keystroke; only touch storage when this
+     actually changed. */
+  const sig=JSON.stringify([keep,pos]);
+  if(sig===UI_LAST)return;
+  UI_LAST=sig;
+  try{
+    localStorage.setItem(UI_KEY,JSON.stringify(keep));
+    sessionStorage.setItem(UI_KEY,JSON.stringify(pos));
+  }catch(e){}
+}
+function loadUI(){
+  try{
+    const a=JSON.parse(localStorage.getItem(UI_KEY)||'{}');
+    for(const k of UI_LASTING)if(a[k]!==undefined)UI[k]=a[k];
+    const b=JSON.parse(sessionStorage.getItem(UI_KEY)||'{}');
+    for(const k of UI_SESSION)if(b[k]!=null)UI[k]=b[k];
+  }catch(e){}
+  /* Never restore onto something that is no longer there. */
+  if(UI.tab&&!TABS.some(t=>t.id===UI.tab))UI.tab='week';
+  if(UI.week&&!(S&&S.weeks&&S.weeks[UI.week]))UI.week=null;
+  if(UI.month&&!monthKeys().includes(UI.month))UI.month=null;
+}
+
 const GROUPS=[
   {id:'checking', label:'Checking'},
   {id:'buckets',  label:'Buckets & Sinking Funds'},
@@ -1838,7 +1880,7 @@ let RENDERING=false;
 function render(){
   if(RENDERING)return;
   RENDERING=true;
-  try{renderInner()}finally{RENDERING=false}
+  try{renderInner();saveUI()}finally{RENDERING=false}
 }
 function renderInner(){
   /* a copy published without seed data starts here — nothing personal ships in the page */
@@ -2263,7 +2305,7 @@ function viewAllocation(el){
   <header class="masthead sheet-masthead">
     <div><h1 class="page-title">${weekLabel(k)}</h1>
       <div class="dateline">${weekLong(k)}${isPlanned(k)?' · planned':''}${
-        locked?' · <span class="sealed">finalised</span>':''}</div></div>
+        locked?' · <span class="sealed">finalized</span>':''}</div></div>
     <div class="sheet-tally">
       <span class="t-label">${label}</span>
       <span class="t-value ${state}">${money(off<0.005?0:off)}</span>
@@ -2275,7 +2317,7 @@ function viewAllocation(el){
       </span>
       <button class="ctl${locked?' ctl-sealed':''}" data-act="lockweek"
         title="${locked?'Reopen this week for editing':'Close this week to editing'}">${
-        locked?'Reopen':'Finalise'}</button>
+        locked?'Reopen':'Finalize'}</button>
       <button class="ctl" data-act="pullfwd" title="Rewrite Balance from last week's After column">Pull forward</button>
       <button class="ctl" data-act="addacct">+ Account</button>
       <button class="ctl" data-act="delweek" title="Delete this week, or the weeks after it">Delete week…</button>
@@ -3009,7 +3051,7 @@ function rollDate(d,from){
   while(x<from&&guard++<36){const t=parseISO(x);t.setMonth(t.getMonth()+1);x=iso(t)}
   return x;
 }
-/* ── finalising a week ────────────────────────────────────────────
+/* ── finalizing a week ────────────────────────────────────────────
    Closing the books on a week that has actually been paid. Reversible,
    because a bank statement can disagree a day later and a lock you cannot
    undo is a trap rather than a safeguard — but deliberate in both
@@ -3018,7 +3060,7 @@ function toggleLock(){
   const k=currentWeek();
   if(isLocked(k)){
     confirmModal('Reopen this week',
-      `${weekLabel(k)} is finalised. Reopening lets its balances and allocations be `
+      `${weekLabel(k)} is finalized. Reopening lets its balances and allocations be `
       +`edited again. Anything you change here does not move later weeks on its own — `
       +`use Pull forward on the next week if a balance changes.`,
       'Reopen for editing',()=>{
@@ -3032,13 +3074,13 @@ function toggleLock(){
   const warn=off>=0.005
     ? ` This week is not balanced — ${money(off)} is still ${C.totals.unallocated>0?'unassigned':'over'}.`
     : '';
-  confirmModal('Finalise this week',
+  confirmModal('Finalize this week',
     `${weekLabel(k)} will be closed to editing: balances, allocations, dates and the paid `
     +`ticks all stop responding. ${paid} of ${payable} rows are ticked paid.${warn} `
     +`You can reopen it at any time.`,
-    'Finalise',()=>{
+    'Finalize',()=>{
       pushUndo(null);S.weeks[k].locked=true;save();render();
-      toast(`${weekLabel(k)} finalised — reopen it from the same button`);
+      toast(`${weekLabel(k)} finalized — reopen it from the same button`);
     });
 }
 
@@ -3062,7 +3104,7 @@ function deleteWeeks(){
     toast(`${list.length} ${list.length===1?'week':'weeks'} removed — ⌘Z to undo`);
   };
   if(ks.length<=1){toast('This is the only week — nothing to delete');return}
-  if(isLocked(k)&&!after.length){toast(`${weekLabel(k)} is finalised — reopen it first`);return}
+  if(isLocked(k)&&!after.length){toast(`${weekLabel(k)} is finalized — reopen it first`);return}
   /* Name what survives, not just what goes. The two options sit next to each
      other and differ by one word otherwise. */
   const body=after.length
@@ -3092,7 +3134,7 @@ function deleteWeeks(){
    correcting a balance against the bank shows what the projection missed. */
 function pullForward(){
   const k=currentWeek(),ks=weekKeys(),i=ks.indexOf(k);
-  if(isLocked(k)){toast(`${weekLabel(k)} is finalised — reopen it first`);return}
+  if(isLocked(k)){toast(`${weekLabel(k)} is finalized — reopen it first`);return}
   if(i<=0){toast('No earlier week to pull from');return}
   const prev=ks[i-1],P=computeWeek(prev);
   const changes=[];
@@ -3148,7 +3190,7 @@ function newWeek(){
 }
 
 /* ── input ────────────────────────────────────────────────────────── */
-/* A finalised week is closed to editing. The guard lives in the setter, not
+/* A finalized week is closed to editing. The guard lives in the setter, not
    only in the markup: readonly attributes are a hint to a person, and every
    other path into week data -- a stray event, a paste, a handler firing after
    a re-render -- goes through here. */
@@ -3199,7 +3241,7 @@ document.addEventListener('input',e=>{
 document.addEventListener('change',e=>{
   const t=e.target,d=t.dataset;
   if(d.paid!=null&&d.paid!==''){
-    if(isLocked(currentWeek())){t.checked=!t.checked;toast('This week is finalised');return}
+    if(isLocked(currentWeek())){t.checked=!t.checked;toast('This week is finalized');return}
     pushUndo(null);entryOf(currentWeek(),d.paid).paid=t.checked;save();render();return}
   if(d.step){const st=planSteps().find(x=>x.id===d.step);if(st){st.on=t.checked;save();render()}return}
   if(d.cal){const c=S.plan.calendar.find(x=>x.id===d.cal);if(c){c.done=t.checked;save();render()}return}
@@ -3446,6 +3488,7 @@ function boot(){
       </div>`);
   }
   const fresh=!load();
+  loadUI();
   render();
   if(typeof syncInit==='function')syncInit().catch(e=>console.warn('sync',e));
   if(fresh&&Object.keys(S.weeks).length)toast(`Imported ${Object.keys(S.weeks).length} weeks from your spreadsheet`);
