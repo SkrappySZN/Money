@@ -490,6 +490,25 @@ td.chg.is-plain{color:var(--ink-secondary);font-weight:var(--weight-regular)}
 .modal .fieldrow input:focus,.modal .fieldrow select:focus{outline:none;
   border-bottom-color:var(--accent)}
 
+/* A finalised week reads as settled rather than disabled: the figures stay
+   at full strength because they are still the record, but nothing offers a
+   hover or a caret, so there is no invitation to type. */
+.sealed{color:var(--positive);font-weight:var(--weight-medium)}
+.ctl-sealed{color:var(--positive)}
+.ctl-sealed:hover{color:var(--positive)}
+.sheet-page input.cell[readonly],.sheet-page input.cell:disabled{
+  color:var(--ink);cursor:default;border-bottom-color:transparent!important;
+  opacity:1;-webkit-text-fill-color:var(--ink)}
+.sheet-page input.cell[readonly]:hover,.sheet-page input.cell:disabled:hover{
+  border-bottom-color:transparent!important}
+.sheet-page input.cell-date:disabled::-webkit-calendar-picker-indicator{display:none}
+/* An unset date keeps its em-dash when the week is finalised. The rule above
+   forces text back to full strength so readonly figures stay legible, and
+   that was overriding the transparent fill that hides "mm/dd/yyyy". */
+td.dcell.is-empty input:disabled{color:transparent;-webkit-text-fill-color:transparent}
+.paidbox:disabled{cursor:default;opacity:1}
+.paidbox:disabled:not(:checked){border-color:var(--rule)}
+
 /* ── The allocation sheet ────────────────────────────────────────
    Its own density so all 27 rows clear the fold. 3px of padding on a
    13px/1.35 cell gives a ~25px step against the ~36px the rest of the
@@ -2238,11 +2257,13 @@ function viewAllocation(el){
   const off=Math.abs(T.unallocated);
   const state=off<0.005?'is-settled':(T.unallocated>0?'is-idle':'is-over');
   const label=off<0.005?'Balanced':(T.unallocated>0?'Unassigned':'Over by');
+  const locked=isLocked(k);
 
   el.innerHTML=`<main class="page sheet-page">
   <header class="masthead sheet-masthead">
     <div><h1 class="page-title">${weekLabel(k)}</h1>
-      <div class="dateline">${weekLong(k)}${isPlanned(k)?' · planned':''}</div></div>
+      <div class="dateline">${weekLong(k)}${isPlanned(k)?' · planned':''}${
+        locked?' · <span class="sealed">finalised</span>':''}</div></div>
     <div class="sheet-tally">
       <span class="t-label">${label}</span>
       <span class="t-value ${state}">${money(off<0.005?0:off)}</span>
@@ -2252,6 +2273,9 @@ function viewAllocation(el){
         <button data-mode="week" aria-pressed="true">Week</button>
         <button data-mode="month" aria-pressed="false">Month</button>
       </span>
+      <button class="ctl${locked?' ctl-sealed':''}" data-act="lockweek"
+        title="${locked?'Reopen this week for editing':'Close this week to editing'}">${
+        locked?'Reopen':'Finalise'}</button>
       <button class="ctl" data-act="pullfwd" title="Rewrite Balance from last week's After column">Pull forward</button>
       <button class="ctl" data-act="addacct">+ Account</button>
       <button class="ctl" data-act="delweek" title="Delete this week, or the weeks after it">Delete week…</button>
@@ -2301,7 +2325,7 @@ const dimCell=v=>`<td class="num dim">${v}</td>`;
 function cellNum(r,f,cls=''){
   const a=r.a,id=a.id;
   if(r.isRollup||a.kind==='income')return `<td class="num dim">${money(n0(r[f]))}</td>`;
-  const ro=a.autoOther==='cardMinShortfall'&&f==='other';
+  const ro=(a.autoOther==='cardMinShortfall'&&f==='other')||isLocked(currentWeek());
   return `<td class="num"><input class="cell ${cls}${n0(r[f])===0?' is-zero':''}" data-fmt="money"`
     +` data-k="${id}:${f}" value="${moneyInput(n0(r[f]))}"`
     +`${ro?' readonly title="Auto: card minimums not paid directly"':''}></td>`;
@@ -2312,6 +2336,7 @@ function cellDate(r,f){
   if(!KIND_DEBT(a.kind))return dimCell('—');
   const v=r[f]||'';
   return `<td class="num dcell${v?'':' is-empty'}"><input class="cell cell-date" type="date"`
+    +`${isLocked(currentWeek())?' disabled':''}`
     +` data-k="${id}:${f}" value="${v}"></td>`;
 }
 
@@ -2323,6 +2348,7 @@ const SHEET_COLS=[
    cell:r=>`<th scope="row" title="${esc(r.a.name)}">`
      +(r.isRollup||r.a.kind==='income'?''
        :`<input type="checkbox" class="paidbox" data-paid="${r.a.id}"${r.e&&r.e.paid?' checked':''}`
+        +`${isLocked(currentWeek())?' disabled':''}`
         +` aria-label="Mark ${esc(r.a.name)} paid this week">`)
      +`<span class="acct">${esc(r.a.name)}</span></th>`},
 
@@ -2342,7 +2368,8 @@ const SHEET_COLS=[
   {k:'balance',label:'Balance',
    cell:r=>r.isRollup||r.a.kind==='income'
      ?`<td class="num dim">${money(r.balance)}</td>`
-     :`<td class="num"><input class="cell" data-fmt="money" data-k="${r.a.id}:balance" value="${moneyInput(r.balance)}">${driftTag(r)}</td>`},
+     :`<td class="num"><input class="cell" data-fmt="money" data-k="${r.a.id}:balance"`
+       +`${isLocked(currentWeek())?' readonly':''} value="${moneyInput(r.balance)}">${driftTag(r)}</td>`},
   {k:'usage',label:'Usage',
    cell:r=>dimCell(r.a.kind==='card'&&r.a.limit?usageBar(n0(r.usage))+pct(n0(r.usage)):'—')},
 
@@ -2351,6 +2378,7 @@ const SHEET_COLS=[
   {k:'minAmt',label:'Min due /mo',
    cell:r=>r.isRollup||r.a.kind==='income'?'<td></td>'
      :`<td class="num"><input class="cell${n0(r.minAmt)===0?' is-zero':''}" data-fmt="money"`
+       +`${isLocked(currentWeek())?' readonly':''}`
        +` data-k="${r.a.id}:minAmt" value="${moneyInput(n0(r.minAmt))}"></td>`},
 
   /* Derived, never typed: the monthly split MIN_DIVISOR ways. */
@@ -2981,6 +3009,39 @@ function rollDate(d,from){
   while(x<from&&guard++<36){const t=parseISO(x);t.setMonth(t.getMonth()+1);x=iso(t)}
   return x;
 }
+/* ── finalising a week ────────────────────────────────────────────
+   Closing the books on a week that has actually been paid. Reversible,
+   because a bank statement can disagree a day later and a lock you cannot
+   undo is a trap rather than a safeguard — but deliberate in both
+   directions, so neither happens by brushing past a control. */
+function toggleLock(){
+  const k=currentWeek();
+  if(isLocked(k)){
+    confirmModal('Reopen this week',
+      `${weekLabel(k)} is finalised. Reopening lets its balances and allocations be `
+      +`edited again. Anything you change here does not move later weeks on its own — `
+      +`use Pull forward on the next week if a balance changes.`,
+      'Reopen for editing',()=>{
+        pushUndo(null);delete S.weeks[k].locked;save();render();toast(`${weekLabel(k)} reopened`);
+      });
+    return;
+  }
+  const C=computeWeek(k),off=Math.abs(C.totals.unallocated);
+  const paid=C.rows.filter(r=>r.e&&r.e.paid).length;
+  const payable=C.rows.filter(r=>!r.isRollup&&r.a.kind!=='income').length;
+  const warn=off>=0.005
+    ? ` This week is not balanced — ${money(off)} is still ${C.totals.unallocated>0?'unassigned':'over'}.`
+    : '';
+  confirmModal('Finalise this week',
+    `${weekLabel(k)} will be closed to editing: balances, allocations, dates and the paid `
+    +`ticks all stop responding. ${paid} of ${payable} rows are ticked paid.${warn} `
+    +`You can reopen it at any time.`,
+    'Finalise',()=>{
+      pushUndo(null);S.weeks[k].locked=true;save();render();
+      toast(`${weekLabel(k)} finalised — reopen it from the same button`);
+    });
+}
+
 /* ── deleting weeks ───────────────────────────────────────────────
    Forty weeks came across from the spreadsheet, four of them dated ahead
    and holding figures typed in advance rather than anything that happened.
@@ -3001,6 +3062,7 @@ function deleteWeeks(){
     toast(`${list.length} ${list.length===1?'week':'weeks'} removed — ⌘Z to undo`);
   };
   if(ks.length<=1){toast('This is the only week — nothing to delete');return}
+  if(isLocked(k)&&!after.length){toast(`${weekLabel(k)} is finalised — reopen it first`);return}
   /* Name what survives, not just what goes. The two options sit next to each
      other and differ by one word otherwise. */
   const body=after.length
@@ -3030,6 +3092,7 @@ function deleteWeeks(){
    correcting a balance against the bank shows what the projection missed. */
 function pullForward(){
   const k=currentWeek(),ks=weekKeys(),i=ks.indexOf(k);
+  if(isLocked(k)){toast(`${weekLabel(k)} is finalised — reopen it first`);return}
   if(i<=0){toast('No earlier week to pull from');return}
   const prev=ks[i-1],P=computeWeek(prev);
   const changes=[];
@@ -3085,8 +3148,14 @@ function newWeek(){
 }
 
 /* ── input ────────────────────────────────────────────────────────── */
+/* A finalised week is closed to editing. The guard lives in the setter, not
+   only in the markup: readonly attributes are a hint to a person, and every
+   other path into week data -- a stray event, a paste, a handler firing after
+   a re-render -- goes through here. */
+const isLocked=k=>!!(S.weeks[k]&&S.weeks[k].locked);
 function setWeekField(key,val){
   const k=currentWeek(),w=S.weeks[k];
+  if(isLocked(k))return;
   if(key==='income'){
     w.income=n0(val);
     const inc=liveAccounts().find(a=>a.kind==='income');
@@ -3130,6 +3199,7 @@ document.addEventListener('input',e=>{
 document.addEventListener('change',e=>{
   const t=e.target,d=t.dataset;
   if(d.paid!=null&&d.paid!==''){
+    if(isLocked(currentWeek())){t.checked=!t.checked;toast('This week is finalised');return}
     pushUndo(null);entryOf(currentWeek(),d.paid).paid=t.checked;save();render();return}
   if(d.step){const st=planSteps().find(x=>x.id===d.step);if(st){st.on=t.checked;save();render()}return}
   if(d.cal){const c=S.plan.calendar.find(x=>x.id===d.cal);if(c){c.done=t.checked;save();render()}return}
@@ -3188,6 +3258,7 @@ document.addEventListener('click',e=>{
   switch(d.act){
     case'pullfwd':pullForward();break;
     case'delweek':deleteWeeks();break;
+    case'lockweek':toggleLock();break;
     case'undo':undo();break;
     case'redo':redo();break;
     case'newweek':newWeek();break;
