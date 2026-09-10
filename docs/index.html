@@ -1908,6 +1908,25 @@ let SYNC={status:'off',at:null,msg:'',busy:false};
 let pushTimer=null;
 
 /* ── session ──────────────────────────────────────────────────────── */
+/* Writing sync bookkeeping must never look like a user edit — save() schedules a
+   push, so using it here made every successful save schedule the next one. */
+function saveLocal(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+/* jsonb does not preserve key order, so comparing JSON.stringify output to what
+   Postgres hands back never matches. Sort keys before comparing. */
+function stableStringify(v){
+  if(v===null||typeof v!=='object')return JSON.stringify(v);
+  if(Array.isArray(v))return '['+v.map(stableStringify).join(',')+']';
+  return '{'+Object.keys(v).sort().map(k=>JSON.stringify(k)+':'+stableStringify(v[k])).join(',')+'}';
+}
+function markSynced(row){
+  S.sync={version:row.version,at:row.updated_at,email:SESSION.email,dirty:false};
+  saveLocal();setSync('ok','');
+}
+function adoptRemote(row){
+  S=row.data;migrate();
+  S.sync={version:row.version,at:row.updated_at,email:SESSION.email,dirty:false};
+  saveLocal();UI.week=null;render();setSync('ok','');
+}
 function loadSession(){try{SESSION=JSON.parse(localStorage.getItem(SESSKEY)||'null')}catch(e){SESSION=null}}
 function saveSession(){try{SESSION?localStorage.setItem(SESSKEY,JSON.stringify(SESSION))
   :localStorage.removeItem(SESSKEY)}catch(e){}}
@@ -1979,29 +1998,28 @@ async function pushRow(){
   if(!r.ok){setSync('error','Could not save — '+r.status);return}
   const rows=await r.json();
   if(!rows.length){await reconcile();return}
-  S.sync={version:rows[0].version,at:rows[0].updated_at,email:SESSION.email,dirty:false};
-  save();setSync('ok','');
+  markSynced(rows[0]);
 }
 /* remote moved under us — let the person choose, never guess */
 async function reconcile(){
   const row=await pullRow();
-  if(!row){S.sync={...(S.sync||{}),version:0};save();return pushRow()}
+  if(!row){S.sync={...(S.sync||{}),version:0};saveLocal();return pushRow()}
   /* an empty row is a placeholder, not a version worth losing sleep over */
   if(!weekCount(row.data)&&weekCount(S)){
     S.sync={version:row.version,at:row.updated_at,email:SESSION.email,dirty:true};
-    save();return pushRow();
+    saveLocal();return pushRow();
   }
+  /* same content, different version counter — adopt theirs and move on */
+  if(stableStringify(blobOf())===stableStringify(row.data)){markSynced(row);return}
   setSync('conflict','Another device saved first');
   confirmModal('This was changed on another device',
     `Here: ${weekCount(S)} weeks, saved ${S.sync&&S.sync.at?timeAgo(S.sync.at):'never'}. `+
     `There: ${weekCount(row.data)} weeks, saved ${timeAgo(row.updated_at)}. Keeping one replaces the other.`,
     'Keep what is here',()=>{
       S.sync={version:row.version,at:row.updated_at,email:SESSION.email,dirty:true};
-      save();pushRow();
+      saveLocal();pushRow();
     },'Take the other one',()=>{
-      S=row.data;migrate();
-      S.sync={version:row.version,at:row.updated_at,email:SESSION.email,dirty:false};
-      save();UI.week=null;render();setSync('ok','');toast('Pulled from the other device');
+      adoptRemote(row);toast('Pulled from the other device');
     });
 }
 async function firstSync(){
@@ -2018,28 +2036,33 @@ async function firstSync(){
     if(!localWeeks&&!remoteWeeks){setSync('ok','Nothing to sync yet — import a backup');return}
     if(!remoteWeeks){                           // remote is an empty placeholder — ours wins, no prompt
       S.sync={version:row.version,at:row.updated_at,email:SESSION.email,dirty:true};
-      save();await pushRow();toast('Ledger uploaded');return;
+      saveLocal();await pushRow();toast('Ledger uploaded');return;
     }
     if(!localWeeks){                            // fresh device
-      S=row.data;migrate();
-      S.sync={version:row.version,at:row.updated_at,email:SESSION.email,dirty:false};
-      save();UI.week=null;render();setSync('ok','');toast(`Pulled ${weekCount(S)} weeks`);return;
+      adoptRemote(row);toast(`Pulled ${weekCount(S)} weeks`);return;
     }
-    const same=JSON.stringify(blobOf())===JSON.stringify(row.data);
-    if(same){
-      S.sync={version:row.version,at:row.updated_at,email:SESSION.email,dirty:false};
-      save();setSync('ok','');return;
+    /* The version counter says what happened; content only breaks a tie the
+       first time this browser meets the row. */
+    const known=(S.sync&&S.sync.version)||0;
+    const dirty=!!(S.sync&&S.sync.dirty);
+    if(known===row.version){
+      if(!dirty){markSynced(row);return}
+      S.sync={version:row.version,at:row.updated_at,email:SESSION.email,dirty:true};
+      saveLocal();await pushRow();return;
     }
+    if(known&&known<row.version&&!dirty){
+      adoptRemote(row);toast(`Pulled ${weekCount(S)} weeks from another device`);return;
+    }
+    if(stableStringify(blobOf())===stableStringify(row.data)){markSynced(row);return}
     setSync('conflict','Two versions');
     confirmModal('There is already a ledger on this account',
       `Here: ${localWeeks} weeks. There: ${weekCount(row.data)} weeks, saved ${timeAgo(row.updated_at)}. `+
       `Keeping one replaces the other.`,
       'Keep what is here',()=>{
-        S.sync={version:row.version,at:row.updated_at,email:SESSION.email,dirty:true};save();pushRow();
+        S.sync={version:row.version,at:row.updated_at,email:SESSION.email,dirty:true};
+        saveLocal();pushRow();
       },'Take the other one',()=>{
-        S=row.data;migrate();
-        S.sync={version:row.version,at:row.updated_at,email:SESSION.email,dirty:false};
-        save();UI.week=null;render();setSync('ok','');toast('Pulled from the account');
+        adoptRemote(row);toast('Pulled from the account');
       });
   }catch(e){setSync('error',e.message)}
 }
@@ -2049,7 +2072,8 @@ function setSync(status,msg){SYNC.status=status;SYNC.msg=msg||'';paintSync()}
 function syncTouch(){
   if(!syncOn()||!SESSION)return;
   S.sync={...(S.sync||{version:0}),dirty:true};
-  setSync('busy','Saving…');
+  /* no status change here — the line only says "Saving…" once a request is
+     actually in flight, so typing does not strobe the sidebar */
   clearTimeout(pushTimer);
   pushTimer=setTimeout(()=>{pushRow().catch(e=>setSync('error',e.message))},2500);
 }
@@ -2104,7 +2128,7 @@ function signInModal(){
 }
 function signOut(){
   SESSION=null;saveSession();
-  if(S.sync){S.sync.dirty=false;save()}
+  if(S.sync){S.sync.dirty=false;saveLocal()}
   setSync('off','');render();toast('Signed out — your data stays in this browser');
 }
 async function syncInit(){
