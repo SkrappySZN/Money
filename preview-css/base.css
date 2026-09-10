@@ -245,7 +245,12 @@ input.cell.is-attack.is-zero{color:var(--ink-muted);font-weight:var(--weight-reg
 .tip{position:absolute;pointer-events:none;background:var(--paper);color:var(--ink);
   border:var(--rule-width) solid var(--rule-strong);border-radius:var(--radius);
   padding:var(--space-1) var(--space-2);
-  font-size:var(--text-2);line-height:1.5;white-space:nowrap;z-index:5}
+  font-size:var(--text-2);line-height:1.5;white-space:nowrap;z-index:5;
+  /* Hidden until the pointer picks a point. Without this the empty callout sits
+     under every chart -- it was in the approved previews and went unnoticed,
+     because a bordered paper box on paper is nearly invisible in a screenshot. */
+  opacity:0;transition:opacity var(--duration-1) var(--ease)}
+.tip.on{opacity:1}
 .tip .tt{font-weight:var(--weight-medium);margin-bottom:2px}
 .tip .tr{display:flex;gap:var(--space-3);justify-content:space-between}
 .tip .tr span:first-child{color:var(--ink-muted)}

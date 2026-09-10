@@ -301,6 +301,9 @@ h2.sect-label,h3.sect-label{margin-top:0;display:flex;align-items:center}
 .account{color:var(--negative);font-weight:var(--weight-semibold)}
 .fig-breach{color:var(--negative);font-weight:var(--weight-semibold);font-variant-numeric:tabular-nums}
 .fig{font-variant-numeric:tabular-nums;font-weight:var(--weight-medium);color:var(--ink)}
+/* Emphasis inside alert prose resolves to the same treatment as a marked figure.
+   The three levels are the whole vocabulary; a raw <b> would be a fourth. */
+.attn-row p b,.ok-list li b{font-weight:var(--weight-medium);color:var(--ink)}
 .ok-head{display:flex;align-items:center;gap:var(--space-1);background:none;border:0;padding:0;
   cursor:pointer;font-size:var(--text-1);font-weight:var(--weight-medium);
   letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted);
@@ -441,7 +444,12 @@ input.cell.is-attack.is-zero{color:var(--ink-muted);font-weight:var(--weight-reg
 .tip{position:absolute;pointer-events:none;background:var(--paper);color:var(--ink);
   border:var(--rule-width) solid var(--rule-strong);border-radius:var(--radius);
   padding:var(--space-1) var(--space-2);
-  font-size:var(--text-2);line-height:1.5;white-space:nowrap;z-index:5}
+  font-size:var(--text-2);line-height:1.5;white-space:nowrap;z-index:5;
+  /* Hidden until the pointer picks a point. Without this the empty callout sits
+     under every chart -- a bordered paper box on paper, which is why it survived
+     the previews unnoticed. */
+  opacity:0;transition:opacity var(--duration-1) var(--ease)}
+.tip.on{opacity:1}
 .tip .tt{font-weight:var(--weight-medium);margin-bottom:2px}
 .tip .tr{display:flex;gap:var(--space-3);justify-content:space-between}
 .tip .tr span:first-child{color:var(--ink-muted)}
@@ -1487,18 +1495,16 @@ function lineChart(el,pts,{h=210,fmt=money0,label='',accent='var(--s1)',zeroFloo
   const X=i=>PL+(W-PL-PR)*(i/(pts.length-1));
   const Y=v=>PT+(h-PT-PB)*(1-(v-lo)/(hi-lo||1));
   const line=pts.map((p,i)=>`${i?'L':'M'}${X(i).toFixed(1)},${Y(p.v).toFixed(1)}`).join('');
-  const area=`${line}L${X(pts.length-1).toFixed(1)},${Y(lo).toFixed(1)}L${X(0).toFixed(1)},${Y(lo).toFixed(1)}Z`;
-  const gid='g'+Math.random().toString(36).slice(2,8);
+  /* No area fill. The direction spends its only fill on the accent block, and the
+     gradient under the line was a second one. Colour comes from .chartline /
+     .chartdot rather than an inline accent: the old --s1 and --surface tokens are
+     scoped to .legacy and resolve to nothing in a converted view. */
   el.innerHTML=`<svg viewBox="0 0 ${W} ${h}" role="img" aria-label="${esc(label)}">
-    <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="${accent}" stop-opacity=".28"/>
-      <stop offset="100%" stop-color="${accent}" stop-opacity="0"/></linearGradient></defs>
     ${ticks.map(t=>`<line class="gridline" x1="${PL}" x2="${W-PR}" y1="${Y(t).toFixed(1)}" y2="${Y(t).toFixed(1)}"/>
       <text class="axl" x="${PL-8}" y="${(Y(t)+3.5).toFixed(1)}" text-anchor="end">${fmt(t)}</text>`).join('')}
-    <path d="${area}" fill="url(#${gid})"/>
-    <path d="${line}" fill="none" stroke="${accent}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path class="chartline" d="${line}"/>
     <g class="hov" style="opacity:0"><line class="crosshair" y1="${PT}" y2="${h-PB}"/>
-      <circle r="4.5" fill="${accent}" stroke="var(--surface)" stroke-width="2"/></g>
+      <circle class="chartdot" r="4"/></g>
     ${pts.map((p,i)=>i%Math.ceil(pts.length/7)===0||i===pts.length-1
       ?`<text class="axl" x="${X(i).toFixed(1)}" y="${h-8}" text-anchor="middle">${esc(p.x)}</text>`:'').join('')}
     <rect x="${PL}" y="${PT}" width="${W-PL-PR}" height="${h-PT-PB}" fill="transparent" class="hit"/>
@@ -1545,7 +1551,7 @@ const TABS=[
   {id:'history', label:'History',   k:'5'},
   {id:'accounts',label:'Accounts',  k:'6'},
 ];
-const CONVERTED=new Set(['week','attack']);   // grows as each view lands
+const CONVERTED=new Set(['week','attack','payoff']);   // grows as each view lands
 /* Replacing #view.innerHTML removes whatever input is focused, and if the user
    has typed in it the browser fires `change` at it SYNCHRONOUSLY, mid-render.
    Any handler that re-renders then re-enters us halfway through and the outer
@@ -1987,7 +1993,9 @@ function viewAttack(el){
 function viewPayoff(el){
   const k=currentWeek(),C=computeWeek(k),T=C.totals;
   const debts=debtSnapshot(k);
-  if(!debts.length){el.innerHTML='<div class="head"><h1>Payoff</h1></div><div class="card"><div class="empty">Nothing left to pay off.</div></div>';return}
+  if(!debts.length){el.innerHTML=`<main class="page">
+    <header class="masthead"><div><h1 class="page-title">Payoff</h1></div></header>
+    <p class="lede">Nothing left to pay off.</p></main>`;return}
   const floor=r2(debts.reduce((s,d)=>s+d.weeklyMin,0));
   if(UI.extra==null)UI.extra=Math.max(T.debtPaid,floor);
   const budget=Math.max(0,n0(UI.extra));
@@ -1997,81 +2005,96 @@ function viewPayoff(el){
   const sn =simulate(debts,simOpts(k,budget,'snowball'));
   const cus=simulate(debts,simOpts(k,budget,'custom'));
   const flat=simulate(debts,{strategy:strat,budget,fromWeek:k,steps:[]});
-  const plus50=simulate(debts,simOpts(k,budget+50,strat));
   const maxW=Math.max(...sim.debts.map(d=>d.paidOff||(sim.weeks===Infinity?520:sim.weeks)),1);
   const steps=planSteps().map(st=>({...st,fireWeek:stepFireWeek(st,k),
     fired:sim.fired.find(f=>f.id===st.id)}));
+  const bleed=r2(debts.reduce((s,d)=>s+d.weekInterest,0));
+  const saved=(flat.weeks===Infinity||sim.weeks===Infinity)
+    ?(flat.weeks===Infinity&&sim.weeks!==Infinity?'clears it':'—')
+    :monthsLabel(weeksToMonths(flat.weeks)-weeksToMonths(sim.weeks));
+  const clears=[...sim.debts].sort((a,b)=>(a.paidOff||1e9)-(b.paidOff||1e9));
+  const cmp=[['Avalanche','avalanche',av],['Snowball','snowball',sn],['Your order','custom',cus]];
+  const cheapest=Math.min(...cmp.filter(r=>r[2].weeks!==Infinity).map(r=>r[2].totalInterest));
 
-  el.innerHTML=`
-  <div class="head"><div><h1>Payoff</h1>
-    <div class="sub">From ${weekLabel(k)} · ${money(T.debtBalance)} across ${debts.length} account${debts.length>1?'s':''}</div></div>
-    <div class="spacer"></div>${stratSeg(strat)}
+  el.innerHTML=`<main class="page">
+  <header class="masthead">
+    <div><h1 class="page-title">Payoff</h1>
+      <div class="dateline">From ${weekLabel(k)} · ${money(T.debtBalance)} across ${debts.length} account${debts.length>1?'s':''}</div></div>
+    <div class="controls">${stratSeg(strat)}</div>
+  </header>
+
+  <div class="hero-row">
+    <div class="hero-label">Debt free</div>
+    <div class="hero-figure">${sim.weeks===Infinity?'Never':longDate(sim.debtFreeDate)}</div>
+    <div class="hero-note">${sim.weeks===Infinity
+      ?`${money(budget)}/wk can't outrun ${money(bleed)}/wk of interest`
+      :monthsLabel(weeksToMonths(sim.weeks))+' from now'}</div>
   </div>
 
-  <div class="tiles">
-    <div class="tile"><div class="l">Weekly debt budget</div>
-      <div class="v"><span style="opacity:.55">$</span><input class="cell" id="budget" style="width:118px;font:inherit;font-size:var(--t-xl);font-weight:680;text-align:left;padding-left:2px" value="${budget.toFixed(2)}"></div>
-      <div class="d">${money(floor)} of that is minimums${sim.endBudget>budget?` · rises to <b>${money(sim.endBudget)}</b>`:''}</div></div>
-    <div class="tile ${sim.weeks===Infinity?'bad':'good'}"><div class="l">Debt free</div>
-      <div class="v">${sim.weeks===Infinity?'Never':longDate(sim.debtFreeDate)}</div>
-      <div class="d">${sim.weeks===Infinity?`${money(budget)}/wk can't outrun ${money(r2(debts.reduce((s,d)=>s+d.weekInterest,0)))}/wk of interest`:monthsLabel(weeksToMonths(sim.weeks))+' from now'}</div></div>
-    <div class="tile"><div class="l">Interest you'll pay</div><div class="v">${sim.weeks===Infinity?'∞':money0(sim.totalInterest)}</div>
-      <div class="d">on ${money0(T.debtBalance)} of principal</div></div>
-    <div class="tile ${sim.endBudget>budget?'good':''}"><div class="l">What the steps buy you</div>
-      <div class="v">${(flat.weeks===Infinity||sim.weeks===Infinity)?(flat.weeks===Infinity&&sim.weeks!==Infinity?'clears it':'—'):monthsLabel(weeksToMonths(flat.weeks)-weeksToMonths(sim.weeks))}</div>
-      <div class="d">${flat.weeks===Infinity&&sim.weeks!==Infinity?`a flat ${money(budget)}/wk never finishes`:`sooner than holding ${money(budget)}/wk flat`}</div></div>
+  <div class="strip">
+    <div class="metric"><div class="m-label">Weekly debt budget</div>
+      <span class="m-value"><span class="mark">$</span><input class="cell inline" id="budget"
+        value="${budget.toFixed(2)}" aria-label="Weekly debt budget"></span>
+      <div class="m-note">${money(floor)} of that is minimums${sim.endBudget>budget?` · rises to ${money(sim.endBudget)}`:''}</div></div>
+    <div class="metric"><div class="m-label">Interest you'll pay</div>
+      <span class="m-value">${sim.weeks===Infinity?'∞':money0(sim.totalInterest)}</span>
+      <div class="m-note">on ${money0(T.debtBalance)} of principal</div></div>
+    <div class="metric"><div class="m-label">What the steps buy you</div>
+      <span class="m-value ${sim.endBudget>budget?'is-settled':''}">${saved}</span>
+      <div class="m-note">${flat.weeks===Infinity&&sim.weeks!==Infinity
+        ?`a flat ${money(budget)}/wk never finishes`
+        :`against holding ${money(budget)}/wk flat`}</div></div>
   </div>
 
-  <div class="card">
-    <div class="cap">Balance from here</div>
-    <div class="chart" id="payChart" style="margin-top:10px"></div>
-  </div>
+  <section class="band" aria-labelledby="chart-h">
+    <h2 class="sect-label" id="chart-h">Balance from here</h2>
+    <div class="chart" id="payChart"></div>
+  </section>
 
-  <div class="card">
-    <div class="cap">Attack steps up as these land</div>
-    <p class="sub" style="margin:8px 0 14px;max-width:72ch">Each one permanently frees a weekly line. The dates above already assume them —
-      untick a step to see what it is worth.</p>
-    <div class="rank">
-      ${steps.map(st=>`<div class="rrow" style="${st.fired?'':'opacity:.6'}">
-        <div class="n" style="font-size:var(--t-sm)">
-          <input type="checkbox" data-step="${st.id}" ${st.on||st.trigger.type!=='manual'?'checked':''}
-            ${st.trigger.type!=='manual'?'disabled title="Fires on its trigger"':''} style="accent-color:var(--accent);width:15px;height:15px"></div>
-        <div><div class="nm">${esc(st.label)}</div>
-          <div class="meta">${esc(st.note||'')}${st.fired?` · lands ${longDate(addWeeks(k,st.fired.week))}`:st.trigger.type==='manual'?' · not done yet':' · trigger not reached'}</div></div>
-        <div class="rt"><div class="rv" style="color:var(--s3)">+${money(n0(st.weekly))}</div><div class="rl">per week</div></div>
-      </div>`).join('')}
+  <section class="band" aria-labelledby="steps-h">
+    <h2 class="sect-label" id="steps-h">Attack steps up as these land</h2>
+    <p class="lede muted">Each one permanently frees a weekly line. The date above already
+      assumes them — untick a step to see what it is worth.</p>
+    <ul class="rank">
+      ${steps.map(st=>`<li class="${st.fired?'lead':''}">
+        <span class="n"><input type="checkbox" data-step="${st.id}"
+          ${st.on||st.trigger.type!=='manual'?'checked':''}
+          ${st.trigger.type!=='manual'?'disabled title="Fires on its trigger"':''}
+          aria-label="${esc(st.label)}"></span>
+        <span><span class="nm">${esc(st.label)}</span>
+          <div class="meta">${esc(st.note||'')}${st.fired?` · lands ${longDate(addWeeks(k,st.fired.week))}`:st.trigger.type==='manual'?' · not done yet':' · trigger not reached'}</div></span>
+        <span class="rt"><div class="rv">+${money(n0(st.weekly))}</div><div class="rl">per week</div></span>
+      </li>`).join('')}
+    </ul>
+  </section>
+
+  <section class="band" aria-labelledby="clears-h">
+    <h2 class="sect-label" id="clears-h">What clears when</h2>
+    <div class="tl">
+      ${clears.map((d,i)=>`<div class="tlr${i===0?' lead':''}">
+        <div class="tln" title="${esc(d.name)}">${esc(d.name)}</div>
+        <div class="tlbar"><i class="${d.paidOff==null?'never':''}" style="width:${clamp((d.paidOff||maxW)/maxW*100,2,100)}%"></i></div>
+        <div class="tlv">${d.paidOff==null?'never':longDate(addWeeks(k,d.paidOff))}</div></div>`).join('')}
     </div>
-  </div>
-
-  <div class="card">
-    <div class="cap">What clears when</div>
-    <div class="tl" style="margin-top:14px">
-      ${[...sim.debts].sort((a,b)=>(a.paidOff||1e9)-(b.paidOff||1e9)).map(d=>`
-        <div class="tlr"><div class="tln" title="${esc(d.name)}">${esc(d.name)}${d.grace?' <span class="tag cash">grace</span>':''}</div>
-          <div class="tlbar"><i class="${d.paidOff==null?'never':''}" style="width:${clamp((d.paidOff||maxW)/maxW*100,2,100)}%"></i></div>
-          <div class="tlv">${d.paidOff==null?'never':longDate(addWeeks(k,d.paidOff))}</div></div>`).join('')}
-    </div>
-    <div class="legend"><span class="k">Interest paid per account:</span>
+    <div class="legend"><span class="k">Interest paid per account</span>
       ${[...sim.debts].sort((a,b)=>b.interest-a.interest).slice(0,4).map(d=>
         `<span class="k">${esc(d.name)} <b>${money0(d.interest)}</b></span>`).join('')}</div>
-  </div>
+  </section>
 
-  <div class="card">
-    <div class="cap">Three orders at ${money(budget)} a week</div>
-    <table class="hist" style="margin-top:10px">
-      <thead><tr><th>Order</th><th class="num">Debt free</th><th class="num">Months</th><th class="num">Total interest</th></tr></thead>
-      <tbody>
-        ${(()=>{const rs=[['Avalanche',av],['Snowball',sn],['Your order',cus]];
-          const best=Math.min(...rs.filter(r=>r[1].weeks!==Infinity).map(r=>r[1].totalInterest));
-          return rs.map(([nm,r])=>`<tr>
-          <td>${nm}${r.weeks!==Infinity&&r.totalInterest===best?' <span class="tag cash">cheapest</span>':''}</td>
-          <td class="num">${r.weeks===Infinity?'never':longDate(r.debtFreeDate)}</td>
-          <td class="num">${r.weeks===Infinity?'—':Math.round(weeksToMonths(r.weeks))}</td>
-          <td class="num">${r.weeks===Infinity?'—':money0(r.totalInterest)}</td></tr>`).join('')})()}
-      </tbody></table>
-    <div class="legend"><span class="k">Your order is <b>${cus.weeks===Infinity||av.weeks===Infinity?'—':money0(Math.abs(cus.totalInterest-av.totalInterest))}</b>
-      ${cus.totalInterest>av.totalInterest?'more':'less'} interest than avalanche — reorder it on the Plan tab</span></div>
-  </div>`;
+  <section class="band" aria-labelledby="cmp-h">
+    <h2 class="sect-label" id="cmp-h">Three orders at ${money(budget)} a week</h2>
+    <table class="cmp">
+      <thead><tr><th>Order</th><th>Debt free</th><th>Months</th><th>Total interest</th></tr></thead>
+      <tbody>${cmp.map(([nm,id,r])=>`<tr class="${id===strat?'lead':''}">
+        <td>${nm}${r.weeks!==Infinity&&r.totalInterest===cheapest?' <span class="cheapest">cheapest</span>':''}</td>
+        <td>${r.weeks===Infinity?'never':longDate(r.debtFreeDate)}</td>
+        <td>${r.weeks===Infinity?'—':Math.round(weeksToMonths(r.weeks))}</td>
+        <td>${r.weeks===Infinity?'—':money0(r.totalInterest)}</td></tr>`).join('')}</tbody>
+    </table>
+    <p class="lede muted">Your order is <b>${cus.weeks===Infinity||av.weeks===Infinity?'—':money0(Math.abs(cus.totalInterest-av.totalInterest))}</b>
+      ${cus.totalInterest>av.totalInterest?'more':'less'} interest than avalanche — reorder it on the Plan tab.</p>
+  </section>
+  </main>`;
 
   const pts=sim.series.filter((_,i)=>i%Math.max(1,Math.ceil(sim.series.length/80))===0||i===sim.series.length-1)
     .map(p=>({x:shortMY(addWeeks(k,p.w)),t:longDate(addWeeks(k,p.w)),v:p.total,
