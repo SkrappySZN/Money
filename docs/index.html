@@ -1466,7 +1466,7 @@ function currentWeek(){
 }
 const isPlanned=k=>k>thisWeek();
 
-function blankEntry(){return{balance:0,min:0,attack:0,other:0,minAmt:0,close:'',due:'',projected:null,paid:false}}
+function blankEntry(){return{balance:0,min:0,attack:0,other:0,out:0,minAmt:0,close:'',due:'',projected:null,paid:false}}
 function entryOf(k,id){const w=S.weeks[k];if(!w)return blankEntry();
   if(!w.entries[id])w.entries[id]=blankEntry();
   const e=w.entries[id];for(const[p,d]of Object.entries(blankEntry()))if(e[p]===undefined)e[p]=d;
@@ -1484,7 +1484,7 @@ function computeWeek(k){
     const e=entryOf(k,a.id);
     const dpr=a.apr?a.apr/365:0;
     const bal=n0(e.balance);
-    const row={a,e,dpr,balance:bal,min:n0(e.min),attack:n0(e.attack),other:n0(e.other)};
+    const row={a,e,dpr,balance:bal,min:n0(e.min),attack:n0(e.attack),other:n0(e.other),out:n0(e.out)};
     row.minAmt=n0(e.minAmt||a.minAmt);
     row.close=e.close||''; row.due=e.due||'';
     return row;
@@ -1514,10 +1514,17 @@ function computeWeek(k){
     r.weekInterest=(KIND_DEBT(r.a.kind)&&!r.inGrace&&S.settings.accrueInterest)
       ?r2(r.balance*r.dpr*7):0;
     if(r.a.kind==='income'){r.after=r.balance}
-    /* A passthrough bucket is funded and emptied in the same week — the money
-       is routed onward, not held — so what went through it never lands in the
-       balance. `total` still counts as allocated: the paycheck did spend it. */
-    else if(KIND_INFLOW(r.a.kind)){r.after=r.a.passthrough?r2(r.balance):r2(r.balance+r.total)}
+    /* A bucket's balance is what went in less what has since left it. `out` is
+       money leaving on its way somewhere else — a subscription hitting the
+       card, a minimum actually paid — and it is NOT an allocation: the
+       paycheck spent that dollar the week it went in, not the week it left.
+       So `out` stays out of `total`, and the week still balances to zero.
+
+       A passthrough is the same idea with the typing removed: funded and
+       emptied every week, so it never holds anything. */
+    else if(KIND_INFLOW(r.a.kind)){
+      r.after=r.a.passthrough?r2(r.balance):r2(r.balance+r.total-n0(r.out));
+    }
     else{r.after=r2(r.balance+r.weekInterest-r.total)}
     if(r.a.limit>0&&r.a.kind==='card'){
       r.usage=r.balance/r.a.limit;
@@ -1534,7 +1541,7 @@ function computeWeek(k){
     }
     /* 6 months out at this week's rate — the sheet's Q column, ×26 weeks */
     if(KIND_INFLOW(r.a.kind))r.sixMo=r.a.passthrough?r2(r.balance)
-      :r2(r.balance+(r.total-n0(r.a.weeklyOutflow))*26);
+      :r2(r.balance+(r.total-(n0(r.out)||n0(r.a.weeklyOutflow)))*26);
     else if(KIND_DEBT(r.a.kind))r.sixMo=r2(Math.max(0,projectDebt(r.balance,r.dpr,r.total,26)));
     r.drift=(r.e.projected!=null)?r2(r.balance-n0(r.e.projected)):null;
   }
@@ -1545,6 +1552,7 @@ function computeWeek(k){
       r.isRollup=true;
       r.balance=r2(kids.reduce((s,x)=>s+x.balance,0));
       r.total=r2(kids.reduce((s,x)=>s+x.total,0));
+      r.out=r2(kids.reduce((s,x)=>s+n0(x.out),0));
       r.after=r2(kids.reduce((s,x)=>s+x.after,0));
     }
   }
@@ -2204,13 +2212,14 @@ function computeMonth(ym){
   const byId={},rows=[];
   for(const r of first.rows){
     const m={a:r.a,isRollup:r.isRollup,opening:r.balance,
-             assigned:0,interest:0,closing:r.after};
+             assigned:0,interest:0,out:0,closing:r.after};
     byId[r.a.id]=m;rows.push(m);
   }
   for(const C of per)for(const r of C.rows){
     const m=byId[r.a.id];if(!m)continue;
     m.assigned=r2(m.assigned+n0(r.total));
     m.interest=r2(m.interest+n0(r.weekInterest));
+    m.out=r2(n0(m.out)+n0(r.out));
   }
   for(const r of last.rows){
     const m=byId[r.a.id];if(!m)continue;
@@ -2225,7 +2234,7 @@ function computeMonth(ym){
        not add up, and the first instinct is to distrust the arithmetic. */
     const modelled=m.a.passthrough?r2(m.opening)
       :KIND_DEBT(m.a.kind)?r2(m.opening+m.interest-m.assigned)
-      :r2(m.opening+m.assigned);
+      :r2(m.opening+m.assigned-n0(m.out));
     m.drift=r2(m.closing-modelled);
     if(m.a.kind==='card'&&m.a.limit>0){
       m.usageOpen=m.opening/m.a.limit;
@@ -2260,6 +2269,7 @@ const MONTH_COLS=[
   {label:'Opening',cell:m=>`<td class="num">${money(m.opening)}</td>`},
   {label:'Usage open',cell:m=>`<td class="num dim">${m.usageOpen!=null?pct(m.usageOpen):'—'}</td>`},
   {label:'Assigned',cell:m=>`<td class="num${n0(m.assigned)?'':' dim'}">${money(m.assigned)}</td>`},
+  {label:'Out',cell:m=>`<td class="num dim">${KIND_INFLOW(m.a.kind)?money(n0(m.out)):'—'}</td>`},
   {label:'Interest',cell:m=>`<td class="num dim">${KIND_DEBT(m.a.kind)?money(m.interest):'—'}</td>`},
   {label:'Charges',cell:m=>`<td class="num ${Math.abs(n0(m.drift))<0.005?'dim':(m.drift>0&&KIND_DEBT(m.a.kind)?'neg':'')}"`
     +` title="New charges, spending, or a balance corrected against the bank — whatever payments and interest do not explain">`
@@ -2289,6 +2299,7 @@ function monthBody(M){
         +`<td class="num">${money(T.opening)}</td>`
         +`<td class="num">${pct(T.usageOpen)}</td>`
         +`<td class="num">${money(T.assigned)}</td>`
+        +`<td></td>`
         +`<td class="num">${money(T.interest)}</td>`
         +`<td class="num">${Math.abs(T.drift)<0.005?'—':(T.drift>0?'+':'−')+money(Math.abs(T.drift)).replace('−','')}</td>`
         +`<td class="num">${money(T.closing)}</td>`
@@ -2456,6 +2467,13 @@ const SHEET_COLS=[
   {k:'other', label:'Other', cell:r=>cellNum(r,'other')},
   {k:'total',label:'Total',
    cell:r=>`<td class="num">${money(r.total)}</td>`},
+
+  /* Money leaving a bucket. Only buckets and savings have one — nothing
+     "leaves" a card except a payment, which is already the Total column. */
+  {k:'out',label:'Out',
+   cell:r=>!KIND_INFLOW(r.a.kind)?dimCell('—')
+     :r.isRollup?`<td class="num dim">${money(n0(r.out))}</td>`
+     :cellNum(r,'out')},
   {k:'interest',label:'Interest',
    cell:r=>`<td class="num ${r.inGrace?'pos':'dim'}"${r.inGrace?' title="In grace — no interest while the statement balance is paid in full"':''}>`
      +`${KIND_DEBT(r.a.kind)?(r.inGrace?'grace':money(r.weekInterest)):'—'}</td>`},
@@ -2511,6 +2529,7 @@ function totalRow(C,cols){
     attack:`<td class="num">${money(sum(C,'attack','card'))}</td>`,
     other:`<td class="num">${money(sum(C,'other','card'))}</td>`,
     total:`<td class="num">${money(sum(C,'total','card'))}</td>`,
+    out:'<td></td>',
     interest:`<td class="num">${money(sum(C,'weekInterest','card'))}</td>`,
     after:`<td class="num">${money(T.cardAfter)}</td>`,
     usageAfter:`<td class="num">${pct(T.usageAfter)}</td>`,
