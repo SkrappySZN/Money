@@ -2165,6 +2165,7 @@ function viewAllocation(el){
       </span>
       <button class="ctl" data-act="pullfwd" title="Rewrite Balance from last week's After column">Pull forward</button>
       <button class="ctl" data-act="addacct">+ Account</button>
+      <button class="ctl" data-act="delweek" title="Delete this week, or the weeks after it">Delete week…</button>
       <button class="ctl" data-act="undo" title="Undo last change (⌘Z)">Undo</button>
       <button class="ctl" data-go="prev" aria-label="Previous week" ${i<=0?'disabled':''}>←</button>
       <span class="jump"><select id="weekPick" aria-label="Jump to week">
@@ -2890,6 +2891,38 @@ function rollDate(d,from){
   while(x<from&&guard++<36){const t=parseISO(x);t.setMonth(t.getMonth()+1);x=iso(t)}
   return x;
 }
+/* ── deleting weeks ───────────────────────────────────────────────
+   Forty weeks came across from the spreadsheet, four of them dated ahead
+   and holding figures typed in advance rather than anything that happened.
+   There was no way to remove a week at all, so there is one now.
+
+   Undo covers it -- the snapshot is the whole ledger -- but a wrong click
+   here costs a week of entry, so it also names what it is about to remove
+   and never leaves the ledger with nothing in it. */
+function deleteWeeks(){
+  const k=currentWeek(),ks=weekKeys(),i=ks.indexOf(k);
+  const after=ks.slice(i+1);
+  const drop=list=>{
+    pushUndo(null);
+    for(const w of list)delete S.weeks[w];
+    const left=weekKeys();
+    UI.week=left.includes(k)?k:(left[left.length-1]||null);
+    save();render();
+    toast(`${list.length} ${list.length===1?'week':'weeks'} removed — ⌘Z to undo`);
+  };
+  if(ks.length<=1){toast('This is the only week — nothing to delete');return}
+  const body=after.length
+    ? `This week is ${weekLabel(k)}. There ${after.length===1?'is 1 week':`are ${after.length} weeks`} dated after it, `
+      +`${weekLabel(after[0])}${after.length>1?` through ${weekLabel(after[after.length-1])}`:''}. `
+      +`Removing a week deletes its balances and everything assigned in it. ⌘Z undoes this.`
+    : `This week is ${weekLabel(k)}. Removing it deletes its balances and everything `
+      +`assigned in it. It is the last week in the ledger. ⌘Z undoes this.`;
+  if(!after.length)return confirmModal('Delete week',body,'Delete this week',()=>drop([k]));
+  confirmModal('Delete week',body,
+    `Delete the ${after.length} after this`,()=>drop(after),
+    'Delete this week only',()=>drop([k]));
+}
+
 /* ── pull balances forward ────────────────────────────────────────
    `+ Next week` carries After into the next week's Balance, but it only
    builds a week that does not exist yet. Four weeks were imported from the
@@ -3043,6 +3076,7 @@ document.addEventListener('click',e=>{
   }
   switch(d.act){
     case'pullfwd':pullForward();break;
+    case'delweek':deleteWeeks();break;
     case'undo':undo();break;
     case'redo':redo();break;
     case'newweek':newWeek();break;

@@ -4,6 +4,8 @@
 /NOTES.md
 /GUIDE.md
 /RESTYLE-PLAN.md
+# Timestamped safety copies of the real ledger, taken before destructive edits.
+/index.html.bak-*
 # The leak-detection word list is itself the sensitive data.
 /.leakwords
 # Rendered previews and the engine dump they come from: both carry real balances.
