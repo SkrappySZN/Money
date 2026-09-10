@@ -147,7 +147,12 @@ select:focus,input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--a
 .hero{font-size:var(--t-3xl);font-weight:680;letter-spacing:-.03em;line-height:1.1}
 
 /* ── the week grid ───────────────────────────────────────────────── */
-.gridwrap{overflow-x:auto;border-radius:var(--r-2);border:1px solid var(--hair);background:var(--surface)}
+/* overflow-x:auto makes the browser compute overflow-y:auto too, so this wrapper
+   is the sticky containing block — but with no height cap it never scrolled, and
+   the header rode off the page with it. The cap gives sticky something to stick
+   inside. max() so a short window cannot collapse the grid to a few rows. */
+.gridwrap{overflow:auto;max-height:max(420px,70vh);
+  border-radius:var(--r-2);border:1px solid var(--hair);background:var(--surface)}
 table.grid{border-collapse:separate;border-spacing:0;width:100%;min-width:960px;font-size:var(--t-sm)}
 table.grid th{position:sticky;top:0;z-index:3;background:var(--surface-2);color:var(--muted);
  font-size:var(--t-xs);font-weight:600;text-align:right;padding:11px 12px;
@@ -155,7 +160,10 @@ table.grid th{position:sticky;top:0;z-index:3;background:var(--surface-2);color:
 table.grid th:first-child{text-align:left;position:sticky;left:0;z-index:4}
 table.grid td{padding:0 12px;height:var(--row-h);border-bottom:1px solid var(--row-hair);
  text-align:right;white-space:nowrap}
-table.grid td:first-child{text-align:left;position:sticky;left:0;background:var(--surface);z-index:2;font-weight:530}
+/* The account column had 18.7px of headroom on the longest name and the table
+   had zero horizontal slack. Cap it so one long name cannot start a scroll. */
+table.grid td:first-child{text-align:left;position:sticky;left:0;background:var(--surface);z-index:2;font-weight:530;
+  max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 table.grid tr:hover td{background:var(--surface-2)}
 table.grid tr:hover td:first-child{background:var(--surface-2)}
 tr.sect td{background:var(--plane)!important;color:var(--muted);font-size:var(--t-xs);
@@ -1104,7 +1112,8 @@ function rowHTML(r,dense,child){
     :`<td class="num"><input class="cell" data-k="${id}:balance" value="${r.balance.toFixed(2)}">${driftTag(r)}</td>`;
   const after=`<td class="num ${a.kind==='card'&&r.after>n0(a.limit)?'neg':r.after<0?'neg':''}">${money(r.after)}</td>`;
   const cls=(r.isRollup?'rollup':'')+(child?' child':'');
-  const name=`<td>${esc(a.name)}${a.apr&&!dense?'':''}</td>`;
+  /* full name stays reachable when the column ellipsises it */
+  const name=`<td title="${esc(a.name)}">${esc(a.name)}</td>`;
   const intr=`<td class="num ${r.inGrace?'pos':'dim'}" ${r.inGrace?'title="In grace — no interest while the statement balance is paid in full"':''}>${
     KIND_DEBT(a.kind)?(r.inGrace?'grace':money(r.weekInterest)):'—'}</td>`;
   if(dense)return`<tr class="${cls}">${name}${bal}
