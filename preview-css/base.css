@@ -102,6 +102,9 @@ h2.sect-label,h3.sect-label{margin-top:0;display:flex;align-items:center}
 .account{color:var(--negative);font-weight:var(--weight-semibold)}
 .fig-breach{color:var(--negative);font-weight:var(--weight-semibold);font-variant-numeric:tabular-nums}
 .fig{font-variant-numeric:tabular-nums;font-weight:var(--weight-medium);color:var(--ink)}
+/* Emphasis inside alert prose resolves to the same treatment as a marked figure.
+   The three levels are the whole vocabulary; a raw <b> would be a fourth. */
+.attn-row p b,.ok-list li b{font-weight:var(--weight-medium);color:var(--ink)}
 .ok-head{display:flex;align-items:center;gap:var(--space-1);background:none;border:0;padding:0;
   cursor:pointer;font-size:var(--text-1);font-weight:var(--weight-medium);
   letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted);

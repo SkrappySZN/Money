@@ -1545,7 +1545,7 @@ const TABS=[
   {id:'history', label:'History',   k:'5'},
   {id:'accounts',label:'Accounts',  k:'6'},
 ];
-const CONVERTED=new Set(['week']);   // grows as each view lands
+const CONVERTED=new Set(['week','attack']);   // grows as each view lands
 /* Replacing #view.innerHTML removes whatever input is focused, and if the user
    has typed in it the browser fires `change` at it SYNCHRONOUSLY, mid-render.
    Any handler that re-renders then re-enters us halfway through and the outer
@@ -1864,8 +1864,11 @@ function driftTag(r){
 <script>
 "use strict";
 const STRATS=[{id:'avalanche',l:'Avalanche'},{id:'snowball',l:'Snowball'},{id:'custom',l:'My order'}];
+/* One segmented control for Attack and Payoff. The new CSS keys on aria-pressed
+   (which is what a toggle should expose anyway); `on` is only there for the old
+   stylesheet still serving Payoff under .legacy, and goes when .legacy does. */
 const stratSeg=cur=>`<div class="seg">${STRATS.map(x=>
-  `<button data-strat="${x.id}" class="${cur===x.id?'on':''}">${x.l}</button>`).join('')}</div>`;
+  `<button data-strat="${x.id}" class="${cur===x.id?'on':''}" aria-pressed="${cur===x.id}">${x.l}</button>`).join('')}</div>`;
 const planSteps=()=>(S.plan&&S.plan.steps)||[];
 /* the budget the plan actually reaches once every step has fired */
 function simOpts(k,budget,strategy){return{strategy,budget,fromWeek:k,steps:planSteps()}}
@@ -1874,7 +1877,9 @@ function simOpts(k,budget,strategy){return{strategy,budget,fromWeek:k,steps:plan
 function viewAttack(el){
   const k=currentWeek(),C=computeWeek(k),T=C.totals;
   const all=debtSnapshot(k);
-  if(!all.length){el.innerHTML='<div class="head"><h1>Attack</h1></div><div class="card"><div class="empty">No balances to attack. That is the whole point.</div></div>';return}
+  if(!all.length){el.innerHTML=`<main class="page">
+    <header class="masthead"><div><h1 class="page-title">Attack</h1></div></header>
+    <p class="lede">No balances to attack. That is the whole point.</p></main>`;return}
   const grace=all.filter(d=>d.grace), debts=all.filter(d=>!d.grace);
   const strat=UI.strategy;
   const budget=Math.max(T.debtPaid,all.reduce((s,d)=>s+d.weeklyMin,0));
@@ -1901,64 +1906,73 @@ function viewAttack(el){
     custom:`First in your order. ${top.limit&&top.kind==='card'?`A card at <b>${pct(top.balance/top.limit,0)}</b> utilization — clearing it moves the number FICO actually scores, which rate-sorting can't see.`:`Ahead of the rate ranking by your own call.`}`,
   }[strat];
 
-  el.innerHTML=`
-  <div class="head"><div><h1>Attack</h1>
-    <div class="sub">${weekLabel(k)} · ${money(T.attack)} of attack money on the table</div></div>
-    <div class="spacer"></div>${stratSeg(strat)}
-  </div>
+  /* Same shape checksHTML takes on This Week, so the three-level marking, the
+     oxblood margin rule and the collapsed "going well" list are the one
+     implementation rather than a second set that drifts. */
+  const notes=[];
+  for(const g of grace)notes.push({s:'warn',t:`<b>${esc(g.name)} is in grace — do not attack it.</b> ${money(g.balance)} due in full by ${g.graceDue?dueLabel(g.graceDue):'the due date'}. It costs ${money(0)} to carry, but a partial payment ends grace and ${pct(g.nominalApr,2)} applies to the whole balance.`});
+  if(T.attack<=0)notes.push({s:'warn',t:`No attack money assigned this week. Minimums alone leave <b>${money(T.weekInterest)}</b> of interest on the table over the next 7 days.`});
+  else if(onTarget)notes.push({s:'ok',t:`This week's <b>${money(T.attack)}</b> is already going to ${esc(top.name)}.`});
+  else notes.push({s:'warn',t:`This week's attack is on <b>${attackRows.map(r=>esc(r.a.name)).join(', ')||'nothing'}</b>. ${esc(top.name)} is what your ${strat==='custom'?'order':strat} says.`});
+  if(strat==='custom'&&cus.weeks!==Infinity&&av.weeks!==Infinity)
+    /* Severity keys on DIRECTION, not magnitude. Beating avalanche by $279 is not a
+       thing that needs attention, and R9 keeps oxblood for what is actually wrong.
+       Only your order costing meaningfully MORE is worth flagging. */
+    notes.push({s:vsAv>50?'warn':'ok',t:`Your order costs <b>${vsAv>0?money0(vsAv)+' more':money0(-vsAv)+' less'}</b> in interest than pure avalanche and finishes <b>${monthsLabel(Math.abs(weeksToMonths(cus.weeks)-weeksToMonths(av.weeks)))}</b> ${cus.weeks>av.weeks?'later':'earlier'}${Math.abs(vsAv)<50?' — close enough that the utilization argument wins':''}.`});
+  if(cur.weeks===Infinity&&chosen.weeks!==Infinity)
+    notes.push({s:'ok',t:`Repeating this week's split forever never clears the balance — the interest outruns it. The same <b>${money(budget)}/wk</b>${chosen.endBudget>budget?`, rising to <b>${money(chosen.endBudget)}</b> as your steps land,`:''} clears everything by <b>${longDate(chosen.debtFreeDate)}</b>.`});
+  else if(saving>1)
+    notes.push({s:'ok',t:`Following this order pays off <b>${monthsLabel(weeksToMonths(cur.weeks)-weeksToMonths(chosen.weeks))} sooner</b> than repeating this week's split, and saves <b>${money0(saving)}</b> in interest.`});
 
-  <div class="card">
-    <div class="cap">This week, put it here</div>
-    <div class="hero" style="margin:8px 0 4px">${esc(top.name)}</div>
-    <div class="sub" style="font-size:var(--t-sm);color:var(--ink-2);max-width:72ch">${why}</div>
-    <div class="checks">
-      ${grace.map(g=>`<div class="chk warn">${icon('warn')}<div><b>${esc(g.name)} is in grace — do not attack it.</b>
-        ${money(g.balance)} due in full by ${g.graceDue?dueLabel(g.graceDue):'the due date'}. It costs ${money(0)} to carry, but a partial payment ends grace and ${pct(g.nominalApr,2)} applies to the whole balance.</div></div>`).join('')}
-      ${T.attack<=0
-        ?`<div class="chk warn">${icon('warn')}<div>No attack money assigned this week. Minimums alone leave <b>${money(T.weekInterest)}</b> of interest on the table over the next 7 days.</div></div>`
-        :onTarget
-        ?`<div class="chk ok">${icon('ok')}<div>This week's <b>${money(T.attack)}</b> is already going to ${esc(top.name)}.</div></div>`
-        :`<div class="chk warn">${icon('warn')}<div>This week's attack is on <b>${attackRows.map(r=>esc(r.a.name)).join(', ')||'nothing'}</b>. ${esc(top.name)} is what your ${strat==='custom'?'order':strat} says.</div></div>`}
-      ${strat==='custom'&&cus.weeks!==Infinity&&av.weeks!==Infinity
-        ?`<div class="chk ${Math.abs(vsAv)<50?'ok':'warn'}">${icon(Math.abs(vsAv)<50?'ok':'warn')}<div>Your order costs <b>${vsAv>0?money0(vsAv)+' more':money0(-vsAv)+' less'}</b> in interest than pure avalanche and finishes <b>${monthsLabel(Math.abs(weeksToMonths(cus.weeks)-weeksToMonths(av.weeks)))}</b> ${cus.weeks>av.weeks?'later':'earlier'}${Math.abs(vsAv)<50?' — close enough that the utilization argument wins':''}.</div></div>`:''}
-      ${cur.weeks===Infinity&&chosen.weeks!==Infinity
-        ?`<div class="chk ok">${icon('ok')}<div>Repeating this week's split forever never clears the balance — the interest outruns it. The same <b>${money(budget)}/wk</b>${chosen.endBudget>budget?`, rising to <b>${money(chosen.endBudget)}</b> as your steps land,`:''} clears everything by <b>${longDate(chosen.debtFreeDate)}</b>.</div></div>`
-        :saving>1
-        ?`<div class="chk ok">${icon('ok')}<div>Following this order pays off <b>${monthsLabel(weeksToMonths(cur.weeks)-weeksToMonths(chosen.weeks))} sooner</b> than repeating this week's split, and saves <b>${money0(saving)}</b> in interest.</div></div>`:''}
-    </div>
-  </div>
+  const bleed=debts.reduce((s,d)=>s+d.weekInterest,0);
+  const rows=[['Avalanche — highest rate first',av],['Snowball — smallest balance first',sn],['Your order',cus],['Repeat this week’s split',cur]];
+  const fin=rows.filter(r=>r[1].weeks!==Infinity).map(r=>r[1].weeks);
+  const mx=Math.max(...(fin.length?fin:[520]));
+  const best=Math.min(...rows.filter(r=>r[1].weeks!==Infinity).map(r=>r[1].totalInterest));
 
-  <div class="card">
-    <div class="cap">The stack, ${strat==='avalanche'?'by what it costs you':strat==='snowball'?'by what clears first':'in your order'}</div>
-    <div class="rank" style="margin-top:12px">
+  el.innerHTML=`<main class="page">
+  <header class="masthead">
+    <div><h1 class="page-title">Attack</h1>
+      <div class="dateline">${weekLabel(k)} · ${money(T.attack)} of attack money on the table</div></div>
+    <div class="controls">${stratSeg(strat)}</div>
+  </header>
+
+  <div class="hero-row">
+    <div class="hero-label">This week, put it here</div>
+    <div class="hero-figure">${esc(top.name)}</div>
+  </div>
+  <p class="lede">${why}</p>
+
+  <section class="band" aria-labelledby="attn-h">${checksHTML(notes)}</section>
+
+  <section class="band" aria-labelledby="stack-h">
+    <h2 class="sect-label" id="stack-h">The stack, ${strat==='avalanche'?'by what it costs you':strat==='snowball'?'by what clears first':'in your order'}</h2>
+    <ul class="rank">
       ${ranked.map((d,i)=>`
-      <div class="rrow ${i===0?'top':''}">
-        <div class="n">${i+1}</div>
-        <div><div class="nm">${esc(d.name)}</div>
-          <div class="meta">${money(d.balance)}${d.kind==='card'&&d.limit?` of ${money0(d.limit)} · ${pct(d.balance/d.limit,0)} used`:''} · ${pct(d.nominalApr,2)} APR${d.weeklyMin?` · ${money(d.weeklyMin)}/wk minimum`:''}</div></div>
-        <div class="rt"><div class="rv">${money(d.weekInterest)}</div><div class="rl">interest / week</div></div>
-      </div>`).join('')}
+      <li class="${i===0?'lead':''}">
+        <span class="n">${i+1}</span>
+        <span><span class="nm">${esc(d.name)}</span>
+          <div class="meta">${money(d.balance)}${d.kind==='card'&&d.limit?` of ${money0(d.limit)} · ${pct(d.balance/d.limit,0)} used`:''} · ${pct(d.nominalApr,2)} APR${d.weeklyMin?` · ${money(d.weeklyMin)}/wk minimum`:''}</div></span>
+        <span class="rt"><div class="rv">${money(d.weekInterest)}</div><div class="rl">interest / week</div></span>
+      </li>`).join('')}
       ${grace.map(d=>`
-      <div class="rrow" style="opacity:.75">
-        <div class="n" style="font-size:var(--t-xs);font-weight:700;color:var(--good)">PIF</div>
-        <div><div class="nm">${esc(d.name)} <span class="tag cash">in grace</span></div>
-          <div class="meta">${money(d.balance)} due in full by ${d.graceDue?dueLabel(d.graceDue):'the due date'} · ${pct(d.nominalApr,2)} APR if grace breaks</div></div>
-        <div class="rt"><div class="rv" style="color:var(--good)">${money(0)}</div><div class="rl">interest / week</div></div>
-      </div>`).join('')}
-    </div>
-    <div class="legend"><span class="k">Total bleed: <b>${money(debts.reduce((s,d)=>s+d.weekInterest,0))}</b> per week · <b>${money(debts.reduce((s,d)=>s+d.weekInterest,0)*52/12)}</b> per month</span></div>
-  </div>
+      <li class="pif">
+        <span class="n">PIF</span>
+        <span><span class="nm">${esc(d.name)}</span>
+          <div class="meta">${money(d.balance)} due in full by ${d.graceDue?dueLabel(d.graceDue):'the due date'} · ${pct(d.nominalApr,2)} APR if grace breaks</div></span>
+        <span class="rt"><div class="rv">${money(0)}</div><div class="rl">interest / week</div></span>
+      </li>`).join('')}
+    </ul>
+    <div class="legend"><span class="k">Total bleed <b>${money(bleed)}</b> per week · <b>${money(bleed*52/12)}</b> per month</span></div>
+  </section>
 
-  <div class="card">
-    <div class="cap">Same ${money(budget)} a week, four ways</div>
-    <div class="tl" style="margin-top:14px">
-      ${(()=>{const rs=[['Avalanche — highest rate first',av],['Snowball — smallest balance first',sn],['Your order',cus],['Repeat this week’s split',cur]];
-        const fin=rs.filter(r=>r[1].weeks!==Infinity).map(r=>r[1].weeks);
-        const mx=Math.max(...(fin.length?fin:[520]));
-        const best=Math.min(...rs.filter(r=>r[1].weeks!==Infinity).map(r=>r[1].totalInterest));
-        return rs.map(([nm,r])=>`<div class="tlr"><div class="tln">${nm}</div>
-          <div class="tlbar"><i class="${r.weeks===Infinity?'never':''}" style="width:${clamp((r.weeks===Infinity?mx:r.weeks)/mx*100,2,100)}%;${r.weeks!==Infinity&&r.totalInterest===best?'background:var(--s3)':''}"></i></div>
-          <div class="tlv">${r.weeks===Infinity?'never':monthsLabel(weeksToMonths(r.weeks))}</div></div>`).join('')})()}
+  <section class="band" aria-labelledby="four-h">
+    <h2 class="sect-label" id="four-h">Same ${money(budget)} a week, four ways</h2>
+    <div class="tl">
+      ${rows.map(([nm,r])=>`<div class="tlr${r.weeks!==Infinity&&r.totalInterest===best?' lead':''}">
+        <div class="tln">${nm}</div>
+        <div class="tlbar"><i class="${r.weeks===Infinity?'never':''}" style="width:${clamp((r.weeks===Infinity?mx:r.weeks)/mx*100,2,100)}%"></i></div>
+        <div class="tlv">${r.weeks===Infinity?'never':monthsLabel(weeksToMonths(r.weeks))}</div></div>`).join('')}
     </div>
     <div class="legend">
       <span class="k">Avalanche <b>${money0(av.totalInterest)}</b></span>
@@ -1966,10 +1980,10 @@ function viewAttack(el){
       <span class="k">Your order <b>${money0(cus.totalInterest)}</b></span>
       <span class="k">This week's split <b>${cur.weeks===Infinity?'never clears':money0(cur.totalInterest)}</b></span>
     </div>
-  </div>`;
+  </section>
+  </main>`;
 }
 
-/* ── Payoff ───────────────────────────────────────────────────────── */
 function viewPayoff(el){
   const k=currentWeek(),C=computeWeek(k),T=C.totals;
   const debts=debtSnapshot(k);
