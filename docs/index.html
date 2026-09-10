@@ -563,6 +563,7 @@ function computeWeek(k){
 
   const cards=rows.filter(r=>r.a.kind==='card');
   const debts=rows.filter(r=>KIND_DEBT(r.a.kind));
+  const buckets=rows.filter(r=>!r.isRollup&&KIND_INFLOW(r.a.kind));
   const totals={
     income, allocated, unallocated,
     limit:r2(cards.reduce((s,r)=>s+n0(r.a.limit),0)),
@@ -571,16 +572,21 @@ function computeWeek(k){
     debtBalance:r2(debts.reduce((s,r)=>s+r.balance,0)),
     debtAfter:r2(debts.reduce((s,r)=>s+r.after,0)),
     debtPaid:r2(debts.reduce((s,r)=>s+r.total,0)),
-    attack:r2(rows.reduce((s,r)=>r.isRollup?s:s+r.attack,0)),
-    minPaid:r2(rows.reduce((s,r)=>r.isRollup?s:s+r.min,0)),
-    otherPaid:r2(rows.reduce((s,r)=>r.isRollup?s:s+r.other,0)),
+    /* Partitioned by row KIND, not by column, so every dollar lands in exactly
+       one bucket. Summing a column across all rows counted a cash account's
+       Min and Attack twice — once here and again in savingsIn — and left the
+       Other column on a debt row in no bucket at all. */
+    minPaid:r2(debts.reduce((s,r)=>s+r.min,0)),
+    attack:r2(debts.reduce((s,r)=>s+r.attack,0)),
+    otherDebt:r2(debts.reduce((s,r)=>s+r.other,0)),
     weekInterest:r2(debts.reduce((s,r)=>s+r.weekInterest,0)),
     availAfter:r2(cards.reduce((s,r)=>s+n0(r.availAfter),0)),
   };
   totals.usage=totals.limit?totals.cardBalance/totals.limit:0;
   totals.usageAfter=totals.limit?totals.cardAfter/totals.limit:0;
   totals.avgUsageAfter=cards.length?cards.reduce((s,r)=>s+n0(r.usageAfter),0)/cards.length:0;
-  totals.savingsIn=r2(rows.filter(r=>!r.isRollup&&KIND_INFLOW(r.a.kind)).reduce((s,r)=>s+r.total,0));
+  /* a bucket's whole contribution, whichever column it was entered in */
+  totals.savingsIn=r2(buckets.reduce((s,r)=>s+r.total,0));
 
   return {key:k, rows, byId, totals, checks:runChecks(k,rows,totals)};
 }
