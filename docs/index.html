@@ -1546,7 +1546,19 @@ const TABS=[
   {id:'accounts',label:'Accounts',  k:'6'},
 ];
 const CONVERTED=new Set(['week']);   // grows as each view lands
+/* Replacing #view.innerHTML removes whatever input is focused, and if the user
+   has typed in it the browser fires `change` at it SYNCHRONOUSLY, mid-render.
+   Any handler that re-renders then re-enters us halfway through and the outer
+   pass never finishes -- the page ends up scrolled to the top with focus on
+   <body>. Render is a whole-view rebuild; there is never a reason to run two at
+   once, so refuse the nested call and let the outer pass complete. */
+let RENDERING=false;
 function render(){
+  if(RENDERING)return;
+  RENDERING=true;
+  try{renderInner()}finally{RENDERING=false}
+}
+function renderInner(){
   /* a copy published without seed data starts here — nothing personal ships in the page */
   if(!S.accounts.length||!weekKeys().length){renderWelcome();return}
   $('#nav').innerHTML=TABS.map(t=>
@@ -2418,7 +2430,18 @@ document.addEventListener('change',e=>{
   if(d.step){const st=planSteps().find(x=>x.id===d.step);if(st){st.on=t.checked;save();render()}return}
   if(d.cal){const c=S.plan.calendar.find(x=>x.id===d.cal);if(c){c.done=t.checked;save();render()}return}
   if(d.open){const o=S.plan.open.find(x=>x.id===d.open);if(o){o.done=t.checked;save();render()}return}
-  if(d.k!=null&&d.k!==''||d.a){save();render()}
+  if(d.k!=null&&d.k!==''||d.a){
+    /* The `input` handler above has already committed this field and re-rendered.
+       That re-render blurs the live element, which makes Chrome fire a late
+       `change` right here -- and a bare render() from this point throws focus to
+       <body> and resets every scroll container. That is the "page jumps to the
+       top while I'm typing" bug: two renders per keystroke, the second undoing
+       the first. Commit again (idempotent, and covers any control that fires
+       change without input) and re-render the focus-preserving way. */
+    if(RENDERING)return;
+    if(d.k!=null&&d.k!=='')setWeekField(d.k,t.value); else setAcctField(d.a,t.value);
+    save();rerenderKeepFocus();
+  }
 });
 
 /* ── clicks ───────────────────────────────────────────────────────── */
