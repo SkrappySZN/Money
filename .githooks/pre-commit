@@ -1,0 +1,28 @@
+#!/bin/sh
+# Refuse to commit anything carrying real financial data.
+# build.py and this hook are skipped: they contain the guard list itself.
+BAD='[redacted]|[redacted]|[redacted]|[redacted]|[redacted]|[redacted]|[redacted]|[redacted]|[redacted]|[redacted]|[redacted]|995\.98|[redacted]'
+staged=$(git diff --cached --name-only --diff-filter=ACM)
+[ -z "$staged" ] && exit 0
+
+if echo "$staged" | grep -qx 'index.html'; then
+  echo "pre-commit: index.html holds your real balances and is gitignored."
+  echo "            Run 'python3 build.py' and commit docs/index.html instead."
+  exit 1
+fi
+
+fail=0
+for f in $staged; do
+  case "$f" in build.py|.githooks/*) continue ;; esac
+  hits=$(git diff --cached -U0 -- "$f" | grep '^+' | grep -nE "$BAD" | head -3)
+  if [ -n "$hits" ]; then
+    echo "pre-commit: personal financial data in $f:"
+    echo "$hits" | cut -c1-140
+    fail=1
+  fi
+done
+if [ "$fail" = 1 ]; then
+  echo "REFUSING. Run 'python3 build.py' and commit docs/index.html, or fix the lines above."
+  exit 1
+fi
+exit 0
