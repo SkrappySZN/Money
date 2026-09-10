@@ -14,12 +14,13 @@ const src = seed.replace('boot();','') + '\n'
   + core.join('\n').replace(/"use strict";/g,'')
   + `\nreturn {SEED, migrate, computeWeek, weekLabel, weekLong, KIND_DEBT, n0,
       debtSnapshot, simulate, stepFireWeek, weeksToMonths, monthsLabel, longDate,
-      dateAfterWeeks, addWeeks, shortMY, r2,
+      dateAfterWeeks, addWeeks, shortMY, r2, weekKeys, thisWeek, md, liveAccounts,
       get S(){return S}, set S(v){S=v}};`;
 const app = new Function(src)();
 const {SEED, migrate, computeWeek, weekLabel, weekLong, KIND_DEBT, n0,
        debtSnapshot, simulate, stepFireWeek, weeksToMonths, monthsLabel, longDate,
-       dateAfterWeeks, addWeeks, shortMY, r2:R2} = app;
+       dateAfterWeeks, addWeeks, shortMY, r2:R2, weekKeys, thisWeek, md,
+       liveAccounts} = app;
 app.S = JSON.parse(JSON.stringify(SEED)); migrate();
 const S = app.S;
 
@@ -108,6 +109,28 @@ function payoffData(){
                 t:longDate(addWeeks(k,p.w)), months:monthsLabel(weeksToMonths(p.w))}))};
 }
 
+function historyData(){
+  const ks=weekKeys();
+  const per=ks.map(w=>{const c=computeWeek(w),t=c.totals;
+    return {k:w, x:md(w), t:weekLong(w), planned:w>thisWeek(),
+      debt:t.debtBalance, cards:t.cardBalance, util:t.usage,
+      paid:t.debtPaid, attack:t.attack, income:t.income,
+      allocated:t.allocated, unallocated:t.unallocated};});
+  const cards=liveAccounts().filter(a=>a.kind==='card');
+  const spark=cards.map(a=>{
+    const pts=ks.map(w=>{const c=computeWeek(w); return R2(n0((c.byId[a.id]||{}).balance));});
+    const now=pts[pts.length-1], then=pts[0];
+    return {name:a.name, pts, now, delta:R2(now-then), limit:n0(a.limit),
+      used:a.limit?R2(now/a.limit):null};});
+  const drift=R2(ks.reduce((s,w)=>{const c=computeWeek(w);
+    return s+c.rows.reduce((t,r)=>t+(r.drift&&r.drift>0?r.drift:0),0);},0));
+  const first=per[0], last=per[per.length-1];
+  return {weeks:per, spark, drift,
+    span:{from:weekLabel(ks[0]), to:weekLabel(ks[ks.length-1]), n:ks.length},
+    totals:{paidAll:R2(per.reduce((s,p)=>s+p.paid,0)),
+            attackAll:R2(per.reduce((s,p)=>s+p.attack,0))},
+    change:{debt:R2(last.debt-first.debt), from:first.debt, to:last.debt}};
+}
 function planData(){
   const P=S.plan, today=k;
   const byId=Object.fromEntries(debts.map(d=>[d.id,d]));
@@ -165,5 +188,5 @@ console.log(JSON.stringify({
   accountNames:S.accounts.map(a=>a.name),
   incomeAccount:(S.accounts.find(a=>a.kind==='income')||{}).name||'Checking',
   attack:attackData(), payoff:payoffData(),
-  plan:planData(), accounts:accountsData()
+  plan:planData(), accounts:accountsData(), history:historyData()
 }, null, 1));

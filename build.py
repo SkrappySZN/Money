@@ -67,6 +67,13 @@ def strip_const(src: str, name: str, blank: str) -> str:
         end += 1
     return src[:m.start()] + blank + src[end:]
 
+def copy_fonts():
+    src, dst = HERE / "fonts", HERE / "docs" / "fonts"
+    dst.mkdir(parents=True, exist_ok=True)
+    for f in src.glob("*.woff2"):
+        (dst / f.name).write_bytes(f.read_bytes())
+    return sorted(f.name for f in dst.glob("*.woff2"))
+
 def main():
     src = SRC.read_text()
     before = len(src)
@@ -91,6 +98,7 @@ def main():
 
     OUT.parent.mkdir(exist_ok=True)
     OUT.write_text(out)
+    print(f"fonts  : {', '.join(copy_fonts())}")
     print(f"wrote  : docs/{OUT.name}  {len(out):,} bytes  ({before-len(out):,} bytes of data removed)")
     print("checked: no account names, balances or plan details in the published copy")
 

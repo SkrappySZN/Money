@@ -690,6 +690,133 @@ def accounts_view():
   </section>
 </main>"""
 
+# ── History ──────────────────────────────────────────────────────────
+METRICS = [('Total debt','debt',m0), ('Card balance','cards',m0),
+           ('Utilization','util',pct), ('Paid to debt','paid',m0),
+           ('Attack','attack',m0), ('Paycheck','income',m0)]
+
+def spark_svg(pts, up):
+    if len(pts) < 2: return ''
+    lo, hi = min(pts + [0]), max(pts + [1])
+    W, H = 200, 34
+    X = lambda i: W * i / (len(pts) - 1)
+    Y = lambda v: H - 2 - (H - 6) * ((v - lo) / (hi - lo or 1))
+    d = ''.join(('L' if i else 'M') + f'{X(i):.1f},{Y(v):.1f}' for i, v in enumerate(pts))
+    k = 'up' if up else 'down'
+    return (f'<svg viewBox="0 0 {W} {H}" preserveAspectRatio="none" aria-hidden="true">'
+            f'<path class="sparkline {k}" d="{d}"/>'
+            f'<circle class="sparkdot {k}" cx="{X(len(pts)-1):.1f}" '
+            f'cy="{Y(pts[-1]):.1f}" r="2.2"/></svg>')
+
+def history_view(metric='Total debt'):
+    H = D['history']
+    label, key, fmt = next(m for m in METRICS if m[0] == metric)
+    series = [{'x': w['x'], 't': w['t'], 'v': w[key]} for w in H['weeks']]
+    now, first = series[-1]['v'], series[0]['v']
+    delta = round(now - first, 2)
+
+    strip_ = '<div class="strip">' + ''.join([
+        metric_tile(f'{label} now', fmt(now), H['span']['to']),
+        metric_tile(f'Change over {H["span"]["n"]} weeks',
+                    ('+' if delta > 0 else '') + fmt(delta),
+                    f'from {fmt(first)} at {H["span"]["from"]}',
+                    'is-over' if delta > 0 else 'is-settled'),
+        metric_tile('Paid to debt, all weeks', m0(H['totals']['paidAll']),
+                    f'{m0(H["totals"]["attackAll"])} of it attack'),
+        metric_tile('Unplanned drift', m0(H['drift']),
+                    'balances landing above projection',
+                    'is-idle' if H['drift'] > 0 else ''),
+    ]) + '</div>'
+
+    sparks = ''.join(
+        f'<div class="spark"><div class="sn"><span>{esc(s["name"])}</span>'
+        f'<span class="sv">{m0(s["now"])}</span></div>'
+        f'<div class="sd"><span class="{"up" if s["delta"] > 0 else "down"}">'
+        f'{("+" if s["delta"] > 0 else "")}{m0(s["delta"])}</span>'
+        + (f' · {pct(s["used"], 0)} used' if s['used'] is not None else '') + '</div>'
+        + spark_svg(s['pts'], s['delta'] > 0) + '</div>'
+        for s in H['spark'])
+
+    rows = ''.join(
+        f'<tr class="{"planned" if w["planned"] else ""}"><td>{esc(w["x"])}</td>'
+        f'<td>{m0(w["income"])}</td><td>{m0(w["allocated"])}</td>'
+        f'<td>{money(w["unallocated"])}</td><td>{m0(w["cards"])}</td>'
+        f'<td>{pct(w["util"], 0)}</td><td>{m0(w["paid"])}</td>'
+        f'<td>{m0(w["attack"]) if w["attack"] else "—"}</td></tr>'
+        for w in reversed(H['weeks']))
+
+    return f"""<main class="page">
+  <header class="masthead">
+    <div><h1 class="page-title">History</h1>
+      <div class="dateline">{H['span']['n']} weeks · {esc(H['span']['from'])} to
+        {esc(H['span']['to'])}</div></div>
+    <div class="controls">
+      <span class="jump"><select aria-label="Metric">
+        {''.join(f'<option{" selected" if m[0]==metric else ""}>{m[0]}</option>' for m in METRICS)}
+      </select><span class="caret"><svg width="9" height="9" viewBox="0 0 12 12" fill="none"
+        stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M2.5 4.5L6 8l3.5-3.5"/></svg></span></span>
+      {seg(['All','This year','13 weeks'], 'All')}
+    </div>
+  </header>
+  {strip_}
+  <section class="band" aria-labelledby="hchart-h">
+    {sect(esc(label), 'hchart-h')}
+    <div class="chart" id="chart"></div>
+  </section>
+  <section class="band" aria-labelledby="spark-h">
+    {sect(f'Each card, {H["span"]["n"]} weeks', 'spark-h')}
+    <div class="sparks">{sparks}</div>
+  </section>
+  <section class="band" aria-labelledby="wk-h">
+    {sect('Every week', 'wk-h')}
+    <table class="cmp"><thead><tr><th>Week</th><th>Paycheck</th><th>Assigned</th>
+      <th>Left</th><th>Card balance</th><th>Util</th><th>To debt</th><th>Attack</th>
+    </tr></thead><tbody>{rows}</tbody></table>
+  </section>
+</main>"""
+
+def metric_tile(label, value, note=None, state=''):
+    return metric(label, value, note, state)
+HISTORY_JS = """
+(function(){
+  const S=%s, el=document.getElementById('chart'); if(!el) return;
+  const W=el.clientWidth||900, H=260, PL=68, PR=16, PT=12, PB=30;
+  const hi=Math.max(...S.map(p=>p.v));
+  const st=Math.pow(10,Math.floor(Math.log10(hi/4)));
+  const tk=Math.ceil(hi/4/st)*st, ticks=[];
+  for(let v=0;v<=hi+tk*0.001;v+=tk) ticks.push(v);
+  const top=ticks[ticks.length-1];
+  const X=i=>PL+(W-PL-PR)*(i/(S.length-1)), Y=v=>PT+(H-PT-PB)*(1-v/top);
+  const line=S.map((p,i)=>(i?'L':'M')+X(i).toFixed(1)+','+Y(p.v).toFixed(1)).join('');
+  const money=n=>'$'+Math.round(n).toLocaleString('en-US');
+  el.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Total debt across '
+    +S.length+' weeks, '+money(S[0].v)+' to '+money(S[S.length-1].v)+'">'
+    +ticks.map(t=>'<line class="gridline" x1="'+PL+'" x2="'+(W-PR)+'" y1="'+Y(t).toFixed(1)
+      +'" y2="'+Y(t).toFixed(1)+'"/><text class="axl" x="'+(PL-10)+'" y="'+(Y(t)+4).toFixed(1)
+      +'" text-anchor="end">'+money(t)+'</text>').join('')
+    +S.map((p,i)=>i%%Math.ceil(S.length/7)===0||i===S.length-1
+      ?'<text class="axl" x="'+X(i).toFixed(1)+'" y="'+(H-8)+'" text-anchor="middle">'+p.x+'</text>':'').join('')
+    +'<path class="chartline" d="'+line+'"/>'
+    +'<g class="hov"><line class="crosshair" y1="'+PT+'" y2="'+(H-PB)+'"/>'
+    +'<circle class="chartdot" r="4"/></g></svg><div class="tip"></div>';
+  const svg=el.querySelector('svg'), hov=el.querySelector('.hov'), tip=el.querySelector('.tip');
+  const cross=hov.querySelector('line'), dot=hov.querySelector('circle');
+  const show=i=>{const p=S[i], b=svg.getBoundingClientRect(), sx=W/b.width;
+    cross.setAttribute('x1',X(i)); cross.setAttribute('x2',X(i));
+    dot.setAttribute('cx',X(i)); dot.setAttribute('cy',Y(p.v));
+    tip.innerHTML='<div class="tt">'+p.t+'</div>'
+      +'<div class="tr"><span>Total debt</span><span class="tv">'+money(p.v)+'</span></div>';
+    const w=tip.offsetWidth;
+    tip.style.left=Math.max(4,Math.min(b.width-w-4,X(i)/sx-w/2))+'px';
+    tip.style.top=Math.max(2,Y(p.v)/sx-tip.offsetHeight-14)+'px';};
+  svg.addEventListener('pointermove',e=>{const b=svg.getBoundingClientRect();
+    show(Math.max(0,Math.min(S.length-1,
+      Math.round(((e.clientX-b.left)*(W/b.width)-PL)/((W-PL-PR)/(S.length-1))))));});
+  show(Math.round(S.length*0.62));
+})();
+"""
+
 # ── Rail ─────────────────────────────────────────────────────────────
 RAIL_NAV = [('This Week','1'), ('Attack','2'), ('Payoff','3'),
             ('Plan','4'), ('History','5'), ('Accounts','6')]
@@ -749,5 +876,10 @@ write('preview-plan.html',           'Plan — preview', CSS_ALL,
       f'<div class="shell">{rail("Plan")}{plan_view()}</div>')
 write('preview-accounts.html',       'Accounts — preview', CSS_ALL,
       f'<div class="shell">{rail("Accounts")}{accounts_view()}</div>')
+write('preview-history.html',        'History — preview', CSS_ALL,
+      f'<div class="shell">{rail("History")}{history_view()}</div>',
+      extra_js=HISTORY_JS % json.dumps(
+          [{'x': w['x'], 't': w['t'], 'v': w['debt']} for w in D['history']['weeks']]))
 print(f"\n  allocation segments sum to {money(sum(D['alloc'].values()))} "
       f"against a {money(D['income'])} paycheck")
+

@@ -45,8 +45,12 @@
    oxblood only when it has actually failed */
 .sync{display:flex;align-items:center;gap:var(--space-1);font-size:var(--text-1);
   color:var(--ink-muted);min-height:var(--control-target)}
-.sync .dot{width:7px;height:7px;border-radius:var(--r-f);flex:0 0 auto;background:var(--ink-secondary)}
-.sync.is-pending .dot{background:none;box-shadow:inset 0 0 0 var(--rule-width) var(--ink-muted)}
+/* A square mark, not a circle: R6 allows one radius and no pills outside the
+   progress bars. It reads as a printer's mark, which suits the direction. */
+.sync .dot{width:7px;height:7px;border-radius:var(--radius);flex:0 0 auto;
+  background:var(--ink-secondary)}
+.sync.is-pending .dot{background:none;
+  box-shadow:inset 0 0 0 var(--rule-width) var(--ink-muted)}
 .sync.is-failed .dot{background:var(--negative)}
 .sync.is-failed{color:var(--negative)}
 /* bare text actions — the rail has no primary, so nothing here is solid */
