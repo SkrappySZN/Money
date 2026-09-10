@@ -413,8 +413,8 @@ td.dcell input:focus{color:var(--ink)}
 .sheet-grid{flex:1 1 auto;min-height:0;max-height:none;
   border-top:var(--rule-width) solid var(--rule)}
 .sheet-page table.grid{--table-row-step:2px;min-width:0}
-.sheet-page table.grid th,.sheet-page table.grid td{line-height:1.35;
-  padding-left:var(--space-1);padding-right:var(--space-1)}
+.sheet-page table.grid th,.sheet-page table.grid td{line-height:1.3;
+  padding-left:5px;padding-right:5px}
 .sheet-page table.grid tbody th{max-width:none}
 .sheet-page tr.sect th{padding-top:var(--space-1)}
 .sheet-page input.cell{width:8ch}
@@ -428,6 +428,12 @@ td.dcell input:focus{color:var(--ink)}
     align-items:baseline;gap:var(--space-2)}
 }
 
+/* Registry fields (limit, APR) edited from the sheet write to the account and
+   so change every week at once. Marked with a dotted rest state to say that
+   they are not week data. */
+input.cell.is-registry{border-bottom-style:dotted;border-bottom-color:var(--rule)}
+input.cell.is-registry:hover{border-bottom-style:solid;border-bottom-color:var(--rule-strong)}
+input.cell.is-registry:focus{border-bottom-style:solid;border-bottom-color:var(--accent)}
 input.cell.is-zero{color:var(--ink-muted)}
 input.cell.is-attack{color:var(--accent);font-weight:var(--weight-medium)}
 input.cell.is-attack.is-zero{color:var(--ink-muted);font-weight:var(--weight-regular)}
@@ -1871,7 +1877,7 @@ function usageBar(u){
 function viewAllocation(el){
   const k=currentWeek(),C=computeWeek(k),T=C.totals,ks=weekKeys();
   const i=ks.indexOf(k);
-  const all=UI.allCols===true;
+  const all=UI.allCols!==false;
   const cols=sheetCols(all);
   const off=Math.abs(T.unallocated);
   const state=off<0.005?'is-settled':(T.unallocated>0?'is-idle':'is-over');
@@ -1887,9 +1893,10 @@ function viewAllocation(el){
     </div>
     <div class="controls">
       <span class="seg">
-        <button data-allcols="0" aria-pressed="${!all}">Core</button>
         <button data-allcols="1" aria-pressed="${all}">All columns</button>
+        <button data-allcols="0" aria-pressed="${!all}">Core</button>
       </span>
+      <button class="ctl" data-act="addacct">+ Account</button>
       <button class="ctl" data-go="prev" aria-label="Previous week" ${i<=0?'disabled':''}>←</button>
       <span class="jump"><select id="weekPick" aria-label="Jump to week">
         <option selected disabled>Jump to week</option>
@@ -1951,11 +1958,20 @@ const SHEET_COLS=[
   {k:'name',core:true,label:'Account',head:'l',
    cell:r=>`<th scope="row" title="${esc(r.a.name)}"><span class="acct">${esc(r.a.name)}</span></th>`},
 
+  /* Limit and APR live on the account, not the week, so these write through
+     `data-a` and change every week at once. Only debts carry them — the
+     Accounts view gates the same two fields on KIND_DEBT. */
   {k:'limit',core:true,label:'Limit',
-   cell:r=>dimCell(r.a.limit?money0(r.a.limit):'—')},
+   cell:r=>KIND_DEBT(r.a.kind)
+     ?`<td class="num"><input class="cell is-registry${n0(r.a.limit)===0?' is-zero':''}"`
+       +` data-a="${r.a.id}:limit" value="${n0(r.a.limit)||''}" placeholder="—"></td>`
+     :dimCell('—')},
 
-  {k:'apr',core:false,label:'APR',
-   cell:r=>dimCell(r.a.apr?pct(r.a.apr,2):'—')},
+  {k:'apr',core:true,label:'APR %',
+   cell:r=>KIND_DEBT(r.a.kind)
+     ?`<td class="num"><input class="cell is-registry${r.a.apr?'':' is-zero'}"`
+       +` data-a="${r.a.id}:aprPct" value="${r.a.apr?r2(r.a.apr*100):''}" placeholder="—"></td>`
+     :dimCell('—')},
 
   {k:'balance',core:true,label:'Balance',
    cell:r=>r.isRollup||r.a.kind==='income'
@@ -1976,7 +1992,7 @@ const SHEET_COLS=[
   {k:'minWk',core:true,label:'Min due /wk',
    cell:r=>dimCell(n0(r.minAmt)?money(r2(n0(r.minAmt)/MIN_DIVISOR)):'—')},
 
-  {k:'close',core:false,label:'Close',cell:r=>cellDate(r,'close')},
+  {k:'close',core:true,label:'Stmt close',cell:r=>cellDate(r,'close')},
   {k:'due',  core:true, label:'Due',  cell:r=>cellDate(r,'due')},
 
   {k:'min',   core:true,label:'Min',   cell:r=>cellNum(r,'min')},
@@ -1993,14 +2009,19 @@ const SHEET_COLS=[
   {k:'after',core:true,label:'After',
    cell:r=>`<td class="num ${r.a.kind==='card'&&r.after>n0(r.a.limit)?'neg':r.after<0?'neg':''}">${money(r.after)}</td>`},
 
-  {k:'usageAfter',core:true,label:'Usage after',
+  {k:'usageAfter',core:true,label:'Usage aft',
    cell:r=>dimCell(r.a.kind==='card'&&r.a.limit?pct(n0(r.usageAfter)):'—')},
 
-  {k:'availAfter',core:false,label:'Avail after',
+  {k:'availAfter',core:false,label:'Avail aft',
    cell:r=>dimCell(r.a.kind==='card'&&r.a.limit?money(n0(r.availAfter)):'—')},
 
   {k:'sixMo',core:false,label:'6 mo',
    cell:r=>dimCell(r.sixMo!=null?money0(r.sixMo):'—')},
+
+  /* The spreadsheet's MIN PMT AFTER $ — what the month's minimum still wants
+     once this week's payment is counted. Computed all along, never shown. */
+  {k:'minLeft',core:false,label:'Min left',
+   cell:r=>dimCell(n0(r.minAmt)?money(n0(r.minLeft)):'—')},
 ];
 const sheetCols=all=>SHEET_COLS.filter(c=>all||c.core);
 
