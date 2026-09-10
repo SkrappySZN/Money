@@ -2302,7 +2302,7 @@ function cellNum(r,f,cls=''){
   const a=r.a,id=a.id;
   if(r.isRollup||a.kind==='income')return `<td class="num dim">${money(n0(r[f]))}</td>`;
   const ro=a.autoOther==='cardMinShortfall'&&f==='other';
-  return `<td class="num"><input class="cell ${cls}${n0(r[f])===0?' is-zero':''}"`
+  return `<td class="num"><input class="cell ${cls}${n0(r[f])===0?' is-zero':''}" data-fmt="money"`
     +` data-k="${id}:${f}" value="${moneyInput(n0(r[f]))}"`
     +`${ro?' readonly title="Auto: card minimums not paid directly"':''}></td>`;
 }
@@ -2331,7 +2331,7 @@ const SHEET_COLS=[
      Accounts view gates the same two fields on KIND_DEBT. */
   {k:'limit',label:'Limit',
    cell:r=>KIND_DEBT(r.a.kind)
-     ?`<td class="num"><input class="cell is-registry${n0(r.a.limit)===0?' is-zero':''}"`
+     ?`<td class="num"><input class="cell is-registry${n0(r.a.limit)===0?' is-zero':''}" data-fmt="money"`
        +` data-a="${r.a.id}:limit" value="${r.a.limit?moneyInput(n0(r.a.limit)):''}" placeholder="—"></td>`
      :dimCell('—')},
   {k:'apr',label:'APR %',
@@ -2342,7 +2342,7 @@ const SHEET_COLS=[
   {k:'balance',label:'Balance',
    cell:r=>r.isRollup||r.a.kind==='income'
      ?`<td class="num dim">${money(r.balance)}</td>`
-     :`<td class="num"><input class="cell" data-k="${r.a.id}:balance" value="${moneyInput(r.balance)}">${driftTag(r)}</td>`},
+     :`<td class="num"><input class="cell" data-fmt="money" data-k="${r.a.id}:balance" value="${moneyInput(r.balance)}">${driftTag(r)}</td>`},
   {k:'usage',label:'Usage',
    cell:r=>dimCell(r.a.kind==='card'&&r.a.limit?usageBar(n0(r.usage))+pct(n0(r.usage)):'—')},
 
@@ -2350,7 +2350,7 @@ const SHEET_COLS=[
      — including cards, which carried no minimum at all until now. */
   {k:'minAmt',label:'Min due /mo',
    cell:r=>r.isRollup||r.a.kind==='income'?'<td></td>'
-     :`<td class="num"><input class="cell${n0(r.minAmt)===0?' is-zero':''}"`
+     :`<td class="num"><input class="cell${n0(r.minAmt)===0?' is-zero':''}" data-fmt="money"`
        +` data-k="${r.a.id}:minAmt" value="${moneyInput(n0(r.minAmt))}"></td>`},
 
   /* Derived, never typed: the monthly split MIN_DIVISOR ways. */
@@ -3103,6 +3103,23 @@ function setAcctField(key,val){
   else if(field==='aprPct')a.apr=n0(val)/100;
   else a[field]=n0(val);
 }
+/* A money cell carries "$12,500.00" at rest and a bare number while it is
+   being edited. Formatting live as you type would fight the caret -- every
+   comma inserted moves it -- so the currency comes off on the way in and goes
+   back on the way out. Without the way out, a cell kept whatever was typed
+   until some unrelated thing forced a redraw, which is how a balance came to
+   sit there reading as a bare number among formatted neighbours.
+
+   Stripping on the way in matters as much: typing at the end of a formatted
+   string appends to it, and n0() would read "$12,500.005" as twelve and a
+   half thousand and change. */
+const isMoneyCell=t=>t&&t.dataset&&t.dataset.fmt==='money';
+document.addEventListener('focusin',e=>{
+  if(isMoneyCell(e.target))e.target.value=n0(e.target.value).toFixed(2);
+});
+document.addEventListener('focusout',e=>{
+  if(isMoneyCell(e.target))e.target.value=moneyInput(n0(e.target.value));
+});
 document.addEventListener('input',e=>{
   const t=e.target;
   if(t.dataset.k!=null&&t.dataset.k!==''){
