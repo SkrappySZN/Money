@@ -1399,6 +1399,7 @@ function migrate(){
   migrateV3();
   migrateV4();
   migrateV5();
+  migrateV6();
 }
 /* v2 — grouping corrections, Sept 10 2026. Runs against the ledger already
    in the browser, not just the seed: editing SEED alone would have changed
@@ -1426,6 +1427,16 @@ function migrate(){
 /* v5 — the card-minimums bucket is a staging account for debt, not savings.
    Money lands there only on its way to a card, and classifying it as savings
    understated what actually goes to debt each week by the whole of it. */
+/* v6 — the Subscriptions bucket exists to clear the Apple card, which is
+   where the subscriptions now bill. Linking them means paying that card draws
+   the bucket down on its own, rather than the balance sitting there looking
+   untouched. */
+function migrateV6(){
+  if(S.v>=6)return;
+  const a=acct('subscriptions');
+  if(a&&acct('apple'))a.autoOut='apple';
+  S.v=6;
+}
 function migrateV5(){
   if(S.v>=5)return;
   const a=acct('credit-card-minimums');
@@ -1500,6 +1511,23 @@ function computeWeek(k){
       r.other=r2(Math.max(0,r.minAmt-paidDirect));
       r.e.other=r.other;
     }
+    /* `autoOut` names the account this bucket exists to pay. Whatever goes to
+       that account this week is drawn out of the bucket, because that is where
+       the money came from — the same idea as the minimums bucket, running the
+       other way: that one fills the gap on the way in, this one records the
+       drawdown on the way out.
+
+       Capped at what the bucket actually holds. Paying more than it has is a
+       real thing to do, but the excess came from general money, not from here,
+       and a savings bucket that reads below zero is telling a lie about
+       itself. */
+    if(r.a.autoOut){
+      const t=byId[r.a.autoOut];
+      const paid=t?r2(t.min+t.attack+t.other):0;
+      const held=r2(r.balance+r.min+r.attack+r.other);
+      r.out=r2(Math.min(Math.max(0,paid),Math.max(0,held)));
+      r.e.out=r.out;
+    }
   }
 
   /* the income row IS the paycheck cell — keep them the same number */
@@ -1557,7 +1585,17 @@ function computeWeek(k){
     }
   }
   const income=n0(w.income);
-  const allocated=r2(rows.filter(r=>!r.isRollup&&r.a.kind!=='income').reduce((s,r)=>s+r.total,0));
+  /* A payment funded out of a bucket is not a fresh call on this paycheck —
+     the paycheck already spent that dollar the week it went into the bucket.
+     Where a bucket is LINKED to the account it pays, the sheet holds both
+     sides of the same money, so the drawdown cancels the payment and the week
+     still balances. Only linked buckets net off: a hand-typed Out is money
+     leaving for something the sheet does not otherwise record, and there is
+     nothing to double count. */
+  const fundedFromBuckets=r2(rows.filter(r=>r.a.autoOut&&!r.isRollup)
+    .reduce((s,r)=>s+n0(r.out),0));
+  const allocated=r2(rows.filter(r=>!r.isRollup&&r.a.kind!=='income')
+    .reduce((s,r)=>s+r.total,0)-fundedFromBuckets);
   const unallocated=r2(income-allocated);
 
   const cards=rows.filter(r=>r.a.kind==='card');
@@ -2473,7 +2511,9 @@ const SHEET_COLS=[
   {k:'out',label:'Out',
    cell:r=>!KIND_INFLOW(r.a.kind)?dimCell('—')
      :r.isRollup?`<td class="num dim">${money(n0(r.out))}</td>`
-     :cellNum(r,'out')},
+     :r.a.autoOut
+       ?`<td class="num dim" title="Auto: drawn down by whatever was paid to ${esc((acct(r.a.autoOut)||{}).name||r.a.autoOut)} this week">${money(n0(r.out))}</td>`
+       :cellNum(r,'out')},
   {k:'interest',label:'Interest',
    cell:r=>`<td class="num ${r.inGrace?'pos':'dim'}"${r.inGrace?' title="In grace — no interest while the statement balance is paid in full"':''}>`
      +`${KIND_DEBT(r.a.kind)?(r.inGrace?'grace':money(r.weekInterest)):'—'}</td>`},
