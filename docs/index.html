@@ -203,7 +203,13 @@ td.dcell input:focus{color:var(--ink)}
 .alloc{display:flex;align-items:center;gap:var(--sp-4);flex-wrap:wrap}
 .allocbar{flex:1;min-width:260px;height:30px;border-radius:var(--r-1);background:var(--surface-3);
  display:flex;overflow:hidden;gap:2px}
+.allocbar{position:relative}
 .allocbar span{display:block;height:100%;transition:width var(--d3) var(--ease)}
+/* where the paycheck ran out */
+.paycheck-line{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--bad);pointer-events:none}
+/* everything past it — a print mark, not a fill */
+.overrun{position:absolute;top:0;bottom:0;pointer-events:none;
+  background:repeating-linear-gradient(135deg,var(--bad) 0 1px,transparent 1px 5px)}
 .allocbar span:first-child{border-radius:var(--r-1) 0 0 var(--r-1)}
 .allocbar span:last-child{border-radius:0 var(--r-1) var(--r-1) 0}
 .legend{display:flex;gap:var(--sp-4);flex-wrap:wrap;font-size:var(--t-xs);color:var(--ink-2);
@@ -988,18 +994,12 @@ function viewWeek(el){
   <div class="card">
     <div class="cap">Where the paycheck goes</div>
     <div class="alloc" style="margin-top:12px">
-      <div class="allocbar">
-        ${seg(T.minPaid,T.income,'var(--s1)')}
-        ${seg(T.attack,T.income,'var(--s2)')}
-        ${seg(T.savingsIn,T.income,'var(--s3)')}
-        ${seg(Math.max(0,T.unallocated),T.income,'var(--surface-3)')}
+      <div class="allocbar${T.allocated>T.income+0.005?' is-over':''}" role="img" aria-label="${esc(allocLabel(T))}">
+        ${allocSegments(T)}
       </div>
     </div>
     <div class="legend">
-      <span class="k"><i class="sw" style="background:var(--s1)"></i>Minimums <b>${money(T.minPaid)}</b></span>
-      <span class="k"><i class="sw" style="background:var(--s2)"></i>Attack <b>${money(T.attack)}</b></span>
-      <span class="k"><i class="sw" style="background:var(--s3)"></i>Buckets &amp; savings <b>${money(T.savingsIn)}</b></span>
-      <span class="k"><i class="sw" style="background:var(--surface-3)"></i>Unassigned <b>${money(Math.max(0,T.unallocated))}</b></span>
+      ${allocLegend(T)}
     </div>
     ${checksHTML(C.checks)}
   </div>
@@ -1037,9 +1037,40 @@ function viewWeek(el){
 
   $('#weekPick').onchange=e=>{UI.week=e.target.value;render()};
 }
-function seg(v,tot,color){
-  const w=tot>0?clamp(v/tot*100,0,100):0;
-  return w<0.4?'':`<span style="width:${w}%;background:${color}" title="${money(v)}"></span>`;
+/* The track is the paycheck. What is filled is what is assigned; the gap is what
+   is not. When the assignment exceeds the paycheck the bar rescales to the total
+   and an oxblood rule marks where the money ran out — the overrun is hatched
+   past it rather than being normalised away. */
+const ALLOC_SEGS=T=>[
+  ['Attack',            T.attack,     'var(--s2)'],
+  ['Other debt',        T.otherDebt,  'var(--s1)'],
+  ['Minimums',          T.minPaid,    'var(--s1)'],
+  ['Buckets & savings', T.savingsIn,  'var(--s3)'],
+];
+function allocSegments(T){
+  const span=Math.max(T.allocated,T.income);
+  if(span<=0)return'';
+  const parts=ALLOC_SEGS(T).filter(([,v])=>v>0)
+    .map(([,v,c])=>`<span style="width:${v/span*100}%;background:${c}"></span>`).join('');
+  const over=T.allocated>T.income+0.005;
+  if(!over)return parts;
+  const at=T.income/span*100;
+  return parts
+    +`<i class="overrun" style="left:${at}%;width:${(T.allocated-T.income)/span*100}%"></i>`
+    +`<i class="paycheck-line" style="left:${at}%"></i>`;
+}
+/* Keys the ink only. The remainder — unassigned or overrun — is the tile's job. */
+function allocLegend(T){
+  return ALLOC_SEGS(T).filter(([,v])=>v>0)
+    .map(([n,v,c])=>`<span class="k"><i class="sw" style="background:${c}"></i>${esc(n)} <b>${money(v)}</b></span>`)
+    .join('');
+}
+function allocLabel(T){
+  const parts=ALLOC_SEGS(T).filter(([,v])=>v>0).map(([n,v])=>`${n} ${money(v)}`).join(', ');
+  const tail=T.unallocated<-0.005?`Over-allocated by ${money(-T.unallocated)}.`
+    :Math.abs(T.unallocated)>=0.005?`Unassigned ${money(T.unallocated)}.`
+    :'Fully assigned, nothing left over.';
+  return `Where the paycheck goes. Paycheck ${money(T.income)}, assigned ${money(T.allocated)}. ${parts}. ${tail}`;
 }
 function icon(s){
   /* a red X reads as "you broke it"; an exclamation reads as "look at this" */
