@@ -2314,17 +2314,48 @@ let toastT=null;
 function toast(msg){const t=$('#toast');t.textContent=msg;t.className='toast on';
   clearTimeout(toastT);toastT=setTimeout(()=>t.className='toast',2600)}
 
+/* Re-rendering replaces #view wholesale, so every scroll container inside it is
+   reborn at offset 0. Walk the tree in document order and key each element by
+   tag+class plus its ordinal, so the same key finds the same box after the
+   rebuild. Both passes must count EVERY element, not just scrolled ones, or the
+   ordinals drift apart. */
+function scrollKeys(fn){
+  const n=new Map();
+  document.querySelectorAll('#view *').forEach(el=>{
+    const t=el.nodeName+'.'+(el.getAttribute('class')||'');
+    const i=n.get(t)||0;n.set(t,i+1);
+    fn(el,t+'#'+i);
+  });
+}
+function scrollSnapshot(){
+  const m=new Map();
+  scrollKeys((el,k)=>{if(el.scrollTop||el.scrollLeft)m.set(k,[el.scrollTop,el.scrollLeft])});
+  return m;
+}
+function scrollRestore(m){
+  if(!m.size)return;
+  scrollKeys((el,k)=>{const v=m.get(k);if(v){el.scrollTop=v[0];el.scrollLeft=v[1]}});
+}
+
 function rerenderKeepFocus(){
   const ae=document.activeElement,ds=ae&&ae.dataset?ae.dataset:null;
   const key=ds?(ds.k||ds.a):null,raw=ae?ae.value:null;
   const ss=ae&&ae.selectionStart,se=ae&&ae.selectionEnd;
+  const scr=scrollSnapshot(),wx=window.scrollX,wy=window.scrollY;
   render();
-  if(!key)return;
-  const el=document.querySelector(`[data-k="${CSS.escape(key)}"],[data-a="${CSS.escape(key)}"]`);
-  if(!el)return;
-  el.focus();
-  if(raw!=null&&el.type!=='date'&&el.value!==raw)el.value=raw;
-  try{el.setSelectionRange(ss,se)}catch(e){}
+  scrollRestore(scr);
+  if(key){
+    const el=document.querySelector(`[data-k="${CSS.escape(key)}"],[data-a="${CSS.escape(key)}"]`);
+    if(el){
+      /* preventScroll or the browser drags the cell into view from offset 0 and
+         the pane jumps under the cursor on every keystroke. */
+      el.focus({preventScroll:true});
+      if(raw!=null&&el.type!=='date'&&el.value!==raw)el.value=raw;
+      try{el.setSelectionRange(ss,se)}catch(e){}
+    }
+  }
+  /* Content reflow can shorten the document and take the window with it. */
+  if(window.scrollX!==wx||window.scrollY!==wy)window.scrollTo(wx,wy);
 }
 
 /* the pay week rolls forward: balances projected, recurring allocations kept */
