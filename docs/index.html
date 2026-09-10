@@ -208,8 +208,12 @@ td.dcell input:focus{color:var(--ink)}
 /* where the paycheck ran out */
 .paycheck-line{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--bad);pointer-events:none}
 /* everything past it — a print mark, not a fill */
+/* The overrun always keys to --bad, never to the segment it overflows. Its own
+   opaque ground, so nothing beneath can tint it — a green Buckets segment
+   underneath must not make a breach read as savings. */
 .overrun{position:absolute;top:0;bottom:0;pointer-events:none;
-  background:repeating-linear-gradient(135deg,var(--bad) 0 1px,transparent 1px 5px)}
+  background:repeating-linear-gradient(135deg,
+    var(--bad) 0 1px,var(--surface-3) 1px 5px)}
 .allocbar span:first-child{border-radius:var(--r-1) 0 0 var(--r-1)}
 .allocbar span:last-child{border-radius:0 var(--r-1) var(--r-1) 0}
 .legend{display:flex;gap:var(--sp-4);flex-wrap:wrap;font-size:var(--t-xs);color:var(--ink-2);
@@ -951,7 +955,9 @@ function viewWeek(el){
   const i=ks.indexOf(k);
   const off=Math.abs(T.unallocated);
   const heroCls=off<0.005?'good':(T.unallocated>0?'warn':'bad');
-  const heroTxt=off<0.005?'Balanced':(T.unallocated>0?'Left to assign':'Over by');
+  /* "Unassigned" at zero and when idle; "Over by" when the week spent more than
+     it earned, so direction is in the label rather than a minus sign. */
+  const heroTxt=T.unallocated<-0.005?'Over by':'Unassigned';
 
   const dense=UI.dense!==false;
   const cols=dense
