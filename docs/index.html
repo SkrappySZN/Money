@@ -2482,7 +2482,25 @@ const SHEET_COLS=[
    cell:r=>r.isRollup||r.a.kind==='income'
      ?`<td class="num dim">${money(r.balance)}</td>`
      :`<td class="num"><input class="cell" data-fmt="money" data-k="${r.a.id}:balance"`
-       +`${isLocked(currentWeek())?' readonly':''} value="${moneyInput(r.balance)}">${driftTag(r)}</td>`},
+       +`${isLocked(currentWeek())?' readonly':''} value="${moneyInput(r.balance)}"></td>`},
+
+  /* What the balance did that the projection did not see. `+ Next week` carries
+     each row forward at its projected close; the gap to what you actually type
+     is new spending on a debt, or money that left a bucket without being
+     recorded. It lived as a rounded tag clipped to the balance cell, where
+     $11.99 read as "+12" and there was nowhere to say what it meant.
+
+     Direction cannot be read from the sign alone: a debt above its projection
+     is bad news and a bucket above its projection is good, so the colour keys
+     off kind. */
+  {k:'drift',label:'Unplanned',
+   cell:r=>{
+     if(r.drift==null||Math.abs(r.drift)<0.005)return dimCell('—');
+     const up=r.drift>0;
+     const cls=KIND_DEBT(r.a.kind)?(up?'is-bad':'is-good'):(up?'is-good':'is-plain');
+     return `<td class="num chg ${cls}" title="Projected ${money(n0(r.e.projected))}">`
+       +`${up?'+':'−'}${money(Math.abs(r.drift))}</td>`;
+   }},
   {k:'usage',label:'Usage',
    cell:r=>dimCell(r.a.kind==='card'&&r.a.limit?usageBar(n0(r.usage))+pct(n0(r.usage)):'—')},
 
@@ -2562,6 +2580,7 @@ function totalRow(C,cols){
     name:'<th scope="row">Total</th>',
     limit:`<td class="num">${money0(T.limit)}</td>`,
     balance:`<td class="num">${money(T.cardBalance)}</td>`,
+    drift:'<td></td>',
     usage:`<td class="num">${pct(T.usage)}</td>`,
     minAmt:`<td class="num">${money(sum(C,'minAmt','card'))}</td>`,
     minWk:`<td class="num">${money(r2(sum(C,'minAmt','card')/MIN_DIVISOR))}</td>`,
@@ -2578,11 +2597,6 @@ function totalRow(C,cols){
   return `<tr class="tot">${cols.map(c=>cell[c.k]||'<td></td>').join('')}</tr>`;
 }
 const sum=(C,f,kind)=>r2(C.rows.filter(r=>r.a.kind===kind).reduce((s,r)=>s+n0(r[f]),0));
-function driftTag(r){
-  if(r.drift==null||Math.abs(r.drift)<0.5)return'';
-  const up=r.drift>0;
-  return`<span class="drift ${up?'up':'dn'}" title="Projected ${money(n0(r.e.projected))} — ${up?'higher':'lower'} than planned">${up?'+':'−'}${money(Math.abs(r.drift),0).slice(1)}</span>`;
-}
 </script>
 <script>
 "use strict";
