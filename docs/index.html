@@ -261,6 +261,7 @@ table.hist tr.planned td:first-child::after{content:'plan';margin-left:7px;font-
     <div class="nav" id="nav"></div>
     <div class="railfoot">
       <div class="railstat" id="railstat"></div>
+      <div id="syncbox"></div>
       <button class="btn sm ghost" id="btnExport">Export backup</button>
       <button class="btn sm ghost" id="btnImport">Import backup</button>
     </div>
@@ -328,7 +329,10 @@ function load(){
   try{const raw=localStorage.getItem(KEY);if(raw){S=JSON.parse(raw);migrate();return true}}catch(e){console.warn('load failed',e)}
   S=JSON.parse(JSON.stringify(SEED));save();return false;
 }
-function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){toast('Could not save — storage may be full')}}
+function save(){
+  try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){toast('Could not save — storage may be full')}
+  if(typeof syncTouch==='function')syncTouch();
+}
 /* The parts of the plan that are decisions rather than balances. Seeded once on
    first run, then yours to edit; the published copy ships this empty. */
 const PLAN_SEED={source:"",order:[],steps:[],calendar:[],open:[],ref:null,minsToVerify:[]};
@@ -778,6 +782,7 @@ function render(){
     dot.className='dot'+(off<0.005?'':(C.totals.unallocated>0?' warn':' bad'));
     $('#railstat').innerHTML=`${weekLabel(k)}<br>${money(C.totals.debtBalance)} owed<br>${pct(C.totals.usage,0)} utilization`;
   }
+  if(typeof paintSync==='function')paintSync();
   const v=$('#view');
   ({week:viewWeek,attack:viewAttack,payoff:viewPayoff,plan:viewPlan,
     history:viewHistory,accounts:viewAccounts}[UI.tab]||viewWeek)(v);
@@ -1579,6 +1584,8 @@ document.addEventListener('click',e=>{
   switch(d.act){
     case'newweek':newWeek();break;
     case'startfresh':startFresh();break;
+    case'signin':signInModal();break;
+    case'signout':signOut();break;
     case'hideref':S.plan.ref.show=false;save();render();toast('Hidden — it lives in your backup');break;
     case'addcal':addCalItem();break;
     case'addopen':addOpenItem();break;
@@ -1710,8 +1717,17 @@ function modal(html,okLabel,onOk){
   document.addEventListener('keydown',function esc2(e){
     if(e.key==='Escape'){close();document.removeEventListener('keydown',esc2)}});
 }
-function confirmModal(title,body,okLabel,onOk){
-  modal(`<h3>${esc(title)}</h3><p>${esc(body)}</p>`,okLabel,onOk);
+function confirmModal(title,body,okLabel,onOk,altLabel,onAlt){
+  if(!altLabel)return modal(`<h3>${esc(title)}</h3><p>${esc(body)}</p>`,okLabel,onOk);
+  const root=$('#modalRoot');
+  root.innerHTML=`<div class="scrim"><div class="modal"><h3>${esc(title)}</h3><p>${esc(body)}</p>
+    <div class="mrow"><button class="btn ghost" data-m="x">Cancel</button>
+      <button class="btn" data-m="alt">${esc(altLabel)}</button>
+      <button class="btn pri" data-m="ok">${esc(okLabel)}</button></div></div></div>`;
+  const close=()=>root.innerHTML='';
+  root.querySelector('[data-m=x]').onclick=close;
+  root.querySelector('[data-m=alt]').onclick=()=>{onAlt();close()};
+  root.querySelector('[data-m=ok]').onclick=()=>{onOk();close()};
 }
 
 /* ── boot ─────────────────────────────────────────────────────────── */
@@ -1731,11 +1747,231 @@ function boot(){
   }
   const fresh=!load();
   render();
+  if(typeof syncInit==='function')syncInit().catch(e=>console.warn('sync',e));
   if(fresh&&Object.keys(S.weeks).length)toast(`Imported ${Object.keys(S.weeks).length} weeks from your spreadsheet`);
   /* charts are sized off the container, so redraw them when it changes */
   ro=new ResizeObserver(()=>{if(UI.tab==='history'||UI.tab==='payoff')render()});
   let w=window.innerWidth;
   window.addEventListener('resize',()=>{if(Math.abs(window.innerWidth-w)>60){w=window.innerWidth;render()}});
+}
+</script>
+<script>
+"use strict";
+/* ═══════════════════════════════════════════════════════════════════
+   Optional cross-device sync.
+
+   Fill in url + key below and the app gains an email login and a synced
+   copy of your ledger. Leave them empty and nothing changes — no network,
+   no login, localStorage only.
+
+   The publishable key is meant to be public; row-level security is what
+   keeps your row yours. Point this at a Supabase project of its own.
+   ═══════════════════════════════════════════════════════════════════ */
+const SUPABASE={url:'https://ewrvtiqhnrcckemigjgx.supabase.co',key:'sb_publishable_0IiqsQubCg9FvPeh4xds4w_gbpG65FJ'};
+
+const syncOn=()=>!!(SUPABASE.url&&SUPABASE.key);
+const SESSKEY='ccb.session';
+let SESSION=null;
+let SYNC={status:'off',at:null,msg:'',busy:false};
+let pushTimer=null;
+
+/* ── session ──────────────────────────────────────────────────────── */
+function loadSession(){try{SESSION=JSON.parse(localStorage.getItem(SESSKEY)||'null')}catch(e){SESSION=null}}
+function saveSession(){try{SESSION?localStorage.setItem(SESSKEY,JSON.stringify(SESSION))
+  :localStorage.removeItem(SESSKEY)}catch(e){}}
+function setSession(d){
+  SESSION={access_token:d.access_token,refresh_token:d.refresh_token,
+    expires_at:Date.now()+((d.expires_in||3600)*1000),
+    email:(d.user&&d.user.email)||(SESSION&&SESSION.email)||'',
+    user_id:(d.user&&d.user.id)||(SESSION&&SESSION.user_id)||''};
+  saveSession();
+}
+const base=()=>SUPABASE.url.replace(/\/+$/,'');
+async function sb(path,opts={},auth=true){
+  const h={apikey:SUPABASE.key,'Content-Type':'application/json',...(opts.headers||{})};
+  if(auth&&SESSION)h.Authorization='Bearer '+SESSION.access_token;
+  return fetch(base()+path,{...opts,headers:h});
+}
+async function ensureToken(){
+  if(!SESSION)return false;
+  if(Date.now()<SESSION.expires_at-60000)return true;
+  const r=await sb('/auth/v1/token?grant_type=refresh_token',
+    {method:'POST',body:JSON.stringify({refresh_token:SESSION.refresh_token})},false);
+  if(!r.ok){SESSION=null;saveSession();return false}
+  setSession(await r.json());return true;
+}
+/* a magic link comes back with the tokens in the URL fragment */
+function consumeAuthHash(){
+  if(!location.hash||location.hash.indexOf('access_token=')<0)return false;
+  const p=new URLSearchParams(location.hash.slice(1));
+  const at=p.get('access_token');if(!at)return false;
+  SESSION={access_token:at,refresh_token:p.get('refresh_token')||'',
+    expires_at:Date.now()+(parseInt(p.get('expires_in')||'3600',10)*1000),email:'',user_id:''};
+  saveSession();
+  history.replaceState(null,'',location.pathname+location.search);
+  return true;
+}
+async function fetchUser(){
+  const r=await sb('/auth/v1/user');
+  if(!r.ok)return false;
+  const u=await r.json();
+  SESSION.email=u.email||'';SESSION.user_id=u.id||'';saveSession();return true;
+}
+
+/* ── the row ──────────────────────────────────────────────────────── */
+const blobOf=()=>{const c={...S};delete c.sync;return c};
+const weekCount=o=>Object.keys((o&&o.weeks)||{}).length;
+
+async function pullRow(){
+  if(!await ensureToken())return null;
+  const r=await sb(`/rest/v1/ledger?user_id=eq.${SESSION.user_id}&select=data,version,updated_at,device`);
+  if(!r.ok)throw new Error('pull failed ('+r.status+')');
+  return (await r.json())[0]||null;
+}
+async function pushRow(){
+  if(!syncOn()||!SESSION)return;
+  if(!await ensureToken()){setSync('signedout','Session expired — sign in again');return}
+  const v=(S.sync&&S.sync.version)||0;
+  const payload={user_id:SESSION.user_id,data:blobOf(),version:v+1,updated_at:new Date().toISOString()};
+  setSync('busy','Saving…');
+  let r;
+  if(v===0){
+    r=await sb('/rest/v1/ledger',{method:'POST',body:JSON.stringify(payload),
+      headers:{Prefer:'return=representation'}});
+    if(r.status===409){await reconcile();return}
+  }else{
+    /* compare-and-set on version: if someone else wrote, we match nothing */
+    r=await sb(`/rest/v1/ledger?user_id=eq.${SESSION.user_id}&version=eq.${v}`,
+      {method:'PATCH',body:JSON.stringify(payload),headers:{Prefer:'return=representation'}});
+  }
+  if(!r.ok){setSync('error','Could not save — '+r.status);return}
+  const rows=await r.json();
+  if(!rows.length){await reconcile();return}
+  S.sync={version:rows[0].version,at:rows[0].updated_at,email:SESSION.email,dirty:false};
+  save();setSync('ok','');
+}
+/* remote moved under us — let the person choose, never guess */
+async function reconcile(){
+  const row=await pullRow();
+  if(!row){S.sync={...(S.sync||{}),version:0};save();return pushRow()}
+  setSync('conflict','Another device saved first');
+  confirmModal('This was changed on another device',
+    `Here: ${weekCount(S)} weeks, saved ${S.sync&&S.sync.at?timeAgo(S.sync.at):'never'}. `+
+    `There: ${weekCount(row.data)} weeks, saved ${timeAgo(row.updated_at)}. Keeping one replaces the other.`,
+    'Keep what is here',()=>{
+      S.sync={version:row.version,at:row.updated_at,email:SESSION.email,dirty:true};
+      save();pushRow();
+    },'Take the other one',()=>{
+      S=row.data;migrate();
+      S.sync={version:row.version,at:row.updated_at,email:SESSION.email,dirty:false};
+      save();UI.week=null;render();setSync('ok','');toast('Pulled from the other device');
+    });
+}
+async function firstSync(){
+  try{
+    const row=await pullRow();
+    const localWeeks=weekCount(S);
+    if(!row){                                   // nothing up there yet
+      S.sync={version:0,at:null,email:SESSION.email,dirty:true};await pushRow();
+      toast('Ledger uploaded');return;
+    }
+    if(!localWeeks){                            // fresh device
+      S=row.data;migrate();
+      S.sync={version:row.version,at:row.updated_at,email:SESSION.email,dirty:false};
+      save();UI.week=null;render();setSync('ok','');toast(`Pulled ${weekCount(S)} weeks`);return;
+    }
+    const same=JSON.stringify(blobOf())===JSON.stringify(row.data);
+    if(same){
+      S.sync={version:row.version,at:row.updated_at,email:SESSION.email,dirty:false};
+      save();setSync('ok','');return;
+    }
+    setSync('conflict','Two versions');
+    confirmModal('There is already a ledger on this account',
+      `Here: ${localWeeks} weeks. There: ${weekCount(row.data)} weeks, saved ${timeAgo(row.updated_at)}. `+
+      `Keeping one replaces the other.`,
+      'Keep what is here',()=>{
+        S.sync={version:row.version,at:row.updated_at,email:SESSION.email,dirty:true};save();pushRow();
+      },'Take the other one',()=>{
+        S=row.data;migrate();
+        S.sync={version:row.version,at:row.updated_at,email:SESSION.email,dirty:false};
+        save();UI.week=null;render();setSync('ok','');toast('Pulled from the account');
+      });
+  }catch(e){setSync('error',e.message)}
+}
+
+/* ── plumbing ─────────────────────────────────────────────────────── */
+function setSync(status,msg){SYNC.status=status;SYNC.msg=msg||'';paintSync()}
+function syncTouch(){
+  if(!syncOn()||!SESSION)return;
+  S.sync={...(S.sync||{version:0}),dirty:true};
+  setSync('busy','Saving…');
+  clearTimeout(pushTimer);
+  pushTimer=setTimeout(()=>{pushRow().catch(e=>setSync('error',e.message))},2500);
+}
+function timeAgo(iso){
+  if(!iso)return'never';
+  const s=Math.max(0,(Date.now()-new Date(iso).getTime())/1000);
+  if(s<60)return'just now';
+  if(s<3600)return Math.round(s/60)+' min ago';
+  if(s<86400)return Math.round(s/3600)+' hr ago';
+  return Math.round(s/86400)+' d ago';
+}
+function paintSync(){
+  const el=$('#syncbox');if(!el)return;
+  if(!syncOn()){el.innerHTML='';return}
+  if(!SESSION){
+    el.innerHTML=`<button class="btn sm ghost" data-act="signin">Sign in to sync</button>`;return;
+  }
+  const dot={ok:'var(--good)',busy:'var(--accent)',error:'var(--critical)',
+    conflict:'var(--warning)',signedout:'var(--warning)'}[SYNC.status]||'var(--muted)';
+  const line=SYNC.msg||(S.sync&&S.sync.at?'Synced '+timeAgo(S.sync.at):'Not synced yet');
+  el.innerHTML=`<div class="railstat" style="display:flex;align-items:center;gap:6px">
+      <span style="width:7px;height:7px;border-radius:99px;background:${dot};flex:0 0 auto"></span>
+      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(line)}</span></div>
+    <div class="railstat" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(SESSION.email||'')}</div>
+    <button class="btn sm ghost" data-act="signout">Sign out</button>`;
+}
+function signInModal(){
+  modal(`<h3>Sign in</h3><p>We email you a link. Open it on this device and you are in —
+      no password to remember or leak.</p>
+    <div class="field"><label>Email</label><input type="text" id="siEmail" placeholder="you@example.com"
+      value="${esc((SESSION&&SESSION.email)||'')}"></div>
+    <div class="field"><label>Or paste the 6-digit code, if you got one</label>
+      <input type="text" id="siCode" placeholder="000000"></div>`,
+    'Send link',async()=>{
+      const email=$('#siEmail').value.trim(),code=$('#siCode').value.trim();
+      if(!email){toast('Email first');return false}
+      try{
+        if(code){
+          const r=await sb('/auth/v1/verify',{method:'POST',
+            body:JSON.stringify({email,token:code,type:'email'})},false);
+          if(!r.ok){toast('That code did not work');return false}
+          setSession(await r.json());await fetchUser();paintSync();await firstSync();return;
+        }
+        const back=encodeURIComponent(location.origin+location.pathname);
+        const r=await sb('/auth/v1/otp?redirect_to='+back,{method:'POST',
+          body:JSON.stringify({email,create_user:true})},false);
+        if(!r.ok){toast('Could not send — '+r.status);return false}
+        toast('Check your email');
+      }catch(e){toast('Network error');return false}
+    });
+  setTimeout(()=>{const e=$('#siEmail');if(e)e.focus()},40);
+}
+function signOut(){
+  SESSION=null;saveSession();
+  if(S.sync){S.sync.dirty=false;save()}
+  setSync('off','');render();toast('Signed out — your data stays in this browser');
+}
+async function syncInit(){
+  if(!syncOn())return;
+  loadSession();
+  const fromLink=consumeAuthHash();
+  if(!SESSION){setSync('off','');return}
+  if(!await ensureToken()){setSync('signedout','Sign in again');return}
+  if(!SESSION.user_id)await fetchUser();
+  paintSync();
+  await firstSync();
+  if(fromLink)toast('Signed in');
 }
 </script>
 <script>
