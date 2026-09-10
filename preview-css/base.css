@@ -1,0 +1,381 @@
+
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:var(--font-sans);font-size:var(--text-3);line-height:var(--leading-3);
+  -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.page{padding:var(--space-6) var(--space-7);max-width:1180px}
+.prose{max-width:var(--measure-prose)}
+
+/* ── Masthead ─────────────────────────────────────────────────────  */
+.masthead{display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-4);
+  flex-wrap:wrap;padding-bottom:var(--space-2);
+  border-bottom:var(--rule-width) solid var(--rule-strong);margin-bottom:var(--space-4)}
+.page-title{font-family:var(--font-display);font-size:var(--text-5);line-height:var(--leading-5);
+  font-weight:var(--weight-regular);letter-spacing:var(--tracking-tight);
+  font-variant-numeric:tabular-nums;font-optical-sizing:auto;color:var(--ink);margin:0}
+.dateline{font-size:var(--text-1);line-height:var(--leading-1);font-weight:var(--weight-medium);
+  letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted);
+  margin-top:var(--space-half)}
+.controls{display:flex;align-items:center;gap:var(--space-1)}
+.ctl{font:inherit;font-size:var(--text-2);color:var(--ink-secondary);background:none;
+  border:var(--rule-width) solid transparent;border-radius:var(--radius);cursor:pointer;
+  min-width:var(--control-target);min-height:var(--control-target);padding:0 var(--space-1);
+  display:inline-flex;align-items:center;justify-content:center;line-height:1.6}
+.ctl:hover{color:var(--ink)}
+.ctl:focus-visible{outline:none;color:var(--focus-ink);text-decoration:underline;
+  text-decoration-color:var(--focus-ink);text-decoration-thickness:var(--focus-ring-width);
+  text-underline-offset:var(--focus-ring-offset)}
+.jump{position:relative;display:inline-flex;align-items:center;min-height:var(--control-target);
+  border-bottom:var(--rule-width) solid var(--rule)}
+.jump:hover{border-bottom-color:var(--rule-strong)}
+.jump:focus-within{border-bottom-color:var(--focus-ink);box-shadow:0 var(--rule-width) 0 0 var(--focus-ink)}
+.jump:focus-within select{color:var(--focus-ink)}
+.jump select{appearance:none;-webkit-appearance:none;font:inherit;font-size:var(--text-2);
+  color:var(--ink-secondary);background:none;border:0;border-radius:var(--radius);
+  align-self:stretch;min-height:var(--control-target);
+  padding:0 calc(var(--space-2) + var(--space-half)) 0 0;cursor:pointer;line-height:1.6}
+.jump select:focus{outline:none}
+.jump:hover select{color:var(--ink)}
+.jump .caret{position:absolute;right:0;pointer-events:none;display:flex;color:var(--ink-muted)}
+.ctl-primary{background:var(--accent);color:var(--accent-on);border-color:var(--accent);
+  font-weight:var(--weight-medium);min-height:var(--control-target);padding:0 var(--space-2)}
+.ctl-primary:hover{background:var(--accent-pressed);border-color:var(--accent-pressed)}
+.ctl-primary:focus-visible{outline:var(--focus-ring-width) solid var(--ink);
+  outline-offset:var(--focus-ring-offset);text-decoration:none;color:var(--accent-on)}
+
+/* ── Hero + four-up ───────────────────────────────────────────────  */
+.hero-row{margin-bottom:var(--space-5)}
+.hero-label,.m-label,.sect-label{font-size:var(--text-1);line-height:var(--leading-1);
+  font-weight:var(--weight-medium);letter-spacing:var(--tracking-label);text-transform:uppercase}
+.hero-label{color:var(--ink-muted);margin-bottom:var(--space-1)}
+.hero-figure{font-family:var(--font-display);font-size:var(--text-7);line-height:var(--leading-7);
+  letter-spacing:var(--tracking-tight);font-weight:var(--weight-regular);
+  font-variant-numeric:tabular-nums;font-optical-sizing:auto;color:var(--ink);
+  display:flex;align-items:baseline;gap:0.06em}
+.hero-figure .mark{font-size:0.42em;color:var(--ink-secondary);letter-spacing:0;
+  transform:translateY(-0.821em)}
+.hero-figure input{font:inherit;font-variant-numeric:inherit;letter-spacing:inherit;color:inherit;
+  background:none;border:0;border-bottom:var(--rule-width) solid transparent;padding:0;
+  width:5.1ch;border-radius:var(--radius)}
+.hero-figure input:focus{outline:none;border-bottom-color:var(--accent)}
+.hero-note{font-size:var(--text-2);line-height:var(--leading-2);color:var(--ink-muted);
+  margin-top:var(--space-1)}
+.strip{display:grid;grid-template-columns:repeat(4,1fr);
+  border-top:var(--rule-width) solid var(--rule);padding-top:var(--space-2)}
+.metric{padding:0 var(--space-3)}
+.metric + .metric{border-left:var(--rule-width) solid var(--rule)}
+.metric:first-child{padding-left:0}
+.metric:last-child{padding-right:0}
+.m-label{color:var(--ink-muted)}
+.m-value{font-size:var(--text-4);line-height:var(--leading-4);font-variant-numeric:tabular-nums;
+  color:var(--ink);margin-top:var(--space-half)}
+.m-value.is-settled{color:var(--positive);font-weight:var(--weight-semibold)}
+.m-value.is-idle,.m-value.is-flagged{color:var(--attention)}
+.m-value.is-over{color:var(--negative);font-weight:var(--weight-semibold)}
+.m-note{font-size:var(--text-2);line-height:var(--leading-2);color:var(--ink-muted);
+  margin-top:var(--space-half);font-variant-numeric:tabular-nums}
+
+/* ── Sections ─────────────────────────────────────────────────────  */
+.band{margin-top:var(--space-6)}
+.sect-label{color:var(--ink-secondary);padding-top:var(--space-2);
+  border-top:var(--rule-width) solid var(--rule-strong);margin-bottom:var(--space-3)}
+.sect-label .count{color:var(--ink-muted);font-variant-numeric:tabular-nums;margin-left:var(--space-1)}
+h2.sect-label,h3.sect-label{margin-top:0;display:flex;align-items:center}
+
+/* ── Allocation bar: one ink, four tints ──────────────────────────  */
+.allocbar{display:flex;height:var(--space-3);gap:var(--rule-width);overflow:hidden;
+  background:var(--bar-track);border-radius:var(--bar-radius)}
+.allocbar span{display:block;height:100%}
+.legend{display:flex;gap:var(--space-4);flex-wrap:wrap;font-size:var(--text-2);
+  color:var(--ink-secondary);margin-top:var(--space-2);line-height:1.8}
+.legend .k{display:flex;align-items:center;gap:var(--space-1)}
+.legend .sw{width:10px;height:10px;flex:0 0 auto;border-radius:var(--bar-radius)}
+.legend b{color:var(--ink);font-weight:var(--weight-medium);font-variant-numeric:tabular-nums}
+
+/* ── Alerts: three-level marking, a rule in the margin ────────────  */
+.attn-list,.ok-list{list-style:none;margin:0;padding:0}
+.attn-row{padding:var(--space-2) 0 var(--space-2) var(--space-2);
+  border-left:var(--rule-width) solid var(--negative);
+  border-bottom:var(--rule-width) solid var(--rule-faint)}
+.attn-row:last-child{border-bottom:0}
+.attn-row p{margin:0;max-width:var(--measure-prose);color:var(--ink-secondary)}
+.account{color:var(--negative);font-weight:var(--weight-semibold)}
+.fig-breach{color:var(--negative);font-weight:var(--weight-semibold);font-variant-numeric:tabular-nums}
+.fig{font-variant-numeric:tabular-nums;font-weight:var(--weight-medium);color:var(--ink)}
+.ok-head{display:flex;align-items:center;gap:var(--space-1);background:none;border:0;padding:0;
+  cursor:pointer;font-size:var(--text-1);font-weight:var(--weight-medium);
+  letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted);
+  min-height:var(--control-target);margin-top:var(--space-2);
+  border-top:var(--rule-width) solid var(--rule-faint);width:100%;justify-content:flex-start}
+.ok-head:hover{color:var(--ink-secondary)}
+.ok-head:focus-visible{outline:none;color:var(--focus-ink);text-decoration:underline;
+  text-decoration-color:var(--focus-ink);text-decoration-thickness:var(--focus-ring-width);
+  text-underline-offset:var(--focus-ring-offset)}
+.ok-head .caret{transition:transform var(--duration-2) var(--ease);display:flex}
+.ok-head[aria-expanded="true"] .caret{transform:rotate(90deg)}
+.ok-list li{padding:var(--space-1) 0 var(--space-1) var(--space-2);color:var(--ink-secondary);
+  max-width:var(--measure-prose);border-left:var(--rule-width) solid var(--rule)}
+
+/* ── Sinking funds: thin, squared, muted ──────────────────────────  */
+.fund{display:grid;grid-template-columns:180px 1fr 150px;gap:var(--space-3);align-items:center;
+  padding:var(--space-1) 0;font-size:var(--text-2)}
+.fund + .fund{border-top:var(--rule-width) solid var(--rule-faint)}
+.fund .fname{color:var(--ink)}
+.fbar{height:var(--bar-height);background:var(--bar-track);border-radius:var(--bar-radius);overflow:hidden}
+.fbar i{display:block;height:100%;background:var(--fill-strong)}
+.fbar i.done{background:var(--positive)}
+.fnum{text-align:right;font-variant-numeric:tabular-nums;color:var(--ink-secondary)}
+.fnum .done{color:var(--positive);font-weight:var(--weight-medium)}
+
+/* ── Segmented control: ink weight + underline, accent stays out ──  */
+.seg{display:inline-flex;gap:var(--space-3)}
+.seg button{background:none;border:0;padding:var(--space-half) 0;cursor:pointer;
+  font-size:var(--text-1);font-weight:var(--weight-medium);letter-spacing:var(--tracking-label);
+  text-transform:uppercase;color:var(--ink-muted);min-height:var(--control-target);
+  border-bottom:var(--focus-ring-width) solid transparent}
+.seg button:hover{color:var(--ink-secondary)}
+.seg button[aria-pressed="true"]{color:var(--ink);border-bottom-color:var(--ink)}
+.seg button:focus-visible{outline:none;color:var(--focus-ink);border-bottom-color:var(--focus-ink)}
+
+/* ── The grid ─────────────────────────────────────────────────────
+   No container border. The sticky header is a deeper stock with one
+   rule beneath; the sticky account column is paper with a hairline at
+   its right edge. The wrapper is capped so sticky resolves inside it. */
+.gridwrap{overflow:auto;max-height:max(420px,70vh)}
+table.grid{border-collapse:separate;border-spacing:0;width:100%;min-width:960px;font-size:var(--text-2)}
+table.grid th,table.grid td{padding:var(--table-row-step) var(--space-2);text-align:right;
+  white-space:nowrap;font-variant-numeric:tabular-nums}
+table.grid thead th{position:sticky;top:0;z-index:3;background:var(--paper-deep);
+  color:var(--ink-muted);font-size:var(--text-1);font-weight:var(--weight-medium);
+  letter-spacing:var(--tracking-label);text-transform:uppercase;
+  border-bottom:var(--rule-width) solid var(--rule-strong)}
+table.grid thead th:first-child{text-align:left;left:0;z-index:4}
+table.grid tbody th{text-align:left;font-weight:var(--weight-regular);position:sticky;left:0;
+  z-index:2;background:var(--paper);max-width:210px;overflow:hidden;text-overflow:ellipsis;
+  border-right:var(--rule-width) solid var(--rule)}
+table.grid tbody tr td{border-bottom:var(--rule-width) solid var(--rule-faint)}
+table.grid tbody tr:hover th,table.grid tbody tr:hover td{background:var(--paper-deep)}
+tr.sect th{background:var(--paper)!important;color:var(--ink-muted);font-size:var(--text-1);
+  font-weight:var(--weight-medium);letter-spacing:var(--tracking-label);text-transform:uppercase;
+  text-align:left;padding-top:var(--space-3);border-bottom:var(--rule-width) solid var(--rule)}
+tr.rollup th{font-style:italic;color:var(--ink-secondary)}
+tr.rollup th,tr.child th{padding-left:var(--space-3)}
+tr.tot th,tr.tot td{font-weight:var(--weight-semibold);
+  border-top:var(--rule-width) solid var(--rule-strong);border-bottom:0}
+td.dim{color:var(--ink-muted)}
+input.cell{width:9ch;text-align:right;background:none;border:0;
+  border-bottom:var(--rule-width) solid transparent;padding:0;color:var(--ink);font:inherit;
+  font-variant-numeric:tabular-nums;border-radius:var(--radius)}
+input.cell:hover{border-bottom-color:var(--rule)}
+input.cell:focus{outline:none;border-bottom-color:var(--accent)}
+input.cell.is-zero{color:var(--ink-muted)}
+input.cell.is-attack{color:var(--accent);font-weight:var(--weight-medium)}
+input.cell.is-attack.is-zero{color:var(--ink-muted);font-weight:var(--weight-regular)}
+
+@media(max-width:880px){
+  .page{padding:var(--space-4) var(--space-3)}
+  .hero-figure{font-size:var(--text-6);line-height:var(--leading-6)}
+  .strip{grid-template-columns:repeat(2,1fr);gap:var(--space-2) 0}
+  .metric{padding:var(--space-2) var(--space-3)}
+  .metric:nth-child(odd){padding-left:0}
+  .metric:nth-child(3){border-left:0}
+  .fund{grid-template-columns:130px 1fr 110px}
+}
+
+/* ══ Shared components ══════════════════════════════════════════════
+   Used by more than one view. The segmented control above is shared
+   too — Compact/Full sheet on This Week, strategy on Attack and Payoff.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Ranked rows ──────────────────────────────────────────────────
+   Attack's stack and Payoff's budget steps. No card, no fill: a rule
+   between rows, and the leading row marked by ink weight alone. */
+.rank{list-style:none;margin:0;padding:0}
+.rank li{display:grid;grid-template-columns:2ch 1fr auto;gap:var(--space-3);
+  align-items:baseline;padding:var(--space-2) 0;
+  border-bottom:var(--rule-width) solid var(--rule-faint)}
+.rank li:last-child{border-bottom:0}
+.rank .n{font-variant-numeric:tabular-nums;color:var(--ink-muted);font-size:var(--text-2)}
+.rank li.lead .n{color:var(--ink);font-weight:var(--weight-medium)}
+.rank .nm{font-weight:var(--weight-medium);color:var(--ink-secondary)}
+.rank li.lead .nm{color:var(--ink);font-weight:var(--weight-semibold)}
+.rank .meta{font-size:var(--text-2);color:var(--ink-muted);margin-top:2px;
+  font-variant-numeric:tabular-nums}
+.rank .rt{text-align:right;font-variant-numeric:tabular-nums}
+.rank .rv{font-size:var(--text-3);color:var(--ink)}
+.rank li.lead .rv{font-weight:var(--weight-semibold)}
+.rank .rl{font-size:var(--text-1);color:var(--ink-muted)}
+.rank .pif .n{font-size:var(--text-1);color:var(--positive);font-weight:var(--weight-medium)}
+
+/* ── Timeline bars ────────────────────────────────────────────────
+   Attack's four-ways comparison and Payoff's what-clears-when. Same
+   squared, muted treatment as the sinking-fund bars (R8). */
+.tl{display:flex;flex-direction:column;gap:var(--space-1)}
+.tlr{display:grid;grid-template-columns:200px 1fr 110px;gap:var(--space-3);
+  align-items:center;font-size:var(--text-2);padding:var(--space-half) 0}
+.tln{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink-secondary)}
+.tlr.lead .tln{color:var(--ink);font-weight:var(--weight-medium)}
+.tlbar{height:var(--bar-height);background:var(--bar-track);border-radius:var(--bar-radius)}
+.tlbar i{display:block;height:100%;background:var(--fill-mid)}
+.tlr.lead .tlbar i{background:var(--fill-emphasis)}
+.tlbar i.never{background:repeating-linear-gradient(135deg,
+  var(--negative) 0 1px,var(--bar-track) 1px 5px)}
+.tlv{text-align:right;color:var(--ink-secondary);font-variant-numeric:tabular-nums}
+
+/* ── Chart ────────────────────────────────────────────────────────  */
+.chart{position:relative;margin-top:var(--space-3)}
+.chart svg{display:block;width:100%;overflow:visible}
+.axl{fill:var(--ink-muted);font-size:11px;font-family:var(--font-sans);
+  font-variant-numeric:tabular-nums}
+.gridline{stroke:var(--gridline);stroke-width:1;shape-rendering:crispEdges}
+/* carries the connection now that the callout no longer shouts */
+.crosshair{stroke:var(--ink-secondary);stroke-width:1;stroke-dasharray:2 3}
+.chartline{fill:none;stroke:var(--data-ink);stroke-width:2;
+  stroke-linejoin:round;stroke-linecap:round}
+.chartdot{fill:var(--data-ink);stroke:var(--paper);stroke-width:2}
+
+/* C7, amended: no elevation AND no fills beyond the single accent block.
+   An ink ground was justifiable as a printed callout, but a panel that tracks
+   the cursor should not outweigh everything static on the page — and paper with
+   a hairline does the same job without spending the system's only fill. The
+   crosshair carries the connection to the point. */
+.tip{position:absolute;pointer-events:none;background:var(--paper);color:var(--ink);
+  border:var(--rule-width) solid var(--rule-strong);border-radius:var(--radius);
+  padding:var(--space-1) var(--space-2);
+  font-size:var(--text-2);line-height:1.5;white-space:nowrap;z-index:5}
+.tip .tt{font-weight:var(--weight-medium);margin-bottom:2px}
+.tip .tr{display:flex;gap:var(--space-3);justify-content:space-between}
+.tip .tr span:first-child{color:var(--ink-muted)}
+.tip .tv{font-variant-numeric:tabular-nums;font-weight:var(--weight-medium)}
+
+/* ── Comparison table ─────────────────────────────────────────────  */
+table.cmp{border-collapse:collapse;width:100%;font-size:var(--text-2);margin-top:var(--space-2)}
+table.cmp th{text-align:right;color:var(--ink-muted);font-size:var(--text-1);
+  font-weight:var(--weight-medium);letter-spacing:var(--tracking-label);
+  text-transform:uppercase;padding:var(--space-1) var(--space-2);
+  border-bottom:var(--rule-width) solid var(--rule)}
+table.cmp th:first-child{text-align:left}
+table.cmp td{padding:var(--space-1) var(--space-2);text-align:right;
+  border-bottom:var(--rule-width) solid var(--rule-faint);font-variant-numeric:tabular-nums}
+table.cmp td:first-child{text-align:left}
+table.cmp tr.lead td{font-weight:var(--weight-medium);color:var(--ink)}
+table.cmp .cheapest{color:var(--positive);font-size:var(--text-1);
+  letter-spacing:var(--tracking-label);text-transform:uppercase;margin-left:var(--space-1)}
+
+/* lede prose under a hero — the sentence that explains the figure */
+.lede{max-width:var(--measure-prose);margin:0 0 var(--space-2);color:var(--ink-secondary)}
+.lede b{color:var(--ink);font-weight:var(--weight-medium);font-variant-numeric:tabular-nums}
+.lede.muted{color:var(--ink-muted);font-size:var(--text-2)}
+.hero-figure.plain{font-family:var(--font-sans)}
+.m-value .mark{font-size:0.6em;color:var(--ink-secondary);vertical-align:0.25em}
+input.cell.inline{width:8ch;font:inherit;font-size:var(--text-4);
+  font-variant-numeric:tabular-nums;text-align:left;padding:0}
+.rank .n input[type=checkbox]{accent-color:var(--accent);width:14px;height:14px;margin:0}
+
+/* ══ Plan ═══════════════════════════════════════════════════════════ */
+/* checkable lists — open items and the calendar */
+.plan-list{list-style:none;margin:0;padding:0}
+.plan-list li{display:grid;grid-template-columns:20px 1fr;gap:var(--space-2);
+  align-items:start;padding:var(--space-1) 0;
+  border-bottom:var(--rule-width) solid var(--rule-faint)}
+.plan-list li:last-child{border-bottom:0}
+.plan-list.dated li{grid-template-columns:20px 92px 1fr}
+.plan-list input[type=checkbox]{accent-color:var(--accent);width:14px;height:14px;
+  margin:5px 0 0}
+.plan-list .pt{color:var(--ink);font-weight:var(--weight-medium)}
+.plan-list .pn{color:var(--ink-muted);font-size:var(--text-2);
+  max-width:var(--measure-prose);line-height:1.55}
+.plan-list .pd{font-size:var(--text-2);color:var(--ink-muted);
+  font-variant-numeric:tabular-nums;padding-top:1px}
+.plan-list .pd.is-overdue{color:var(--negative);font-weight:var(--weight-medium)}
+.plan-list li.done{opacity:.45}
+.plan-list li.done .pt{text-decoration:line-through}
+/* C2: no chips. A state is tracked uppercase text, not a filled shape. */
+.state{font-size:var(--text-1);font-weight:var(--weight-medium);
+  letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted);
+  margin-left:var(--space-1)}
+.state.clear{color:var(--positive)}
+.reorder{display:flex;gap:var(--space-half)}
+.reorder button{background:none;border:0;cursor:pointer;color:var(--ink-muted);
+  min-width:var(--control-target);min-height:var(--control-target);
+  display:inline-flex;align-items:center;justify-content:center;font-size:var(--text-2)}
+.reorder button:hover{color:var(--ink)}
+.reorder button:disabled{opacity:.3;cursor:not-allowed}
+.reorder button:focus-visible{outline:none;color:var(--focus-ink);text-decoration:underline;
+  text-decoration-color:var(--focus-ink);text-decoration-thickness:var(--focus-ring-width);
+  text-underline-offset:var(--focus-ring-offset)}
+
+/* ══ Accounts ═══════════════════════════════════════════════════════ */
+.acct-head,.acct-row{display:grid;
+  grid-template-columns:1fr 108px 96px 88px 104px 96px 88px;
+  gap:var(--space-2);align-items:center;padding:var(--space-1) 0}
+.acct-head{font-size:var(--text-1);font-weight:var(--weight-medium);
+  letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted);
+  border-bottom:var(--rule-width) solid var(--rule)}
+.acct-row{border-bottom:var(--rule-width) solid var(--rule-faint)}
+.acct-row:last-child{border-bottom:0}
+.acct-head span:not(:first-child),.acct-row .num{text-align:right}
+/* fields are a hairline underline, never a box — same as the jump control */
+.field{background:none;border:0;border-bottom:var(--rule-width) solid var(--rule);
+  border-radius:var(--radius);font:inherit;font-size:var(--text-2);color:var(--ink);
+  padding:var(--space-half) 0;width:100%;min-height:var(--control-target)}
+.field.num{text-align:right;font-variant-numeric:tabular-nums}
+.field:hover{border-bottom-color:var(--rule-strong)}
+.field:focus{outline:none;border-bottom-color:var(--accent);
+  box-shadow:0 var(--rule-width) 0 0 var(--accent)}
+select.field{appearance:none;-webkit-appearance:none;cursor:pointer;color:var(--ink-secondary)}
+.acct-row .archive{background:none;border:0;cursor:pointer;color:var(--ink-muted);
+  min-height:var(--control-target);font-size:var(--text-2);text-align:right}
+.acct-row .archive:hover{color:var(--negative)}
+.acct-row .archive:focus-visible{outline:none;color:var(--focus-ink);text-decoration:underline;
+  text-decoration-color:var(--focus-ink);text-decoration-thickness:var(--focus-ring-width);
+  text-underline-offset:var(--focus-ring-offset)}
+.actions{display:flex;gap:var(--space-4);flex-wrap:wrap;margin-top:var(--space-2)}
+.actions button{background:none;border:0;padding:0;cursor:pointer;
+  min-height:var(--control-target);font-size:var(--text-2);color:var(--ink-secondary)}
+.actions button:hover{color:var(--ink)}
+.actions button.danger{color:var(--negative)}
+.actions button:focus-visible{outline:none;color:var(--focus-ink);text-decoration:underline;
+  text-decoration-color:var(--focus-ink);text-decoration-thickness:var(--focus-ring-width);
+  text-underline-offset:var(--focus-ring-offset)}
+@media(max-width:880px){
+  .acct-head{display:none}
+  .acct-row{grid-template-columns:1fr 96px 88px;gap:var(--space-1)}
+  .acct-row .hideS{display:none}
+  .plan-list.dated li{grid-template-columns:20px 1fr}
+}
+.sub-label{font-size:var(--text-1);font-weight:var(--weight-medium);
+  letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted);
+  margin:var(--space-3) 0 var(--space-1)}
+.sect-label .count{color:var(--ink-muted);font-weight:var(--weight-regular);
+  letter-spacing:0;text-transform:none;font-size:var(--text-2)}
+
+/* R9 on dated rows: a date that has passed is wrong and takes oxblood; a date
+   that is coming is worth noticing and takes attention. When nothing is overdue
+   the colour must not all read as alarm. */
+.attn-row.upcoming{border-left-color:var(--attention)}
+.attn-row .when{color:var(--attention);font-weight:var(--weight-semibold);
+  font-variant-numeric:tabular-nums}
+
+/* A masthead should hand straight to its first real content. --space-6 between
+   them left an empty band that read as calm but was just a gap. */
+.band.tight{margin-top:var(--space-4)}
+.masthead + .band{margin-top:var(--space-4)}
+.sect-label + .lede{margin-top:calc(-1 * var(--space-1))}
+.rowmeta{font-size:var(--text-1);color:var(--ink-muted);margin-top:2px;
+  font-variant-numeric:tabular-nums}
+
+
+/* A band directly under the masthead must not draw a second rule: masthead rule,
+   gap, section rule reads as an empty box with nothing in it. */
+.masthead + .band > .sect-label,
+.masthead + .band > .sect-label:first-child{border-top:0;padding-top:0}
+
+/* Archive is destructive-ish and was the most repeated word on the page — twenty
+   identical rows of it. It stays in the accessibility tree and stays focusable,
+   but only shows on hover or focus. */
+.acct-row .archive{opacity:0;transition:opacity var(--duration-1) var(--ease-standard)}
+.acct-row:hover .archive,
+.acct-row:focus-within .archive,
+.acct-row .archive:focus-visible{opacity:1}
+@media(hover:none){.acct-row .archive{opacity:1}}

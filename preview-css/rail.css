@@ -1,0 +1,75 @@
+
+/* ── Shell ────────────────────────────────────────────────────────
+   The rail sits on the same paper as the page, separated by a single
+   hairline. No panel, no fill, no shadow — it recedes by being the
+   same surface rather than a different one. */
+.shell{display:flex;min-height:100vh;align-items:stretch}
+.rail{flex:0 0 220px;width:220px;position:sticky;top:0;height:100vh;
+  padding:var(--space-5) var(--space-4);display:flex;flex-direction:column;
+  gap:var(--space-5);border-right:var(--rule-width) solid var(--rule)}
+.shell .page{flex:1;min-width:0;max-width:none;padding:var(--space-6) var(--space-6) var(--space-7)}
+
+/* the product masthead, not a page title — display serif, held small */
+.brand{font-family:var(--font-display);font-size:var(--text-4);line-height:var(--leading-4);
+  font-weight:var(--weight-regular);letter-spacing:var(--tracking-tight);color:var(--ink);
+  font-optical-sizing:auto}
+
+/* ── Nav ──────────────────────────────────────────────────────────
+   Active is an accent rule in the margin plus ink weight. No fill.
+   Accent is permitted here: primary action and active nav only. */
+.nav{display:flex;flex-direction:column}
+.nav a{display:flex;align-items:center;gap:var(--space-2);
+  min-height:var(--control-target);padding:0 var(--space-2);
+  border-left:var(--focus-ring-width) solid transparent;
+  color:var(--ink-muted);text-decoration:none;font-size:var(--text-3);
+  transition:color var(--duration-1) var(--ease-standard)}
+.nav a:hover{color:var(--ink-secondary)}
+.nav a[aria-current="page"]{color:var(--ink);font-weight:var(--weight-medium);
+  border-left-color:var(--accent)}
+.nav a:focus-visible{outline:none;color:var(--focus-ink);
+  text-decoration:underline;text-decoration-color:var(--focus-ink);
+  text-decoration-thickness:var(--focus-ring-width);text-underline-offset:var(--focus-ring-offset)}
+.nav .key{margin-left:auto;font-size:var(--text-1);color:var(--ink-muted);
+  font-variant-numeric:tabular-nums}
+
+/* ── Foot ─────────────────────────────────────────────────────────  */
+/* Sits directly under the nav. Bottom-anchoring suited a rail that was its own
+   slab; on shared paper it left a block of text orphaned at the foot of an empty
+   column, and it is a long look for something glanced at. */
+.railfoot{display:flex;flex-direction:column;gap:var(--space-2);
+  padding-top:var(--space-3);border-top:var(--rule-width) solid var(--rule)}
+.railstat{font-size:var(--text-1);line-height:1.7;color:var(--ink-muted);
+  font-variant-numeric:tabular-nums}
+.railstat .wk{color:var(--ink-secondary)}
+/* sync state in ink weight: filled when synced, hollow when pending,
+   oxblood only when it has actually failed */
+.sync{display:flex;align-items:center;gap:var(--space-1);font-size:var(--text-1);
+  color:var(--ink-muted);min-height:var(--control-target)}
+.sync .dot{width:7px;height:7px;border-radius:var(--r-f);flex:0 0 auto;background:var(--ink-secondary)}
+.sync.is-pending .dot{background:none;box-shadow:inset 0 0 0 var(--rule-width) var(--ink-muted)}
+.sync.is-failed .dot{background:var(--negative)}
+.sync.is-failed{color:var(--negative)}
+/* bare text actions — the rail has no primary, so nothing here is solid */
+.railact{display:flex;flex-direction:column;align-items:flex-start}
+.railact button{background:none;border:0;padding:0;cursor:pointer;text-align:left;
+  min-height:var(--control-target);font-size:var(--text-2);color:var(--ink-secondary)}
+.railact button:hover{color:var(--ink)}
+.railact button:focus-visible{outline:none;color:var(--focus-ink);
+  text-decoration:underline;text-decoration-color:var(--focus-ink);
+  text-decoration-thickness:var(--focus-ring-width);text-underline-offset:var(--focus-ring-offset)}
+
+@media(max-width:880px){
+  .shell{flex-direction:column}
+  .rail{position:static;height:auto;width:100%;flex:0 0 auto;flex-direction:row;
+    align-items:center;gap:var(--space-3);overflow-x:auto;border-right:0;
+    border-bottom:var(--rule-width) solid var(--rule);padding:var(--space-2) var(--space-3)}
+  .nav{flex-direction:row}
+  .nav a{border-left:0;border-bottom:var(--focus-ring-width) solid transparent}
+  .nav a[aria-current="page"]{border-bottom-color:var(--accent)}
+  .nav .key{display:none}
+  .railfoot{flex-direction:row;align-items:center;gap:var(--space-3);
+    padding-top:0;border-top:0}
+  .railfoot .railstat{display:none}
+  .railact{flex-direction:row;gap:var(--space-3)}
+  .shell .page{padding:var(--space-4) var(--space-3) var(--space-7)}
+}

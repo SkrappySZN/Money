@@ -3,6 +3,11 @@
 /index.html
 /NOTES.md
 /GUIDE.md
+/RESTYLE-PLAN.md
+# Rendered previews and the engine dump they come from: both carry real balances.
+# The generator, its stylesheets and preview-data.js hold no data and are tracked.
+/preview-*.html
+/preview-data.json
 *.backup.json
 money-backup-*.json
 money-*.csv

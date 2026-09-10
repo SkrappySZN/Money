@@ -1,0 +1,188 @@
+/* ═══════════════════════════════════════════════════════════════════
+   BROADSHEET — design tokens
+   Every component reads from here. No literal colour, size or radius
+   should appear anywhere else in the app.
+
+   At build time this file is inlined into index.html, so the app keeps
+   its single-file, zero-external-request property.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Faces ─────────────────────────────────────────────────────────
+   Self-hosted, subset to the glyphs this app actually renders.
+   Both are variable: weight is an axis, not a separate file.
+   Source Serif also carries an optical-size axis, so the hero figure
+   is cut differently from a 19px subhead rather than just scaled.
+   ─────────────────────────────────────────────────────────────── */
+@font-face{
+  font-family:"Source Serif 4";
+  src:url("fonts/source-serif-4.woff2") format("woff2-variations");
+  font-weight:200 900;
+  font-stretch:normal;
+  font-display:swap;
+}
+@font-face{
+  font-family:"Inter Tight";
+  src:url("fonts/inter-tight.woff2") format("woff2-variations");
+  font-weight:100 900;
+  font-stretch:normal;
+  font-display:swap;
+}
+
+:root{
+  color-scheme:light;
+
+  /* ── Type families ─────────────────────────────────────────────
+     Display carries page titles and every large dollar figure.
+     Sans carries labels, body, tables — everything else.          */
+  --font-display:"Source Serif 4", ui-serif, Georgia, "Times New Roman", serif;
+  --font-sans:"Inter Tight", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  /* ── Type scale ────────────────────────────────────────────────
+     Seven steps. Tight increments at the bottom where table rows
+     need density; opening sharply at the top so the hero figure is
+     unmistakably the loudest thing on the page — step-7 is 5.8x
+     step-1. Line-heights fall as size rises.                      */
+  --text-1:0.6875rem;  --leading-1:1.45;   /* 11px — uppercase labels, axis ticks   */
+  --text-2:0.8125rem;  --leading-2:1.50;   /* 13px — table cells, meta, legends     */
+  --text-3:0.9375rem;  --leading-3:1.60;   /* 15px — body, prose, alert text        */
+  --text-4:1.1875rem;  --leading-4:1.40;   /* 19px — card headings, modal titles    */
+  --text-5:1.75rem;    --leading-5:1.25;   /* 28px — page titles (display)          */
+  --text-6:2.75rem;    --leading-6:1.10;   /* 44px — secondary display figures      */
+  --text-7:4rem;       --leading-7:1.00;   /* 64px — the hero figure (display)      */
+
+  /* ── Weights ───────────────────────────────────────────────────
+     Both faces are variable, so these are axis positions.         */
+  --weight-regular:400;
+  --weight-medium:500;    /* section labels sit here, not at bold  */
+  --weight-semibold:600;  /* alert card names, totals row          */
+
+  /* ── Tracking ──────────────────────────────────────────────────  */
+  --tracking-label:0.08em;   /* small uppercase section labels      */
+  --tracking-body:0;
+  --tracking-tight:-0.02em;  /* display sizes only                  */
+
+  /* ── Paper & ink ───────────────────────────────────────────────
+     Three paper tones: the sheet, a deeper stock for sticky table
+     headers and recessed strips, and a third for hover. Ink is a
+     warm near-black, never pure.                                   */
+  --paper:#F6F2EA;
+  --paper-deep:#EFEAE0;
+  --paper-deeper:#E7E1D5;
+
+  --ink:#1B1815;        /* headings, figures, primary prose         */
+  --ink-secondary:#4A443C;
+  --ink-muted:#857C6F;  /* labels, axis text, disabled              */
+
+  /* ── Accent ────────────────────────────────────────────────────
+     Exactly one. Primary action and active nav state only. It is
+     also the single data-ink for line charts — a broadsheet prints
+     charts in the same ink it prints buttons.                      */
+  --accent:#20456B;
+  --accent-pressed:#163350;
+  --accent-on:#F6F2EA;   /* text on an accent fill                  */
+
+  /* ── Semantic inks ─────────────────────────────────────────────
+     Press marks, not browser errors. Desaturated to sit in the
+     paper. Each has a wash for backgrounds at low opacity.
+
+     RESERVATION: oxblood marks things that are actually wrong —
+     breaches, overdrafts, negative balances, past-due. It is never
+     a category colour. Anything merely worth noticing takes
+     attention (sienna) instead.                                    */
+  --negative:#8C3A2E;                          /* oxblood            */
+  --negative-wash:rgba(140,58,46,0.07);
+  --positive:#3E6B4F;                          /* dull forest        */
+  --positive-wash:rgba(62,107,79,0.07);
+  --attention:#8A6516;                         /* raw sienna         */
+  --attention-wash:rgba(138,101,22,0.08);
+
+  /* ── Rules ─────────────────────────────────────────────────────
+     Hairlines replace every card border and every drop shadow.     */
+  --rule-width:1px;
+  --rule-opacity:0.12;
+  --rule-opacity-strong:0.22;
+  --rule:rgba(27,24,21,0.12);          /* default hairline           */
+  --rule-strong:rgba(27,24,21,0.22);   /* under section labels, totals */
+  --rule-faint:rgba(27,24,21,0.07);    /* between table rows         */
+
+  /* ── Controls ──────────────────────────────────────────────────
+     Minimum hit target, reached with padding rather than by enlarging
+     the glyph. Focus is drawn in the accent because the boxes that
+     used to imply it are gone.                                       */
+  --control-target:40px;
+  --focus-ink:var(--accent);
+  --focus-ring-width:2px;
+  --focus-ring-offset:2px;
+
+  /* ── Radius ────────────────────────────────────────────────────
+     One value in the entire app. Progress bars are the sole
+     exception and take squared ends, not pills.                    */
+  --radius:2px;
+
+  /* ── Measure ───────────────────────────────────────────────────
+     Cap on running prose. Anything that wraps to more than one line
+     and is read as sentences takes this; tables, charts, legends and
+     single-line notes do not.                                        */
+  --measure-prose:78ch;
+
+  /* ── Spacing ───────────────────────────────────────────────────
+     8px base with a single 4px half-step for optical corrections.  */
+  --space-half:0.25rem;   /*  4px */
+  --space-1:0.5rem;       /*  8px */
+  --space-2:1rem;         /* 16px */
+  --space-3:1.5rem;       /* 24px */
+  --space-4:2rem;         /* 32px */
+  --space-5:3rem;         /* 48px */
+  --space-6:4rem;         /* 64px */
+  --space-7:6rem;         /* 96px — outer page margin               */
+  /* Tables carry their own vertical step. 25 rows at the page rhythm is
+     over 1,000px; this stays on the 8px scale rather than being an
+     exception to it. */
+  --table-row-step:var(--space-1);
+  /* Account column cap.
+     DO NOT move this onto the table cell. A max-width on a <td>/<th> is advisory:
+     under table-layout:auto the column algorithm sizes from content and ignores
+     it, so the column grows past the cap and never ellipsises. It has to be
+     applied to a block box INSIDE the cell. Shipped once on the cell itself and
+     it silently did nothing — a 28-character name rendered at 221.8px against a
+     210px cap with no ellipsis. */
+  --account-col:210px;
+
+  /* ── Data ink ──────────────────────────────────────────────────
+     Line charts are single-series and print in the accent.
+     The allocation bar is part-to-whole of ONE quantity, so it is a
+     tint ramp rather than four unrelated hues — monotonic in OKLab
+     lightness (0.383 / 0.528 / 0.705 / 0.847, min step 0.141).
+     Attack is the win, not a problem, so it takes the accent at full
+     strength and the rest step down from it. Darkness reads as how
+     hard that money is working.
+     Named by weight, not by slot, so no component encodes meaning.  */
+  --data-ink:#20456B;
+  --fill-emphasis:#20456B;   /* Attack — extra principal            */
+  --fill-strong:#4A6E96;     /* Minimums                            */
+  --fill-mid:#8AA3BD;        /* Buckets & savings                   */
+  --fill-faint:#C3CEDA;      /* Unassigned — money doing nothing    */
+
+  /* A rising card balance is worth noticing but is not a breach, so
+     it takes attention, not oxblood. See the reservation above.     */
+  --spark-better:#3E6B4F;
+  --spark-worse:#8A6516;
+  --axis:rgba(27,24,21,0.10);
+  --gridline:rgba(27,24,21,0.07);
+
+  /* ── Progress bars ─────────────────────────────────────────────  */
+  --bar-track:rgba(27,24,21,0.09);
+  --bar-height:4px;
+  --bar-radius:0;          /* squared ends, per spec                */
+
+  /* ── Motion ────────────────────────────────────────────────────
+     Carried over unchanged; not part of this restyle.              */
+  --ease:cubic-bezier(.22,1,.36,1);
+  --ease-standard:cubic-bezier(.4,0,.2,1);
+  --duration-1:120ms;
+  --duration-2:220ms;
+  --duration-3:340ms;
+}
+@media(prefers-reduced-motion:reduce){
+  :root{--duration-1:1ms;--duration-2:1ms;--duration-3:1ms}
+}
