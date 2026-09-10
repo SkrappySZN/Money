@@ -395,6 +395,21 @@ td.dcell input:focus{color:var(--ink)}
   text-transform:uppercase;color:var(--ink-muted);font-weight:var(--weight-medium);
   margin-left:auto}
 
+/* A paid row keeps the green the spreadsheet used, at wash strength rather
+   than fill: the sheet is read as a whole and 20 saturated rows would drown
+   the figures. The tick sits in the account cell so it costs no column. */
+.paidbox{appearance:none;width:13px;height:13px;margin:0 var(--space-1) 0 0;
+  vertical-align:-2px;border:var(--rule-width) solid var(--rule-strong);
+  border-radius:var(--radius);background:var(--paper);cursor:pointer;flex:0 0 auto}
+.paidbox:hover{border-color:var(--positive)}
+.paidbox:checked{background:var(--positive);border-color:var(--positive)}
+.paidbox:checked::after{content:'';display:block;width:3px;height:6px;margin:1px auto 0;
+  border:solid var(--paper);border-width:0 1.5px 1.5px 0;transform:rotate(45deg)}
+.paidbox:focus-visible{outline:var(--focus-ring-width) solid var(--accent);outline-offset:1px}
+tr.is-paid > th,tr.is-paid > td{background:var(--positive-wash)}
+tr.is-paid:hover > th,tr.is-paid:hover > td{background:var(--positive-wash)}
+tr.is-paid .acct{color:var(--ink-secondary)}
+
 /* ── The allocation sheet ────────────────────────────────────────
    Its own density so all 27 rows clear the fold. 3px of padding on a
    13px/1.35 cell gives a ~25px step against the ~36px the rest of the
@@ -412,13 +427,16 @@ td.dcell input:focus{color:var(--ink)}
   font-variant-numeric:tabular-nums}
 .sheet-grid{flex:1 1 auto;min-height:0;max-height:none;
   border-top:var(--rule-width) solid var(--rule)}
-.sheet-page table.grid{--table-row-step:2px;min-width:0}
+.sheet-page table.grid{--table-row-step:2px;min-width:0;font-size:12px}
 .sheet-page table.grid th,.sheet-page table.grid td{line-height:1.3;
-  padding-left:5px;padding-right:5px}
+  padding-left:4px;padding-right:4px}
 .sheet-page table.grid tbody th{max-width:none}
 .sheet-page tr.sect th{padding-top:var(--space-1)}
-.sheet-page input.cell{width:8ch}
-.sheet-page input.cell-date{width:104px}
+.sheet-page input.cell{width:10ch}
+.sheet-page input.cell-date{width:96px}
+.sheet-page input.cell-date::-webkit-calendar-picker-indicator{opacity:0;transition:opacity var(--duration-1) ease}
+.sheet-page tr:hover input.cell-date::-webkit-calendar-picker-indicator{opacity:.45}
+.sheet-page input.cell-date:focus::-webkit-calendar-picker-indicator{opacity:.7}
 /* The tally sits between title and controls; on a narrow window it wraps
    under rather than squeezing the week picker. */
 @media(max-width:1100px){
@@ -1110,6 +1128,10 @@ const r2=n=>Math.round((n+Number.EPSILON)*100)/100;
 const n0=v=>{const x=typeof v==='number'?v:parseFloat(String(v??'').replace(/[^0-9.\-]/g,''));return Number.isFinite(x)?x:0};
 const money=(n,dp=2)=>(n<0?'−':'')+'$'+Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:dp,maximumFractionDigits:dp});
 const money0=n=>money(n,0);
+/* For values that live inside an <input>. Same shape as money() but with an
+   ASCII hyphen, because n0() strips everything outside [0-9.-] and would read
+   the typographic minus as a positive number. */
+const moneyInput=n=>(n<0?'-':'')+'$'+Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
 const pct=(n,dp=1)=>(n*100).toFixed(dp)+'%';
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const slug=s=>String(s).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
@@ -1168,6 +1190,35 @@ function load(){
   try{const raw=localStorage.getItem(KEY);if(raw){S=JSON.parse(raw);migrate();return true}}catch(e){console.warn('load failed',e)}
   /* the seed needs migrating too — it carries no plan, settings or account extras */
   S=JSON.parse(JSON.stringify(SEED));migrate();save();return false;
+}
+/* ── undo ─────────────────────────────────────────────────────────
+   Cell edits fire on every keystroke, so one snapshot per save would make
+   ctrl+Z walk back a character at a time. Snapshots coalesce by key: typing
+   "300" into a cell is a single step, and touching a different cell starts a
+   new one. Whole-state snapshots rather than diffs — the ledger is ~150KB, so
+   the cap is what keeps this honest about memory. */
+let UNDO=[],REDO=[],UNDO_KEY=null;
+const UNDO_MAX=30;
+const snapshot=()=>JSON.stringify({accounts:S.accounts,weeks:S.weeks,plan:S.plan,settings:S.settings});
+function pushUndo(key){
+  if(key!=null&&key===UNDO_KEY)return;
+  UNDO_KEY=key;
+  UNDO.push(snapshot());
+  if(UNDO.length>UNDO_MAX)UNDO.shift();
+  REDO.length=0;
+}
+function applySnapshot(json){
+  const x=JSON.parse(json);
+  S.accounts=x.accounts;S.weeks=x.weeks;S.plan=x.plan;S.settings=x.settings;
+  UNDO_KEY=null;save();render();
+}
+function undo(){
+  if(!UNDO.length){toast('Nothing left to undo');return}
+  REDO.push(snapshot());applySnapshot(UNDO.pop());toast('Undone — ⇧⌘Z to put it back');
+}
+function redo(){
+  if(!REDO.length){toast('Nothing to redo');return}
+  UNDO.push(snapshot());applySnapshot(REDO.pop());toast('Redone');
 }
 function save(){
   try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){toast('Could not save — storage may be full')}
@@ -1228,7 +1279,7 @@ function currentWeek(){
 }
 const isPlanned=k=>k>thisWeek();
 
-function blankEntry(){return{balance:0,min:0,attack:0,other:0,minAmt:0,close:'',due:'',projected:null}}
+function blankEntry(){return{balance:0,min:0,attack:0,other:0,minAmt:0,close:'',due:'',projected:null,paid:false}}
 function entryOf(k,id){const w=S.weeks[k];if(!w)return blankEntry();
   if(!w.entries[id])w.entries[id]=blankEntry();
   const e=w.entries[id];for(const[p,d]of Object.entries(blankEntry()))if(e[p]===undefined)e[p]=d;
@@ -1877,8 +1928,7 @@ function usageBar(u){
 function viewAllocation(el){
   const k=currentWeek(),C=computeWeek(k),T=C.totals,ks=weekKeys();
   const i=ks.indexOf(k);
-  const all=UI.allCols!==false;
-  const cols=sheetCols(all);
+  const cols=sheetCols();
   const off=Math.abs(T.unallocated);
   const state=off<0.005?'is-settled':(T.unallocated>0?'is-idle':'is-over');
   const label=off<0.005?'Balanced':(T.unallocated>0?'Unassigned':'Over by');
@@ -1892,11 +1942,8 @@ function viewAllocation(el){
       <span class="t-value ${state}">${money(off<0.005?0:off)}</span>
     </div>
     <div class="controls">
-      <span class="seg">
-        <button data-allcols="1" aria-pressed="${all}">All columns</button>
-        <button data-allcols="0" aria-pressed="${!all}">Core</button>
-      </span>
       <button class="ctl" data-act="addacct">+ Account</button>
+      <button class="ctl" data-act="undo" title="Undo last change (⌘Z)">Undo</button>
       <button class="ctl" data-go="prev" aria-label="Previous week" ${i<=0?'disabled':''}>←</button>
       <span class="jump"><select id="weekPick" aria-label="Jump to week">
         <option selected disabled>Jump to week</option>
@@ -1911,7 +1958,7 @@ function viewAllocation(el){
 
   <div class="gridwrap sheet-grid"><table class="grid">
     <thead>${gridHead(cols)}</thead>
-    <tbody>${gridBody(C,all)}</tbody>
+    <tbody>${gridBody(C)}</tbody>
   </table></div>
 </main>`;
 
@@ -1926,9 +1973,9 @@ function viewAllocation(el){
    cells were never dimmed and attack money was never accented outside
    `.legacy`. One list cannot drift from itself.
 
-   `core:true` is what the Allocation tab opens with — the fourteen
-   columns you type into or read every Friday. The rest arrive with
-   "All columns" and are reference, not entry.
+   Every column shows. There was a Core/All toggle; once 6 mo and Min left
+   came out and APR and Statement close went in, it separated 16 columns
+   from 17, which is not a choice worth a control.
 
    MIN DUE is split. `minAmt` has always held the MONTHLY obligation
    while the sheet is worked weekly, so the old single Min Due column
@@ -1942,7 +1989,7 @@ function cellNum(r,f,cls=''){
   if(r.isRollup||a.kind==='income')return `<td class="num dim">${money(n0(r[f]))}</td>`;
   const ro=a.autoOther==='cardMinShortfall'&&f==='other';
   return `<td class="num"><input class="cell ${cls}${n0(r[f])===0?' is-zero':''}"`
-    +` data-k="${id}:${f}" value="${n0(r[f]).toFixed(2)}"`
+    +` data-k="${id}:${f}" value="${moneyInput(n0(r[f]))}"`
     +`${ro?' readonly title="Auto: card minimums not paid directly"':''}></td>`;
 }
 function cellDate(r,f){
@@ -1955,81 +2002,72 @@ function cellDate(r,f){
 const dimCell=v=>`<td class="num dim">${v}</td>`;
 
 const SHEET_COLS=[
-  {k:'name',core:true,label:'Account',head:'l',
-   cell:r=>`<th scope="row" title="${esc(r.a.name)}"><span class="acct">${esc(r.a.name)}</span></th>`},
+  /* Marking a row paid is the ritual the spreadsheet did by filling a cell
+     green. The tick rides inside the account cell so it costs no column, and
+     `paid` is week data — it does not roll forward into the next week. */
+  {k:'name',label:'Account',head:'l',
+   cell:r=>`<th scope="row" title="${esc(r.a.name)}">`
+     +(r.isRollup||r.a.kind==='income'?''
+       :`<input type="checkbox" class="paidbox" data-paid="${r.a.id}"${r.e&&r.e.paid?' checked':''}`
+        +` aria-label="Mark ${esc(r.a.name)} paid this week">`)
+     +`<span class="acct">${esc(r.a.name)}</span></th>`},
 
   /* Limit and APR live on the account, not the week, so these write through
      `data-a` and change every week at once. Only debts carry them — the
      Accounts view gates the same two fields on KIND_DEBT. */
-  {k:'limit',core:true,label:'Limit',
+  {k:'limit',label:'Limit',
    cell:r=>KIND_DEBT(r.a.kind)
      ?`<td class="num"><input class="cell is-registry${n0(r.a.limit)===0?' is-zero':''}"`
-       +` data-a="${r.a.id}:limit" value="${n0(r.a.limit)||''}" placeholder="—"></td>`
+       +` data-a="${r.a.id}:limit" value="${r.a.limit?moneyInput(n0(r.a.limit)):''}" placeholder="—"></td>`
      :dimCell('—')},
-
-  {k:'apr',core:true,label:'APR %',
+  {k:'apr',label:'APR %',
    cell:r=>KIND_DEBT(r.a.kind)
      ?`<td class="num"><input class="cell is-registry${r.a.apr?'':' is-zero'}"`
        +` data-a="${r.a.id}:aprPct" value="${r.a.apr?r2(r.a.apr*100):''}" placeholder="—"></td>`
      :dimCell('—')},
-
-  {k:'balance',core:true,label:'Balance',
+  {k:'balance',label:'Balance',
    cell:r=>r.isRollup||r.a.kind==='income'
      ?`<td class="num dim">${money(r.balance)}</td>`
-     :`<td class="num"><input class="cell" data-k="${r.a.id}:balance" value="${r.balance.toFixed(2)}">${driftTag(r)}</td>`},
-
-  {k:'usage',core:true,label:'Usage',
+     :`<td class="num"><input class="cell" data-k="${r.a.id}:balance" value="${moneyInput(r.balance)}">${driftTag(r)}</td>`},
+  {k:'usage',label:'Usage',
    cell:r=>dimCell(r.a.kind==='card'&&r.a.limit?usageBar(n0(r.usage))+pct(n0(r.usage)):'—')},
 
   /* The obligation, as the statement states it. Editable on every debt
      — including cards, which carried no minimum at all until now. */
-  {k:'minAmt',core:true,label:'Min due /mo',
+  {k:'minAmt',label:'Min due /mo',
    cell:r=>r.isRollup||r.a.kind==='income'?'<td></td>'
      :`<td class="num"><input class="cell${n0(r.minAmt)===0?' is-zero':''}"`
-       +` data-k="${r.a.id}:minAmt" value="${n0(r.minAmt).toFixed(2)}"></td>`},
+       +` data-k="${r.a.id}:minAmt" value="${moneyInput(n0(r.minAmt))}"></td>`},
 
   /* Derived, never typed: the monthly split MIN_DIVISOR ways. */
-  {k:'minWk',core:true,label:'Min due /wk',
+  {k:'minWk',label:'Min due /wk',
    cell:r=>dimCell(n0(r.minAmt)?money(r2(n0(r.minAmt)/MIN_DIVISOR)):'—')},
+  {k:'close',label:'Stmt close',cell:r=>cellDate(r,'close')},
+  {k:'due',   label:'Due',  cell:r=>cellDate(r,'due')},
 
-  {k:'close',core:true,label:'Stmt close',cell:r=>cellDate(r,'close')},
-  {k:'due',  core:true, label:'Due',  cell:r=>cellDate(r,'due')},
-
-  {k:'min',   core:true,label:'Min',   cell:r=>cellNum(r,'min')},
-  {k:'attack',core:true,label:'Attack',cell:r=>cellNum(r,'attack','is-attack')},
-  {k:'other', core:true,label:'Other', cell:r=>cellNum(r,'other')},
-
-  {k:'total',core:true,label:'Total',
+  {k:'min',   label:'Min',   cell:r=>cellNum(r,'min')},
+  {k:'attack',label:'Attack',cell:r=>cellNum(r,'attack','is-attack')},
+  {k:'other', label:'Other', cell:r=>cellNum(r,'other')},
+  {k:'total',label:'Total',
    cell:r=>`<td class="num">${money(r.total)}</td>`},
-
-  {k:'interest',core:true,label:'Interest',
+  {k:'interest',label:'Interest',
    cell:r=>`<td class="num ${r.inGrace?'pos':'dim'}"${r.inGrace?' title="In grace — no interest while the statement balance is paid in full"':''}>`
      +`${KIND_DEBT(r.a.kind)?(r.inGrace?'grace':money(r.weekInterest)):'—'}</td>`},
-
-  {k:'after',core:true,label:'After',
+  {k:'after',label:'After',
    cell:r=>`<td class="num ${r.a.kind==='card'&&r.after>n0(r.a.limit)?'neg':r.after<0?'neg':''}">${money(r.after)}</td>`},
-
-  {k:'usageAfter',core:true,label:'Usage aft',
+  {k:'usageAfter',label:'Usage aft',
    cell:r=>dimCell(r.a.kind==='card'&&r.a.limit?pct(n0(r.usageAfter)):'—')},
-
-  {k:'availAfter',core:false,label:'Avail aft',
+  {k:'availAfter',label:'Avail aft',
    cell:r=>dimCell(r.a.kind==='card'&&r.a.limit?money(n0(r.availAfter)):'—')},
 
-  {k:'sixMo',core:false,label:'6 mo',
-   cell:r=>dimCell(r.sixMo!=null?money0(r.sixMo):'—')},
-
-  /* The spreadsheet's MIN PMT AFTER $ — what the month's minimum still wants
-     once this week's payment is counted. Computed all along, never shown. */
-  {k:'minLeft',core:false,label:'Min left',
-   cell:r=>dimCell(n0(r.minAmt)?money(n0(r.minLeft)):'—')},
 ];
-const sheetCols=all=>SHEET_COLS.filter(c=>all||c.core);
+const sheetCols=()=>SHEET_COLS;
 
 function gridHead(cols){
   return `<tr>${cols.map((c,i)=>`<th scope="col"${i?' class="num"':''}>${c.label}</th>`).join('')}</tr>`;
 }
-function gridBody(C,all){
-  const cols=sheetCols(all),out=[],byId=C.byId,rendered=new Set();
+function gridBody(C){
+  const cols=sheetCols(),out=[],byId=C.byId,rendered=new Set();
   for(const g of GROUPS){
     const rows=C.rows.filter(r=>(r.a.group||'buckets')===g.id);
     if(!rows.length)continue;
@@ -2047,7 +2085,7 @@ function gridBody(C,all){
   return out.join('');
 }
 function rowHTML(r,cols,child){
-  const cls=(r.isRollup?'rollup':'')+(child?' child':'');
+  const cls=(r.isRollup?'rollup':'')+(child?' child':'')+(r.e&&r.e.paid?' is-paid':'');
   return `<tr class="${cls}">${cols.map(c=>c.cell(r)).join('')}</tr>`;
 }
 /* The cards subtotal, keyed by column so it cannot fall out of step with
@@ -2628,7 +2666,7 @@ function rollDate(d,from){
 }
 function newWeek(){
   const ks=weekKeys(),last=ks[ks.length-1],nk=addWeeks(last,1);
-  if(S.weeks[nk]){UI.week=nk;UI.tab='week';render();toast('That week already exists');return}
+  if(S.weeks[nk]){UI.week=nk;UI.tab='sheet';render();toast('That week already exists');return}
   const C=computeWeek(last),entries={};
   for(const r of C.rows){
     const a=r.a,e=blankEntry();
@@ -2646,7 +2684,7 @@ function newWeek(){
     entries[a.id]=e;
   }
   S.weeks[nk]={income:C.totals.income,entries};
-  UI.week=nk;UI.tab='week';save();render();
+  UI.week=nk;UI.tab='sheet';save();render();
   toast('Balances projected forward — correct any that differ from the bank');
 }
 
@@ -2671,11 +2709,15 @@ function setAcctField(key,val){
 }
 document.addEventListener('input',e=>{
   const t=e.target;
-  if(t.dataset.k!=null&&t.dataset.k!==''){setWeekField(t.dataset.k,t.value);save();rerenderKeepFocus()}
-  else if(t.dataset.a){setAcctField(t.dataset.a,t.value);save();rerenderKeepFocus()}
+  if(t.dataset.k!=null&&t.dataset.k!==''){
+    pushUndo('k:'+t.dataset.k);setWeekField(t.dataset.k,t.value);save();rerenderKeepFocus()}
+  else if(t.dataset.a){
+    pushUndo('a:'+t.dataset.a);setAcctField(t.dataset.a,t.value);save();rerenderKeepFocus()}
 });
 document.addEventListener('change',e=>{
   const t=e.target,d=t.dataset;
+  if(d.paid!=null&&d.paid!==''){
+    pushUndo(null);entryOf(currentWeek(),d.paid).paid=t.checked;save();render();return}
   if(d.step){const st=planSteps().find(x=>x.id===d.step);if(st){st.on=t.checked;save();render()}return}
   if(d.cal){const c=S.plan.calendar.find(x=>x.id===d.cal);if(c){c.done=t.checked;save();render()}return}
   if(d.open){const o=S.plan.open.find(x=>x.id===d.open);if(o){o.done=t.checked;save();render()}return}
@@ -2704,7 +2746,6 @@ document.addEventListener('click',e=>{
     if(ks[j]){UI.week=ks[j];render()}return;
   }
   if(d.dense!=null){UI.dense=d.dense==='1';render();return}
-  if(d.allcols!=null){UI.allCols=d.allcols==='1';render();return}
   if(d.strat){UI.strategy=d.strat;render();return}
   if(d.range){UI.histRange=d.range;render();return}
   if(d.porder){
@@ -2727,6 +2768,8 @@ document.addEventListener('click',e=>{
     toast(a.archived?`${a.name} archived — history keeps it`:`${a.name} restored`);return;
   }
   switch(d.act){
+    case'undo':undo();break;
+    case'redo':redo();break;
     case'newweek':newWeek();break;
     case'startfresh':startFresh();break;
     case'theme':toggleTheme();break;
@@ -2750,6 +2793,11 @@ $('#btnExport').onclick=exportBackup;
 $('#btnImport').onclick=()=>$('#filepick').click();
 
 document.addEventListener('keydown',e=>{
+  if((e.metaKey||e.ctrlKey)&&!e.altKey&&(e.key==='z'||e.key==='Z')){
+    e.preventDefault();
+    if(e.shiftKey)redo();else undo();
+    return;
+  }
   /* Ask the event where it came from rather than trusting activeElement: a
      re-render between keydown and handler can leave focus on <body>, and a bare
      digit would then jump to another tab mid-edit. */
