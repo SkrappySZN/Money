@@ -410,6 +410,15 @@ tr.is-paid > th,tr.is-paid > td{background:var(--positive-wash)}
 tr.is-paid:hover > th,tr.is-paid:hover > td{background:var(--positive-wash)}
 tr.is-paid .acct{color:var(--ink-secondary)}
 
+/* The pull-forward preview: what changes, before it changes. */
+.pulllist{list-style:none;margin:var(--space-3) 0 0;padding:0;
+  font-variant-numeric:tabular-nums;font-size:var(--text-2)}
+.pulllist li{display:flex;justify-content:space-between;gap:var(--space-3);
+  padding:var(--space-1) 0;border-bottom:var(--rule-width) solid var(--rule-faint)}
+.pulllist li:last-child{border-bottom:0}
+.pulllist li.more{color:var(--ink-muted);justify-content:flex-start}
+.pulllist b{font-weight:var(--weight-medium)}
+
 /* ── The allocation sheet ────────────────────────────────────────
    Its own density so all 27 rows clear the fold. 3px of padding on a
    13px/1.35 cell gives a ~25px step against the ~36px the rest of the
@@ -1244,6 +1253,7 @@ function migrate(){
   if(S.settings===undefined)S.settings={};
   if(S.settings.accrueInterest===undefined)S.settings.accrueInterest=true;
   migrateV2();
+  migrateV3();
 }
 /* v2 — grouping corrections, Sept 10 2026. Runs against the ledger already
    in the browser, not just the seed: editing SEED alone would have changed
@@ -1257,6 +1267,20 @@ function migrate(){
    of the 40 weeks, the subscriptions now bill to the Apple card and are saved
    for by the Subscriptions row, and History keeps archived accounts so nothing
    is lost. Un-archive it in Accounts if that turns out to be wrong. */
+/* v3 — the income row carried the same bank name as the checking bucket
+   directly beneath it, and the pair read as one thing split in two. The top
+   row is the paycheck arriving, so it says so. Renamed in the data rather
+   than special-cased at render, so it stays editable in Accounts.
+
+   Unconditional on purpose: matching the old name would mean writing a real
+   account name into a file that gets published, which is what `.leakwords`
+   and the pre-commit hook exist to stop. This migration runs once. */
+function migrateV3(){
+  if(S.v>=3)return;
+  const inc=S.accounts.find(a=>a.kind==='income');
+  if(inc)inc.name='Income';
+  S.v=3;
+}
 function migrateV2(){
   if(S.v>=2)return;
   const lease=acct('car-lease-savings');
@@ -1942,6 +1966,7 @@ function viewAllocation(el){
       <span class="t-value ${state}">${money(off<0.005?0:off)}</span>
     </div>
     <div class="controls">
+      <button class="ctl" data-act="pullfwd" title="Rewrite Balance from last week's After column">Pull forward</button>
       <button class="ctl" data-act="addacct">+ Account</button>
       <button class="ctl" data-act="undo" title="Undo last change (⌘Z)">Undo</button>
       <button class="ctl" data-go="prev" aria-label="Previous week" ${i<=0?'disabled':''}>←</button>
@@ -1984,6 +2009,8 @@ function viewAllocation(el){
    it through MIN_DIVISOR, the same divisor Attack and Payoff use. */
 const MONEY_W='9ch';
 
+const dimCell=v=>`<td class="num dim">${v}</td>`;
+
 function cellNum(r,f,cls=''){
   const a=r.a,id=a.id;
   if(r.isRollup||a.kind==='income')return `<td class="num dim">${money(n0(r[f]))}</td>`;
@@ -1995,11 +2022,11 @@ function cellNum(r,f,cls=''){
 function cellDate(r,f){
   const a=r.a,id=a.id;
   if(r.isRollup||a.kind==='income')return '<td></td>';
+  if(!KIND_DEBT(a.kind))return dimCell('—');
   const v=r[f]||'';
   return `<td class="num dcell${v?'':' is-empty'}"><input class="cell cell-date" type="date"`
     +` data-k="${id}:${f}" value="${v}"></td>`;
 }
-const dimCell=v=>`<td class="num dim">${v}</td>`;
 
 const SHEET_COLS=[
   /* Marking a row paid is the ritual the spreadsheet did by filling a cell
@@ -2664,6 +2691,49 @@ function rollDate(d,from){
   while(x<from&&guard++<36){const t=parseISO(x);t.setMonth(t.getMonth()+1);x=iso(t)}
   return x;
 }
+/* ── pull balances forward ────────────────────────────────────────
+   `+ Next week` carries After into the next week's Balance, but it only
+   builds a week that does not exist yet. Four weeks were imported from the
+   spreadsheet already forward-planned, so stepping into one of those gives
+   figures typed weeks ago rather than a projection of what actually
+   happened. This does the carry on a week that is already there.
+
+   Balances only. Minimums, dates and allocations in an existing week were
+   entered deliberately and are not the caller's problem. Setting `projected`
+   alongside `balance` is deliberate too: it turns on the drift tag, so
+   correcting a balance against the bank shows what the projection missed. */
+function pullForward(){
+  const k=currentWeek(),ks=weekKeys(),i=ks.indexOf(k);
+  if(i<=0){toast('No earlier week to pull from');return}
+  const prev=ks[i-1],P=computeWeek(prev);
+  const changes=[];
+  for(const r of P.rows){
+    if(r.a.kind==='income'||r.isRollup)continue;
+    const proj=KIND_DEBT(r.a.kind)?r2(Math.max(0,r.after)):r2(r.after);
+    const e=entryOf(k,r.a.id);
+    if(Math.abs(n0(e.balance)-proj)>=0.005)changes.push({name:r.a.name,from:n0(e.balance),to:proj});
+  }
+  if(!changes.length){toast(`Already matches ${weekLabel(prev)} — nothing to pull`);return}
+  const list=changes.slice(0,6).map(c=>
+    `<li><span>${esc(c.name)}</span><b>${money(c.from)} → ${money(c.to)}</b></li>`).join('');
+  modal(`<h3>Pull balances forward</h3>
+    <p>Rewrites this week's Balance column from ${esc(weekLabel(prev))}'s After column.
+      <b>${changes.length}</b> ${changes.length===1?'balance changes':'balances change'};
+      minimums, dates and allocations are left alone. ⌘Z undoes it.</p>
+    <ul class="pulllist">${list}${changes.length>6
+      ?`<li class="more"><span>and ${changes.length-6} more</span></li>`:''}</ul>`,
+    'Pull forward',()=>{
+      pushUndo(null);
+      for(const r of P.rows){
+        if(r.a.kind==='income'||r.isRollup)continue;
+        const proj=KIND_DEBT(r.a.kind)?r2(Math.max(0,r.after)):r2(r.after);
+        const e=entryOf(k,r.a.id);e.balance=proj;e.projected=proj;
+      }
+      save();render();
+      toast(`${changes.length} balances pulled from ${weekLabel(prev)} — ⌘Z to undo`);
+    });
+}
+
 function newWeek(){
   const ks=weekKeys(),last=ks[ks.length-1],nk=addWeeks(last,1);
   if(S.weeks[nk]){UI.week=nk;UI.tab='sheet';render();toast('That week already exists');return}
@@ -2768,6 +2838,7 @@ document.addEventListener('click',e=>{
     toast(a.archived?`${a.name} archived — history keeps it`:`${a.name} restored`);return;
   }
   switch(d.act){
+    case'pullfwd':pullForward();break;
     case'undo':undo();break;
     case'redo':redo();break;
     case'newweek':newWeek();break;
