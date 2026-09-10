@@ -22,12 +22,19 @@ BLANKS = {
     "ACCT_SEED": 'const ACCT_SEED={};',
 }
 
-# if any of these survive into the output, the build is wrong and we stop
-FORBIDDEN = [
-    "[redacted]", "[redacted]", "[redacted]", "[redacted]", "[redacted]", "[redacted]",
-    "[redacted]", "[redacted]", "[redacted]", "Z4", "[redacted]", "[redacted]",
-    "[redacted]", "[redacted]", "[redacted]", "[redacted]",
-]
+# Strings that must not survive into the published copy. The list lives in
+# .leakwords, which is gitignored — it is the sensitive data, and shipping it
+# inside this file is exactly how it leaked the first time. Fails closed.
+def load_leakwords():
+    p = HERE / ".leakwords"
+    if not p.exists():
+        sys.exit("build: REFUSING — .leakwords is missing, so nothing can be checked. "
+                 "Restore it before building.")
+    words = [l.strip() for l in p.read_text().splitlines()
+             if l.strip() and not l.startswith("#")]
+    if not words:
+        sys.exit("build: REFUSING — .leakwords is empty.")
+    return words
 
 def strip_const(src: str, name: str, blank: str) -> str:
     """Replace `const NAME={...};` with an empty equivalent, brace-matching so a
@@ -73,7 +80,7 @@ def main():
         out = strip_const(out, name, blank)
 
     # nothing personal may survive
-    hits = sorted({w for w in FORBIDDEN if w in out})
+    hits = sorted({w for w in load_leakwords() if w in out})
     if hits:
         sys.exit(f"build: REFUSING to write — personal data still present: {', '.join(hits)}")
 

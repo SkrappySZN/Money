@@ -1,7 +1,29 @@
 #!/bin/sh
 # Refuse to commit anything carrying real financial data.
-# build.py and this hook are skipped: they contain the guard list itself.
-BAD='[redacted]|[redacted]|[redacted]|[redacted]|[redacted]|[redacted]|[redacted]|[redacted]|[redacted]|[redacted]|[redacted]|995\.98|[redacted]'
+#
+# The word list lives in .leakwords, which is gitignored: the list IS the
+# sensitive data. Shipping it inside this hook is how it leaked the first time —
+# the detector was the leak. Two consequences:
+#   1. This hook fails closed if .leakwords is missing.
+#   2. It checks TRACKED FILES too, not just the diff, so a guard that starts
+#      carrying the words again is caught by the guard.
+set -eu
+
+LW=".leakwords"
+if [ ! -r "$LW" ]; then
+  echo "pre-commit: REFUSING — $LW is missing, so nothing can be checked."
+  echo "            Restore it before committing."
+  exit 1
+fi
+
+# strip comments and blanks; build an alternation with regex metachars escaped
+PATTERN=$(grep -v '^[[:space:]]*#' "$LW" | grep -v '^[[:space:]]*$' \
+          | sed 's/[.[\*^$()+?{}|]/\\&/g' | paste -sd'|' -)
+if [ -z "$PATTERN" ]; then
+  echo "pre-commit: REFUSING — $LW is empty."
+  exit 1
+fi
+
 staged=$(git diff --cached --name-only --diff-filter=ACM)
 [ -z "$staged" ] && exit 0
 
@@ -12,17 +34,32 @@ if echo "$staged" | grep -qx 'index.html'; then
 fi
 
 fail=0
+
+# 1. the staged diff
 for f in $staged; do
-  case "$f" in build.py|.githooks/*) continue ;; esac
-  hits=$(git diff --cached -U0 -- "$f" | grep '^+' | grep -nE "$BAD" | head -3)
+  hits=$(git diff --cached -U0 -- "$f" | grep '^+' | grep -nE "$PATTERN" | head -3 || true)
   if [ -n "$hits" ]; then
-    echo "pre-commit: personal financial data in $f:"
+    echo "pre-commit: personal data in the staged changes to $f:"
     echo "$hits" | cut -c1-140
     fail=1
   fi
 done
+
+# 2. every tracked file, whether or not it changed. This is the check that would
+#    have caught build.py and this hook carrying the word list in plaintext.
+for f in $(git ls-files); do
+  case "$f" in *.woff2|*.png|*.jpg|*.ttf) continue ;; esac
+  [ -f "$f" ] || continue
+  hits=$(grep -nE "$PATTERN" "$f" 2>/dev/null | head -3 || true)
+  if [ -n "$hits" ]; then
+    echo "pre-commit: TRACKED file $f contains a $LW string:"
+    echo "$hits" | cut -c1-140
+    fail=1
+  fi
+done
+
 if [ "$fail" = 1 ]; then
-  echo "REFUSING. Run 'python3 build.py' and commit docs/index.html, or fix the lines above."
+  echo "REFUSING. No tracked file may contain a string from $LW."
   exit 1
 fi
 exit 0
