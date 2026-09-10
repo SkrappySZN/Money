@@ -38,6 +38,37 @@ Here the accounts are defined once and every week reflows around them.
 **Import backup** reads it back. That is how you move between devices, since local
 storage is per-browser. **Export CSV** gives you every week × every account, flat.
 
+## Sync
+
+Optional. With `SUPABASE` filled in at the top of the file, the sidebar gains a
+sign-in button; leave it empty and the app never touches the network.
+
+Login is an emailed magic link — no password to remember or leak. Your whole ledger
+is one row in a `ledger` table, reachable only by the account that owns it:
+
+```sql
+create policy ledger_select_own on public.ledger
+  for select using (auth.uid() = user_id);
+```
+
+That is why the publishable key can ship in a public page. It is a key to the front
+door of a building where every flat has its own lock.
+
+Writes are debounced 2.5s, so entering a week's numbers is one write rather than forty.
+Each one is compare-and-set on a `version` column: if another device saved in the
+meantime, the write **fails instead of overwriting**, and you get a prompt naming both
+sides — "Here: 40 weeks, saved 2 min ago. There: 41 weeks, saved just now" — and pick.
+It never guesses, and it never uploads an empty ledger over a real one.
+
+localStorage stays the working copy, so the app opens and works offline and pushes
+when it can.
+
+### Setting it up for a new project
+
+Run `supabase-setup.sql` in the SQL editor, add the site URL under
+Authentication → URL Configuration, then put the project URL and publishable key
+into the `SUPABASE` block.
+
 ## Working on it
 
 `index.html` is the local copy and holds real data. The published copy is built from
