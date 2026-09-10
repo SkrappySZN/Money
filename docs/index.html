@@ -1697,7 +1697,13 @@ $('#filepick').onchange=ev=>{
       if(!d||!d.accounts||!d.weeks)throw new Error('not a Money backup');
       confirmModal('Replace everything with this backup?',
         `${d.accounts.length} accounts and ${Object.keys(d.weeks).length} weeks. What is here now is overwritten.`,
-        'Import',()=>{S=d;migrate();save();UI.week=null;render();toast('Backup restored')});
+        'Import',()=>{
+          const keep=S.sync;                    // stay on the same remote version
+          S=d;migrate();
+          if(keep)S.sync={...keep,dirty:true};
+          save();UI.week=null;render();
+          toast((typeof SESSION!=='undefined'&&SESSION)?'Backup restored — syncing':'Backup restored');
+        });
     }catch(err){toast('That file is not a Money backup')}
     ev.target.value='';
   };
@@ -1854,6 +1860,11 @@ async function pushRow(){
 async function reconcile(){
   const row=await pullRow();
   if(!row){S.sync={...(S.sync||{}),version:0};save();return pushRow()}
+  /* an empty row is a placeholder, not a version worth losing sleep over */
+  if(!weekCount(row.data)&&weekCount(S)){
+    S.sync={version:row.version,at:row.updated_at,email:SESSION.email,dirty:true};
+    save();return pushRow();
+  }
   setSync('conflict','Another device saved first');
   confirmModal('This was changed on another device',
     `Here: ${weekCount(S)} weeks, saved ${S.sync&&S.sync.at?timeAgo(S.sync.at):'never'}. `+
@@ -1871,9 +1882,17 @@ async function firstSync(){
   try{
     const row=await pullRow();
     const localWeeks=weekCount(S);
+    const remoteWeeks=row?weekCount(row.data):0;
     if(!row){                                   // nothing up there yet
+      /* signing in on an empty browser must not publish that emptiness */
+      if(!localWeeks){setSync('ok','Nothing to sync yet — import a backup');return}
       S.sync={version:0,at:null,email:SESSION.email,dirty:true};await pushRow();
       toast('Ledger uploaded');return;
+    }
+    if(!localWeeks&&!remoteWeeks){setSync('ok','Nothing to sync yet — import a backup');return}
+    if(!remoteWeeks){                           // remote is an empty placeholder — ours wins, no prompt
+      S.sync={version:row.version,at:row.updated_at,email:SESSION.email,dirty:true};
+      save();await pushRow();toast('Ledger uploaded');return;
     }
     if(!localWeeks){                            // fresh device
       S=row.data;migrate();
