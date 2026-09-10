@@ -256,7 +256,7 @@ body{margin:0;background:var(--paper);color:var(--ink);
   transform:translateY(-0.821em)}
 .hero-figure input{font:inherit;font-variant-numeric:inherit;letter-spacing:inherit;color:inherit;
   background:none;border:0;border-bottom:var(--rule-width) solid transparent;padding:0;
-  width:5.1ch;border-radius:var(--radius)}
+  width:5.1ch;min-width:3ch;max-width:14ch;border-radius:var(--radius)}
 .hero-figure input:focus{outline:none;border-bottom-color:var(--accent)}
 .hero-note{font-size:var(--text-2);line-height:var(--leading-2);color:var(--ink-muted);
   margin-top:var(--space-1)}
@@ -637,7 +637,7 @@ table.cmp .cheapest{color:var(--positive);font-size:var(--text-1);
 .lede.muted{color:var(--ink-muted);font-size:var(--text-2)}
 .hero-figure.plain{font-family:var(--font-sans)}
 .m-value .mark{font-size:0.6em;color:var(--ink-secondary);vertical-align:0.25em}
-input.cell.inline{width:8ch;font:inherit;font-size:var(--text-4);
+input.cell.inline{width:8ch;min-width:3ch;max-width:12ch;font:inherit;font-size:var(--text-4);
   font-variant-numeric:tabular-nums;text-align:left;padding:0}
 .rank .n input[type=checkbox]{accent-color:var(--accent);width:14px;height:14px;margin:0}
 
@@ -1211,6 +1211,17 @@ const money0=n=>money(n,0);
 /* For values that live inside an <input>. Same shape as money() but with an
    ASCII hyphen, because n0() strips everything outside [0-9.-] and would read
    the typographic minus as a positive number. */
+/* Editable figures are sized from their own contents. A fixed `ch` width
+   clips the moment the number grows a digit, and the paycheck field was set
+   narrower than the six characters a few hundred dollars and cents already
+   needs -- the last digit was cut off in place, with nothing to say so.
+   Separators are narrower than a digit even in tabular figures, so they
+   count for less than a full ch rather than overshooting.
+
+   No real figure goes in a comment: build.py refused this file when the
+   first draft quoted one, which is the leak guard doing its job. */
+const chSpan=v=>[...String(v)].reduce((w,c)=>w+(c==='.'||c===','?0.42:1),0);
+const figureWidth=v=>`width:${(chSpan(v)+0.25).toFixed(2)}ch;field-sizing:content`;
 const moneyInput=n=>(n<0?'-':'')+'$'+Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
 const pct=(n,dp=1)=>(n*100).toFixed(dp)+'%';
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -1907,6 +1918,7 @@ function viewWeek(el){
   <div class="hero-row">
     <div class="hero-label">Paycheck in</div>
     <div class="hero-figure"><span class="mark">$</span><input data-k="income"
+      style="${figureWidth(n0(S.weeks[k].income).toFixed(2))}"
       value="${n0(S.weeks[k].income).toFixed(2)}" aria-label="Paycheck in"></div>
     <div class="hero-note">${esc((liveAccounts().find(a=>a.kind==='income')||{}).name||'Checking')}</div>
   </div>
@@ -2588,6 +2600,7 @@ function viewPayoff(el){
   <div class="strip">
     <div class="metric"><div class="m-label">Weekly debt budget</div>
       <span class="m-value"><span class="mark">$</span><input class="cell inline" id="budget"
+        style="${figureWidth(budget.toFixed(2))}"
         value="${budget.toFixed(2)}" aria-label="Weekly debt budget"></span>
       <div class="m-note">${money(floor)} of that is minimums${sim.endBudget>budget?` · rises to ${money(sim.endBudget)}`:''}</div></div>
     <div class="metric"><div class="m-label">Interest you'll pay</div>
