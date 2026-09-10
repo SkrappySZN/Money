@@ -2446,7 +2446,14 @@ $('#btnExport').onclick=exportBackup;
 $('#btnImport').onclick=()=>$('#filepick').click();
 
 document.addEventListener('keydown',e=>{
+  /* Ask the event where it came from rather than trusting activeElement: a
+     re-render between keydown and handler can leave focus on <body>, and a bare
+     digit would then jump to another tab mid-edit. */
+  if(e.target.closest&&e.target.closest('input,select,textarea,[contenteditable]'))return;
   if(/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName))return;
+  /* The number pad is for entering money in this app, never for navigation. */
+  if(e.code&&e.code.startsWith('Numpad'))return;
+  if(e.metaKey||e.ctrlKey||e.altKey)return;
   const t=TABS.find(x=>x.k===e.key);
   if(t){UI.tab=t.id;render();return}
   if(e.key==='['||e.key===']'){
