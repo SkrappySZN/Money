@@ -30,7 +30,8 @@ Here the accounts are defined once and every week reflows around them.
 - **Accounts** — the registry. Add a card, archive a closed one, change an APR;
   every week recalculates. History keeps archived accounts.
 
-`1`–`6` switch tabs. `[` and `]` step through weeks.
+`1`–`6` switch tabs. `[` and `]` step through weeks. The sidebar has a light/dark
+switch; it opens light.
 
 ## Getting your data in and out
 

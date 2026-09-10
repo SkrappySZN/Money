@@ -2,6 +2,7 @@
 # Anchored with a leading slash so docs/index.html — the stripped copy — still ships.
 /index.html
 /NOTES.md
+/GUIDE.md
 *.backup.json
 money-backup-*.json
 money-*.csv
