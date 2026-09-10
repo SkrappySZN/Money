@@ -1254,6 +1254,7 @@ function migrate(){
   if(S.settings.accrueInterest===undefined)S.settings.accrueInterest=true;
   migrateV2();
   migrateV3();
+  migrateV4();
 }
 /* v2 — grouping corrections, Sept 10 2026. Runs against the ledger already
    in the browser, not just the seed: editing SEED alone would have changed
@@ -1275,6 +1276,15 @@ function migrate(){
    Unconditional on purpose: matching the old name would mean writing a real
    account name into a file that gets published, which is what `.leakwords`
    and the pre-commit hook exist to stop. This migration runs once. */
+/* v4 — Car Insurance is sent onward the week it is funded, so it never holds
+   a balance. Flagged by id: it is the one account with this shape, and the
+   registry has no other way to say "this is a conduit, not a fund". */
+function migrateV4(){
+  if(S.v>=4)return;
+  const a=acct('car-insurance');
+  if(a)a.passthrough=true;
+  S.v=4;
+}
 function migrateV3(){
   if(S.v>=3)return;
   const inc=S.accounts.find(a=>a.kind==='income');
@@ -1351,7 +1361,10 @@ function computeWeek(k){
     r.weekInterest=(KIND_DEBT(r.a.kind)&&!r.inGrace&&S.settings.accrueInterest)
       ?r2(r.balance*r.dpr*7):0;
     if(r.a.kind==='income'){r.after=r.balance}
-    else if(KIND_INFLOW(r.a.kind)){r.after=r2(r.balance+r.total)}
+    /* A passthrough bucket is funded and emptied in the same week — the money
+       is routed onward, not held — so what went through it never lands in the
+       balance. `total` still counts as allocated: the paycheck did spend it. */
+    else if(KIND_INFLOW(r.a.kind)){r.after=r.a.passthrough?r2(r.balance):r2(r.balance+r.total)}
     else{r.after=r2(r.balance+r.weekInterest-r.total)}
     if(r.a.limit>0&&r.a.kind==='card'){
       r.usage=r.balance/r.a.limit;
@@ -1367,7 +1380,8 @@ function computeWeek(k){
       r.targetWeeks=r.targetDone?0:(r.total>0?Math.ceil(r.targetShort/r.total):Infinity);
     }
     /* 6 months out at this week's rate — the sheet's Q column, ×26 weeks */
-    if(KIND_INFLOW(r.a.kind))r.sixMo=r2(r.balance+(r.total-n0(r.a.weeklyOutflow))*26);
+    if(KIND_INFLOW(r.a.kind))r.sixMo=r.a.passthrough?r2(r.balance)
+      :r2(r.balance+(r.total-n0(r.a.weeklyOutflow))*26);
     else if(KIND_DEBT(r.a.kind))r.sixMo=r2(Math.max(0,projectDebt(r.balance,r.dpr,r.total,26)));
     r.drift=(r.e.projected!=null)?r2(r.balance-n0(r.e.projected)):null;
   }
@@ -2081,7 +2095,9 @@ const SHEET_COLS=[
    cell:r=>`<td class="num ${r.inGrace?'pos':'dim'}"${r.inGrace?' title="In grace — no interest while the statement balance is paid in full"':''}>`
      +`${KIND_DEBT(r.a.kind)?(r.inGrace?'grace':money(r.weekInterest)):'—'}</td>`},
   {k:'after',label:'After',
-   cell:r=>`<td class="num ${r.a.kind==='card'&&r.after>n0(r.a.limit)?'neg':r.after<0?'neg':''}">${money(r.after)}</td>`},
+   cell:r=>`<td class="num ${r.a.kind==='card'&&r.after>n0(r.a.limit)?'neg':r.after<0?'neg':''}"`
+     +`${r.a.passthrough?' title="Passes straight through — funded and sent onward the same week, so nothing accumulates"':''}>`
+     +`${money(r.after)}</td>`},
   {k:'usageAfter',label:'Usage aft',
    cell:r=>dimCell(r.a.kind==='card'&&r.a.limit?pct(n0(r.usageAfter)):'—')},
   {k:'availAfter',label:'Avail aft',
