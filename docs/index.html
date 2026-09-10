@@ -2911,16 +2911,20 @@ function deleteWeeks(){
     toast(`${list.length} ${list.length===1?'week':'weeks'} removed — ⌘Z to undo`);
   };
   if(ks.length<=1){toast('This is the only week — nothing to delete');return}
+  /* Name what survives, not just what goes. The two options sit next to each
+     other and differ by one word otherwise. */
   const body=after.length
-    ? `This week is ${weekLabel(k)}. There ${after.length===1?'is 1 week':`are ${after.length} weeks`} dated after it, `
+    ? `${after.length===1?'1 week is':`${after.length} weeks are`} dated after this one: `
       +`${weekLabel(after[0])}${after.length>1?` through ${weekLabel(after[after.length-1])}`:''}. `
-      +`Removing a week deletes its balances and everything assigned in it. ⌘Z undoes this.`
-    : `This week is ${weekLabel(k)}. Removing it deletes its balances and everything `
-      +`assigned in it. It is the last week in the ledger. ⌘Z undoes this.`;
+      +`Deleting those keeps ${weekLabel(k)} and everything in it. `
+      +`Deleting this week instead removes ${weekLabel(k)}'s own balances and allocations `
+      +`and leaves the later weeks alone. Either way, ⌘Z undoes it.`
+    : `This week is ${weekLabel(k)}, the last in the ledger. Removing it deletes its `
+      +`balances and everything assigned in it. ⌘Z undoes this.`;
   if(!after.length)return confirmModal('Delete week',body,'Delete this week',()=>drop([k]));
   confirmModal('Delete week',body,
-    `Delete the ${after.length} after this`,()=>drop(after),
-    'Delete this week only',()=>drop([k]));
+    `Delete the ${after.length} after ${weekLabel(k)}`,()=>drop(after),
+    `Delete ${weekLabel(k)} itself`,()=>drop([k]));
 }
 
 /* ── pull balances forward ────────────────────────────────────────
