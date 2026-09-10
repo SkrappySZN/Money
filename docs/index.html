@@ -114,6 +114,7 @@
   --rule:rgba(27,24,21,0.12);          /* default hairline           */
   --rule-strong:rgba(27,24,21,0.22);   /* under section labels, totals */
   --rule-faint:rgba(27,24,21,0.07);    /* between table rows         */
+  --veil:rgba(27,24,21,0.28);          /* behind a modal             */
 
   /* ── Controls ──────────────────────────────────────────────────
      Minimum hit target, reached with padding rather than by enlarging
@@ -427,6 +428,67 @@ td.chg.is-good{color:var(--positive)}
 td.chg.is-bad{color:var(--negative)}
 td.chg.is-flat{color:var(--ink-muted);font-weight:var(--weight-regular)}
 td.chg.is-plain{color:var(--ink-secondary);font-weight:var(--weight-regular)}
+
+/* ── Modals and buttons ─────────────────────────────────────────
+   These lived only under `.legacy`, and `#modalRoot` is a SIBLING of
+   `#view` — so the selector could never match from anywhere, on any
+   tab, converted or not. Every dialog in the app rendered as bare text
+   at the foot of the page, and so did the welcome screen's buttons on
+   the published copy, which is the first thing a new visitor sees.
+
+   Per C7: a transient panel does not get elevation. The veil separates
+   it from the page; the panel itself is paper with a strong hairline,
+   the same treatment the chart tooltip settled on. */
+.scrim{position:fixed;inset:0;z-index:50;background:var(--veil);
+  display:flex;align-items:center;justify-content:center;padding:var(--space-4)}
+.modal{background:var(--paper);border:var(--rule-width) solid var(--rule-strong);
+  border-radius:var(--radius);padding:var(--space-5);
+  max-width:560px;width:100%;max-height:86vh;overflow:auto}
+.modal h3{font-family:var(--font-display);font-size:var(--text-4);
+  line-height:var(--leading-4);font-weight:var(--weight-regular);margin:0 0 var(--space-2)}
+.modal p{color:var(--ink-secondary);font-size:var(--text-2);line-height:var(--leading-2);
+  margin:0 0 var(--space-3);max-width:var(--measure-prose)}
+.modal p b{color:var(--ink);font-weight:var(--weight-medium)}
+.mrow{display:flex;gap:var(--space-2);justify-content:flex-end;
+  margin-top:var(--space-4);flex-wrap:wrap;align-items:center}
+
+/* One solid block per cluster (C3): the confirming action. Everything
+   else in the row is text, so the eye lands on the one that commits. */
+.btn{font:inherit;font-size:var(--text-2);color:var(--ink-secondary);background:none;
+  border:var(--rule-width) solid transparent;border-radius:var(--radius);cursor:pointer;
+  min-height:var(--control-target);padding:0 var(--space-2);
+  display:inline-flex;align-items:center;gap:var(--space-1);line-height:1.6}
+.btn:hover{color:var(--ink)}
+.btn:focus-visible{outline:none;color:var(--focus-ink);text-decoration:underline;
+  text-decoration-color:var(--focus-ink);text-decoration-thickness:var(--focus-ring-width);
+  text-underline-offset:var(--focus-ring-offset)}
+.btn.pri{background:var(--accent);color:var(--accent-on);border-color:var(--accent);
+  font-weight:var(--weight-medium)}
+.btn.pri:hover{background:var(--accent-pressed);border-color:var(--accent-pressed);
+  color:var(--accent-on)}
+.btn.pri:focus-visible{outline:var(--focus-ring-width) solid var(--ink);
+  outline-offset:var(--focus-ring-offset);text-decoration:none;color:var(--accent-on)}
+.btn.ghost{color:var(--ink-muted)}
+.btn.ghost:hover{color:var(--ink)}
+.btn.sm{min-height:auto;padding:var(--space-1) var(--space-2)}
+.btn[disabled]{opacity:.35;cursor:not-allowed}
+/* A destructive confirm reads in oxblood — the one place R9 clearly binds. */
+.btn.danger{background:var(--negative);border-color:var(--negative);color:var(--paper);
+  font-weight:var(--weight-medium)}
+.btn.danger:hover{background:var(--negative);border-color:var(--negative);filter:brightness(.92)}
+
+/* The modal's own field wrapper. The bare `.field` rule styles form
+   controls, so it must not also be the label-plus-input container. */
+.modal .f2{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3)}
+.modal .fieldrow{margin-bottom:var(--space-3)}
+.modal .fieldrow label{display:block;font-size:var(--text-1);line-height:var(--leading-1);
+  letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted);
+  font-weight:var(--weight-medium);margin-bottom:var(--space-1)}
+.modal .fieldrow input,.modal .fieldrow select{width:100%;font:inherit;font-size:var(--text-3);
+  background:none;border:0;border-bottom:var(--rule-width) solid var(--rule);
+  border-radius:var(--radius);padding:var(--space-1) 0;color:var(--ink)}
+.modal .fieldrow input:focus,.modal .fieldrow select:focus{outline:none;
+  border-bottom-color:var(--accent)}
 
 /* ── The allocation sheet ────────────────────────────────────────
    Its own density so all 27 rows clear the fold. 3px of padding on a
@@ -1771,27 +1833,42 @@ function renderInner(){
   }
 }
 
+/* The empty state. It threw for months: it set `#statusdot`, and the brand
+   dot was removed from the rail under C9, so `$('#statusdot')` came back null
+   and the whole function died BEFORE writing any HTML. Nothing rendered, and
+   because the published copy is the one that ships empty, that blank page was
+   the only thing a first-time visitor ever saw. Every element below is now
+   addressed defensively, and the markup is the new system rather than the
+   `.card`/`.head` classes that live under `.legacy` and could never apply
+   here — `#view` carries no class on this path. */
 function renderWelcome(){
-  $('#nav').innerHTML=''; $('#railstat').innerHTML='No data yet';
-  $('#statusdot').className='dot warn';
-  $('#view').innerHTML=`
-  <div class="head"><div><h1>Money</h1>
-    <div class="sub">A weekly zero-based allocation ledger</div></div></div>
-  <div class="card" style="max-width:640px">
-    <h3>Nothing here yet</h3>
-    <p style="margin-top:8px">This page ships empty on purpose — no balances, no account names, nothing
+  const nav=$('#nav'); if(nav)nav.innerHTML='';
+  const rs=$('#railstat'); if(rs)rs.innerHTML='No data yet';
+  const dot=$('#statusdot'); if(dot)dot.className='dot warn';
+  $('#view').className='';
+  $('#view').innerHTML=`<main class="page">
+  <header class="masthead">
+    <div><h1 class="page-title">Money</h1>
+      <div class="dateline">A weekly zero-based allocation ledger</div></div>
+  </header>
+
+  <section class="band">
+    <h2 class="sect-label">Nothing here yet</h2>
+    <p class="lede">This page ships empty on purpose — no balances, no account names, nothing
       personal in the source. Your data lives only in this browser, and only once you put it here.</p>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:var(--sp-5)">
+    <div class="mrow" style="justify-content:flex-start">
       <button class="btn pri" data-act="import">Import a backup</button>
       <button class="btn" data-act="startfresh">Start from scratch</button>
     </div>
-  </div>
-  <div class="card" style="max-width:640px">
-    <div class="cap">Moving between devices</div>
-    <p style="margin-top:8px;color:var(--ink-2)">Local storage is per-browser. On the machine that
-      already has your weeks, use <b>Export backup</b>, then import the file here. Do it again whenever
-      you want the two back in step.</p>
-  </div>`;
+  </section>
+
+  <section class="band">
+    <h2 class="sect-label">Moving between devices</h2>
+    <p class="lede">Local storage is per-browser. On the machine that already has your weeks,
+      use <b>Export backup</b>, then import the file here. Do it again whenever you want the
+      two back in step.</p>
+  </section>
+</main>`;
 }
 function startFresh(){
   const k=thisWeek();
@@ -2924,7 +3001,7 @@ function deleteWeeks(){
   if(!after.length)return confirmModal('Delete week',body,'Delete this week',()=>drop([k]));
   confirmModal('Delete week',body,
     `Delete the ${after.length} after ${weekLabel(k)}`,()=>drop(after),
-    `Delete ${weekLabel(k)} itself`,()=>drop([k]));
+    `Delete ${weekLabel(k)} itself`,()=>drop([k]),true);
 }
 
 /* ── pull balances forward ────────────────────────────────────────
@@ -3130,14 +3207,14 @@ document.addEventListener('keydown',e=>{
 /* ── accounts ─────────────────────────────────────────────────────── */
 function addAccount(){
   modal(`<h3>New account</h3><p>It shows up in every week from here on.</p>
-    <div class="field"><label>Name</label><input type="text" id="naName" placeholder="Citi Double Cash"></div>
-    <div class="field"><label>Type</label><select id="naKind">
+    <div class="fieldrow"><label>Name</label><input type="text" id="naName" placeholder="Citi Double Cash"></div>
+    <div class="fieldrow"><label>Type</label><select id="naKind">
       <option value="card">Credit card</option><option value="loan">Loan</option>
       <option value="cash">Bucket / sinking fund</option><option value="savings">Savings</option>
       </select></div>
-    <div class="f2"><div class="field"><label>Credit limit</label><input type="number" id="naLimit" placeholder="0"></div>
-      <div class="field"><label>APR %</label><input type="number" step="0.01" id="naApr" placeholder="0"></div></div>
-    <div class="field"><label>Minimum per month</label><input type="number" step="0.01" id="naMin" placeholder="0"></div>`,
+    <div class="f2"><div class="fieldrow"><label>Credit limit</label><input type="number" id="naLimit" placeholder="0"></div>
+      <div class="fieldrow"><label>APR %</label><input type="number" step="0.01" id="naApr" placeholder="0"></div></div>
+    <div class="fieldrow"><label>Minimum per month</label><input type="number" step="0.01" id="naMin" placeholder="0"></div>`,
     'Add',()=>{
       const name=$('#naName').value.trim();if(!name){toast('Give it a name');return false}
       const kind=$('#naKind').value;
@@ -3153,9 +3230,9 @@ function addAccount(){
 function nextId(list,p){let n=1;while(list.some(x=>x.id===p+n))n++;return p+n}
 function addCalItem(){
   modal(`<h3>Add a date</h3><p>It surfaces in the week it lands in.</p>
-    <div class="field"><label>Date</label><input type="date" id="ncD" value="${thisWeek()}"></div>
-    <div class="field"><label>What</label><input type="text" id="ncT" placeholder="Statement closes"></div>
-    <div class="field"><label>Note</label><input type="text" id="ncN" placeholder="optional"></div>`,
+    <div class="fieldrow"><label>Date</label><input type="date" id="ncD" value="${thisWeek()}"></div>
+    <div class="fieldrow"><label>What</label><input type="text" id="ncT" placeholder="Statement closes"></div>
+    <div class="fieldrow"><label>Note</label><input type="text" id="ncN" placeholder="optional"></div>`,
     'Add',()=>{
       const t=$('#ncT').value.trim(),d=$('#ncD').value;
       if(!t||!d){toast('Needs a date and a description');return false}
@@ -3166,8 +3243,8 @@ function addCalItem(){
 }
 function addOpenItem(){
   modal(`<h3>Add an open item</h3><p>Something undecided or unverified.</p>
-    <div class="field"><label>What</label><input type="text" id="noT" placeholder="Check the prepayment penalty"></div>
-    <div class="field"><label>Note</label><input type="text" id="noN" placeholder="optional"></div>`,
+    <div class="fieldrow"><label>What</label><input type="text" id="noT" placeholder="Check the prepayment penalty"></div>
+    <div class="fieldrow"><label>Note</label><input type="text" id="noN" placeholder="optional"></div>`,
     'Add',()=>{
       const t=$('#noT').value.trim();
       if(!t){toast('Needs a description');return false}
@@ -3238,13 +3315,13 @@ function modal(html,okLabel,onOk){
   document.addEventListener('keydown',function esc2(e){
     if(e.key==='Escape'){close();document.removeEventListener('keydown',esc2)}});
 }
-function confirmModal(title,body,okLabel,onOk,altLabel,onAlt){
+function confirmModal(title,body,okLabel,onOk,altLabel,onAlt,danger){
   if(!altLabel)return modal(`<h3>${esc(title)}</h3><p>${esc(body)}</p>`,okLabel,onOk);
   const root=$('#modalRoot');
   root.innerHTML=`<div class="scrim"><div class="modal"><h3>${esc(title)}</h3><p>${esc(body)}</p>
     <div class="mrow"><button class="btn ghost" data-m="x">Cancel</button>
       <button class="btn" data-m="alt">${esc(altLabel)}</button>
-      <button class="btn pri" data-m="ok">${esc(okLabel)}</button></div></div></div>`;
+      <button class="btn ${danger?'danger':'pri'}" data-m="ok">${esc(okLabel)}</button></div></div></div>`;
   const close=()=>root.innerHTML='';
   root.querySelector('[data-m=x]').onclick=close;
   root.querySelector('[data-m=alt]').onclick=()=>{onAlt();close()};
@@ -3494,9 +3571,9 @@ function paintSync(){
 function signInModal(){
   modal(`<h3>Sign in</h3><p>We email you a link. Open it on this device and you are in —
       no password to remember or leak.</p>
-    <div class="field"><label>Email</label><input type="text" id="siEmail" placeholder="you@example.com"
+    <div class="fieldrow"><label>Email</label><input type="text" id="siEmail" placeholder="you@example.com"
       value="${esc((SESSION&&SESSION.email)||'')}"></div>
-    <div class="field"><label>Or paste the 6-digit code, if you got one</label>
+    <div class="fieldrow"><label>Or paste the 6-digit code, if you got one</label>
       <input type="text" id="siCode" placeholder="000000"></div>`,
     'Send link',async()=>{
       const email=$('#siEmail').value.trim(),code=$('#siCode').value.trim();
