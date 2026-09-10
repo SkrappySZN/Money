@@ -1398,6 +1398,7 @@ function migrate(){
   migrateV2();
   migrateV3();
   migrateV4();
+  migrateV5();
 }
 /* v2 — grouping corrections, Sept 10 2026. Runs against the ledger already
    in the browser, not just the seed: editing SEED alone would have changed
@@ -1422,6 +1423,15 @@ function migrate(){
 /* v4 — Car Insurance is sent onward the week it is funded, so it never holds
    a balance. Flagged by id: it is the one account with this shape, and the
    registry has no other way to say "this is a conduit, not a fund". */
+/* v5 — the card-minimums bucket is a staging account for debt, not savings.
+   Money lands there only on its way to a card, and classifying it as savings
+   understated what actually goes to debt each week by the whole of it. */
+function migrateV5(){
+  if(S.v>=5)return;
+  const a=acct('credit-card-minimums');
+  if(a)a.fundsDebt=true;
+  S.v=5;
+}
 function migrateV4(){
   if(S.v>=4)return;
   const a=acct('car-insurance');
@@ -1567,7 +1577,19 @@ function computeWeek(k){
   totals.usageAfter=totals.limit?totals.cardAfter/totals.limit:0;
   totals.avgUsageAfter=cards.length?cards.reduce((s,r)=>s+n0(r.usageAfter),0)/cards.length:0;
   /* a bucket's whole contribution, whichever column it was entered in */
-  totals.savingsIn=r2(buckets.reduce((s,r)=>s+r.total,0));
+  /* A bucket flagged `fundsDebt` is a staging account for debt — money lands
+     there on its way to a card, not as savings. It is partitioned out of
+     savingsIn so the allocation bar does not read it as money set aside.
+
+     `debtPaid` deliberately stays as it was: money that actually reached a
+     debt row this week. The weekly check compares it against interest to say
+     whether the debt moved, and a dollar sitting in a bucket has not moved
+     any debt yet. `debtFunded` is the wider figure — everything committed to
+     debt — and that is what the projections should run on. */
+  const debtBuckets=buckets.filter(r=>r.a.fundsDebt);
+  totals.savingsIn=r2(buckets.filter(r=>!r.a.fundsDebt).reduce((s,r)=>s+r.total,0));
+  totals.debtBucket=r2(debtBuckets.reduce((s,r)=>s+r.total,0));
+  totals.debtFunded=r2(totals.debtPaid+totals.debtBucket);
 
   return {key:k, rows, byId, totals, checks:runChecks(k,rows,totals)};
 }
@@ -2036,7 +2058,7 @@ function viewWeek(el){
 const ALLOC_SEGS=T=>[
   ['Attack',            T.attack,     'var(--fill-emphasis)'],
   ['Other debt',        T.otherDebt,  'var(--fill-strong)'],
-  ['Minimums',          T.minPaid,    'var(--fill-mid)'],
+  ['Minimums',          r2(T.minPaid+n0(T.debtBucket)), 'var(--fill-mid)'],
   ['Buckets & savings', T.savingsIn,  'var(--fill-faint)'],
 ];
 function allocSegments(T){
@@ -2524,7 +2546,7 @@ function viewAttack(el){
     <p class="lede">No balances to attack. That is the whole point.</p></main>`;return}
   const grace=all.filter(d=>d.grace), debts=all.filter(d=>!d.grace);
   const strat=UI.strategy;
-  const budget=Math.max(T.debtPaid,all.reduce((s,d)=>s+d.weeklyMin,0));
+  const budget=Math.max(n0(T.debtFunded),all.reduce((s,d)=>s+d.weeklyMin,0));
   const rank=Object.fromEntries((S.plan.order||[]).map((id,i)=>[id,i]));
   const ranked=[...debts].sort((a,b)=>
     strat==='snowball'?a.balance-b.balance
@@ -2633,7 +2655,7 @@ function viewPayoff(el){
     <header class="masthead"><div><h1 class="page-title">Payoff</h1></div></header>
     <p class="lede">Nothing left to pay off.</p></main>`;return}
   const floor=r2(debts.reduce((s,d)=>s+d.weeklyMin,0));
-  if(UI.extra==null)UI.extra=Math.max(T.debtPaid,floor);
+  if(UI.extra==null)UI.extra=Math.max(n0(T.debtFunded),floor);
   const budget=Math.max(0,n0(UI.extra));
   const strat=UI.strategy;
   const sim=simulate(debts,simOpts(k,budget,strat));
