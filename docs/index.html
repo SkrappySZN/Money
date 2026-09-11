@@ -1325,16 +1325,21 @@ function saveUI(){
   }catch(e){}
 }
 function loadUI(){
+  /* Declared out here on purpose: a `const` inside the try block is not in
+     scope after it, and reading it below threw a ReferenceError that took
+     boot() down with it before render() ever ran — a blank page, for the sake
+     of remembering which tab you were on. */
+  let stored={};
   try{
-    const a=JSON.parse(localStorage.getItem(UI_KEY)||'{}');
-    for(const k of UI_LASTING)if(a[k]!==undefined)UI[k]=a[k];
+    stored=JSON.parse(localStorage.getItem(UI_KEY)||'{}');
+    for(const k of UI_LASTING)if(stored[k]!==undefined)UI[k]=stored[k];
     const b=JSON.parse(sessionStorage.getItem(UI_KEY)||'{}');
     for(const k of UI_SESSION)if(b[k]!=null)UI[k]=b[k];
   }catch(e){}
   /* Never restore onto something that is no longer there. */
   /* An order set on the Plan tab is a decision; a default of `avalanche` is
      not. Only applies when nothing was stored — an explicit choice stands. */
-  if(a.strategy===undefined&&(S&&S.plan&&(S.plan.order||[]).length))UI.strategy='custom';
+  if(stored.strategy===undefined&&(S&&S.plan&&(S.plan.order||[]).length))UI.strategy='custom';
   if(UI.tab&&!TABS.some(t=>t.id===UI.tab))UI.tab='week';
   if(UI.week&&!(S&&S.weeks&&S.weeks[UI.week]))UI.week=null;
   if(UI.month&&!monthKeys().includes(UI.month))UI.month=null;
@@ -3667,8 +3672,35 @@ function boot(){
       </div>`);
   }
   const fresh=!load();
-  loadUI();
-  render();
+  /* Restoring the last view is a convenience. It must never be able to stop
+     the ledger from opening — which it did: a scope error in loadUI() threw
+     before render() and left nothing on the page at all. */
+  try{loadUI()}catch(e){console.warn('loadUI failed, using defaults',e)}
+  try{render()}
+  catch(e){
+    /* A blank page says nothing and offers nothing. The data is still in
+       storage, so say that, and put the way to get it out within reach. */
+    console.error('render failed at boot',e);
+    const v=$('#view');
+    if(v){
+      v.className='';
+      v.innerHTML=`<main class="page">
+        <header class="masthead"><div><h1 class="page-title">Something broke</h1>
+          <div class="dateline">The page could not draw itself</div></div></header>
+        <section class="band">
+          <p class="lede"><b>Your ledger is not lost.</b> It is still in this browser's storage —
+            this is a fault in the page, not in your data. Take a backup now, before anything else.</p>
+          <div class="mrow" style="justify-content:flex-start">
+            <button class="btn pri" data-act="export">Export backup</button>
+          </div>
+        </section>
+        <section class="band">
+          <h2 class="sect-label">What went wrong</h2>
+          <p class="lede muted" style="font-family:ui-monospace,monospace">${esc(String(e&&e.message||e))}</p>
+        </section>
+      </main>`;
+    }
+  }
   if(typeof syncInit==='function')syncInit().catch(e=>console.warn('sync',e));
   if(fresh&&Object.keys(S.weeks).length)toast(`Imported ${Object.keys(S.weeks).length} weeks from your spreadsheet`);
   /* charts are sized off the container, so redraw them when it changes */
