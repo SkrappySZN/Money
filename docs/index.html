@@ -1446,6 +1446,7 @@ function migrate(){
   migrateV7();
   migrateV8();
   migrateV9();
+  migrateV10();
 }
 /* v2 — grouping corrections, Sept 10 2026. Runs against the ledger already
    in the browser, not just the seed: editing SEED alone would have changed
@@ -1491,6 +1492,15 @@ function migrate(){
 /* v9 — the motorcycle premium is fully funded, so its $14.50 a week is free
    for attack. Same shape as the lease and buffer steps, which the target
    already implied and nothing read. */
+/* v10 — the subscription schedule, so the sheet knows what lands and when
+   rather than only that a bucket exists to pay for it. */
+function migrateV10(){
+  if(S.v>=10)return;
+  S.plan=S.plan||{};
+  if(!S.plan.subs||!S.plan.subs.length)
+    S.plan.subs=JSON.parse(JSON.stringify(PLAN_SEED.subs||[]));
+  S.v=10;
+}
 function migrateV9(){
   if(S.v>=9)return;
   S.plan=S.plan||{}; S.plan.steps=S.plan.steps||[];
@@ -1806,6 +1816,22 @@ function runChecks(k,rows,T){
     out.push({s:'warn',t:`<b>${esc(r.a.name)} ${already?`closed ${dueLabel(r.close)}`:`closes ${dueLabel(r.close)}`} `
       +`and has no minimum recorded.</b> Put it in Min due /mo — until it is there nothing can tell you `
       +`if it goes unpaid, and the payoff date assumes you are paying it nothing.`});
+  }
+  /* Subscriptions land on a card whether or not the bucket has the money for
+     them. The schedule itself lives on Plan — a recurring charge you expect is
+     reference, not an alarm — so this speaks only when what bills this week is
+     more than the bucket holds. */
+  {
+    const hits=subsInWeek(k);
+    if(hits.length){
+      const due=r2(hits.reduce((t,x)=>t+x.amount,0));
+      const bucket=rows.find(r=>r.a.id==='subscriptions');
+      const held=bucket?r2(bucket.balance+bucket.total):0;
+      if(due>held+0.005)
+        out.push({s:'warn',t:`<b>${money(due)} of subscriptions bill this week</b> and the bucket `
+          +`holds ${money(held)} — ${money(r2(due-held))} short. `
+          +hits.map(x=>`${esc(x.name)} ${money(x.amount)} on ${dueLabel(x.date)}`).join(', ')+`.`});
+    }
   }
   /* over limit, and utilization that'll get reported */
   for(const r of rows.filter(x=>x.a.kind==='card'&&x.a.limit>0)){
@@ -2999,6 +3025,12 @@ function viewPlan(el){
   const done=cal.filter(c=>c.done);
   const openLeft=P.open.filter(o=>!o.done),openDone=P.open.filter(o=>o.done);
 
+  const subs=[...(P.subs||[])].sort((a,b)=>n0(a.day)-n0(b.day));
+  const subsNow=subsMonthly(today);
+  /* the next four pay weeks, so the clustering is visible rather than implied */
+  const subWeeks=[0,1,2,3].map(i=>{const wk=addWeeks(k,i),h=subsInWeek(wk);
+    return {wk,hits:h,total:r2(h.reduce((t,x)=>t+x.amount,0))}});
+
   const debts=debtSnapshot(k);
   const byId=Object.fromEntries(debts.map(d=>[d.id,d]));
   const ordered=(P.order||[]).filter(id=>acct(id));
@@ -3028,6 +3060,34 @@ function viewPlan(el){
     <div class="checks">
       ${overdue.map(c=>`<div class="chk bad">${icon('bad')}<div><b>${dueLabel(c.d)} — ${esc(c.t)}</b>${c.n?` · ${esc(c.n)}`:''} <span style="color:var(--muted)">(${Math.abs(daysBetween(c.d,today))} days ago)</span></div></div>`).join('')}
       ${soon.filter(c=>c.d<weekEnd).map(c=>`<div class="chk warn">${icon('warn')}<div><b>${dueLabel(c.d)} — ${esc(c.t)}</b>${c.n?` · ${esc(c.n)}`:''}</div></div>`).join('')}
+    </div>
+  </div>`:''}
+
+  ${subs.length?`<div class="card">
+    <div class="cap">Subscriptions · ${money(subsNow)}/month</div>
+    <p class="sub" style="margin:8px 0 14px;max-width:72ch">Every recurring charge and the day it bills.
+      They bill to ${esc((acct(subs[0].card)||{}).name||'a card')}, and the Subscriptions bucket is what clears it —
+      ${(()=>{const b=C.rows.find(r=>r.a.id==='subscriptions');
+        if(!b)return 'no bucket is funding them';
+        const per=r2(n0(b.minAmt)*MIN_DIVISOR),gap=r2(per-subsNow);
+        return `it puts in ${money(n0(b.minAmt))}/week, ${money(per)} a month, `
+          +(Math.abs(gap)<0.005?'exactly what they cost'
+            :gap>0?`<b>${money(gap)} more</b> than they cost`
+                  :`<b>${money(-gap)} less</b> than they cost`)})()}.</p>
+    <div class="rank">
+      ${subs.map(x=>{const amtNow=subAmountOn(x,today);
+        return `<li><span class="n">${n0(x.day)}</span>
+        <span><span class="nm">${esc(x.name)}</span>
+          <div class="meta">bills on the ${ordinal(n0(x.day))}${x.to
+            ? ` · ${money(n0(x.amt))} → <b>${money(n0(x.to.amt))}</b> from ${dueLabel(x.to.from)}`:''}</div></span>
+        <span class="rt"><div class="rv">${money(amtNow)}</div><div class="rl">per month</div></span></li>`}).join('')}
+    </div>
+    <div class="cap" style="margin-top:var(--sp-5)">What lands, by pay week</div>
+    <div class="rank">
+      ${subWeeks.map(w=>`<li><span class="n"></span>
+        <span><span class="nm">${weekLabel(w.wk)}</span>
+          <div class="meta">${w.hits.length?w.hits.map(h=>`${esc(h.name)} ${money(h.amount)}`).join(' · '):'nothing bills'}</div></span>
+        <span class="rt"><div class="rv">${w.total?money(w.total):'—'}</div><div class="rl">${w.hits.length?`${w.hits.length} charge${w.hits.length===1?'':'s'}`:''}</div></span></li>`).join('')}
     </div>
   </div>`:''}
 
@@ -3300,6 +3360,28 @@ function rerenderKeepFocus(){
    month. The day of the month is an anchor, so it is held separately and
    clamped to each month's last day rather than allowed to spill into the
    next one — Jan 31 → Feb 28 → Mar 31, not Feb 28 → Mar 28. */
+/* What a subscription costs on a given date — after a known price change,
+   the new figure. */
+const ordinal=n=>n+(n%100>=11&&n%100<=13?'th':['th','st','nd','rd'][n%10]||'th');
+const subAmountOn=(x,date)=>x.to&&date>=x.to.from?n0(x.to.amt):n0(x.amt);
+/* Which subscriptions bill inside a pay week. Walks the seven days rather than
+   reasoning about months, so a week crossing a month boundary is not a special
+   case; a charge dated past the end of a short month bills on its last day. */
+function subsInWeek(k){
+  const list=(S.plan&&S.plan.subs)||[];
+  const out=[];
+  for(let i=0;i<7;i++){
+    const date=addDays(k,i),d=parseISO(date);
+    const last=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();
+    for(const x of list)
+      if(Math.min(n0(x.day),last)===d.getDate())
+        out.push({...x,date,amount:subAmountOn(x,date)});
+  }
+  return out;
+}
+const subsMonthly=on=>r2(((S.plan&&S.plan.subs)||[])
+  .reduce((t,x)=>t+subAmountOn(x,on||thisWeek()),0));
+
 function rollDate(d,from,anchorDay){
   if(!d)return'';
   if(d>=from)return d;
