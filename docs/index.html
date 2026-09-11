@@ -3532,11 +3532,23 @@ function newWeek(){
   const C=computeWeek(last),entries={};
   for(const r of C.rows){
     const a=r.a,e=blankEntry();
+    let proj=0;
     if(a.kind==='income'){e.balance=C.totals.income;e.projected=C.totals.income}
     else{
       /* `after` already includes this week's interest, so the next opening balance is just that */
-      const proj=KIND_DEBT(a.kind)?r2(Math.max(0,r.after)):r.after;
+      proj=KIND_DEBT(a.kind)?r2(Math.max(0,r.after)):r.after;
       e.balance=proj;e.projected=proj;
+      /* Everything assigned last week carries. It used to carry `other` only
+         for buckets and `min` only for loans, which quietly dropped the lease
+         payment — that sits in Min on a cash account and matched neither rule
+         — and cleared Attack every week on the theory that it is a fresh
+         decision. In practice a week's allocation is mostly the same week to
+         week, and retyping it is how a number goes in wrong. */
+      e.min=r.min; e.attack=r.attack; e.other=r.other;
+      /* Nothing carries onto a debt that is now clear: there is nothing left
+         to pay, and the money should be re-aimed rather than sent anyway.
+         A bucket at zero still has a job, so this is debts only. */
+      if(KIND_DEBT(a.kind)&&proj<=0.005){e.min=0;e.attack=0;e.other=0}
     }
     e.minAmt=r.minAmt;
     /* The anchor day is remembered on the account, because a date that has
@@ -3547,14 +3559,11 @@ function newWeek(){
     if(r.due&&!a.dueDay)a.dueDay=parseISO(r.due).getDate();
     e.close=rollDate(r.close,nk,a.closeDay);
     e.due=rollDate(r.due,nk,a.dueDay);
-    /* sinking funds and loan minimums repeat every week; attack is a fresh decision */
-    if(KIND_INFLOW(a.kind))e.other=r.other;
-    if(a.kind==='loan')e.min=r.min;
     entries[a.id]=e;
   }
   S.weeks[nk]={income:C.totals.income,entries};
   UI.week=nk;UI.tab='sheet';save();render();
-  toast('Balances projected forward — correct any that differ from the bank');
+  toast('Balances projected forward and last week\u2019s allocation carried — correct anything the bank disagrees with');
 }
 
 /* ── input ────────────────────────────────────────────────────────── */
