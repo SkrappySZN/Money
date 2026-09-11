@@ -82,6 +82,7 @@
   --ink:#1B1815;        /* headings, figures, primary prose         */
   --ink-secondary:#4A443C;
   --ink-muted:#857C6F;  /* labels, axis text, disabled              */
+  --ink-absent:#B3ACA1; /* a cell holding nothing: an em-dash, a zero */
 
   /* ── Accent ────────────────────────────────────────────────────
      Exactly one. Primary action and active nav state only. It is
@@ -517,12 +518,37 @@ td.dcell.is-empty input:disabled{color:transparent;-webkit-text-fill-color:trans
   color:var(--ink-muted);font-weight:var(--weight-medium)}
 .gracebox input:checked+span{color:var(--positive)}
 
+/* Two thirds of the cells in this sheet hold nothing — an em-dash for a
+   column that does not apply to the row, a zero for one you have not used.
+   At full strength they compete with the figures that actually carry the
+   week. Dropped a rung below muted so the eye lands on what moved. */
+.sheet-page td.is-absent,.sheet-page td.chg.is-flat{color:var(--ink-absent)}
+.sheet-page input.cell.is-zero{color:var(--ink-absent)}
+.sheet-page td.dcell.is-empty::after{color:var(--ink-absent)}
+
+/* Nineteen columns in one undifferentiated run gives the eye nothing to hold.
+   A hairline at each change of subject — what it is, where it stands, what it
+   owes, what you are giving it, where it lands — which is R5's rule rather
+   than a border. */
+.sheet-page table.grid th.grp,.sheet-page table.grid td.grp,
+.sheet-page table.grid tbody th.grp{border-left:var(--rule-width) solid var(--rule-faint)}
+.sheet-page table.grid thead th.grp{border-left-color:var(--rule)}
+
 /* ── The allocation sheet ────────────────────────────────────────
    Its own density so all 27 rows clear the fold. 3px of padding on a
    13px/1.35 cell gives a ~25px step against the ~36px the rest of the
    app uses; the wrapper takes the viewport that is left rather than a
    fixed 70vh, so the table grows with the window instead of capping. */
-.sheet-page{padding-top:var(--space-4);padding-bottom:0;
+/* `.shell .page` is two classes and beat this on specificity, so the sheet
+   kept the standard page's 64px top and 96px bottom padding — 160px of the
+   one view whose entire job is fitting on screen, spent on margin. The
+   layout properties applied; only the padding lost. Matched selector depth
+   rather than reaching for !important. */
+/* Three classes on purpose. `.shell .page` is two and is declared later in
+   the sheet, so matching its depth was not enough — order decided it and this
+   lost. Depth that cannot be beaten by position is the fix; !important would
+   have hidden the reason. */
+.shell .page.sheet-page{padding:var(--space-3) var(--space-4) 0;
   height:100vh;display:flex;flex-direction:column;max-width:none}
 .sheet-masthead{margin-bottom:var(--space-3);flex:0 0 auto;align-items:center}
 .sheet-masthead .page-title{font-size:var(--text-5);line-height:var(--leading-5)}
@@ -534,9 +560,9 @@ td.dcell.is-empty input:disabled{color:transparent;-webkit-text-fill-color:trans
   font-variant-numeric:tabular-nums}
 .sheet-grid{flex:1 1 auto;min-height:0;max-height:none;
   border-top:var(--rule-width) solid var(--rule)}
-.sheet-page table.grid{--table-row-step:2px;min-width:0;font-size:12px}
-.sheet-page table.grid th,.sheet-page table.grid td{line-height:1.3;
-  padding-left:4px;padding-right:4px}
+.sheet-page table.grid{--table-row-step:4px;min-width:0;font-size:12.5px}
+.sheet-page table.grid th,.sheet-page table.grid td{line-height:1.35;
+  padding-left:5px;padding-right:5px}
 .sheet-page table.grid tbody th{max-width:none}
 .sheet-page tr.sect th{padding-top:var(--space-1)}
 .sheet-page input.cell{width:10ch}
@@ -547,7 +573,7 @@ td.dcell.is-empty input:disabled{color:transparent;-webkit-text-fill-color:trans
 /* The tally sits between title and controls; on a narrow window it wraps
    under rather than squeezing the week picker. */
 @media(max-width:1100px){
-  .sheet-page{height:auto}
+  .shell .page.sheet-page{height:auto;padding-bottom:var(--space-4)}
   .sheet-grid{max-height:none}
   .sheet-tally{margin-left:0;flex-basis:100%;order:3;flex-direction:row;
     align-items:baseline;gap:var(--space-2)}
@@ -2475,7 +2501,10 @@ function viewAllocation(el){
    it through MIN_DIVISOR, the same divisor Attack and Payoff use. */
 const MONEY_W='9ch';
 
-const dimCell=v=>`<td class="num dim">${v}</td>`;
+/* `dim` marks a figure as secondary; it still holds a number. An em-dash
+   holds nothing, and only that gets faded — otherwise the Limit, Min due /wk
+   and Interest columns, all of which are dim AND real, fade with it. */
+const dimCell=v=>`<td class="num dim${v==='—'?' is-absent':''}">${v}</td>`;
 
 function cellNum(r,f,cls=''){
   const a=r.a,id=a.id;
@@ -2520,7 +2549,7 @@ const SHEET_COLS=[
      ?`<td class="num"><input class="cell is-registry${r.a.apr?'':' is-zero'}"`
        +` data-a="${r.a.id}:aprPct" value="${r.a.apr?r2(r.a.apr*100):''}" placeholder="—"></td>`
      :dimCell('—')},
-  {k:'balance',label:'Balance',
+  {k:'balance',grp:true,label:'Balance',
    cell:r=>r.isRollup||r.a.kind==='income'
      ?`<td class="num dim">${money(r.balance)}</td>`
      :`<td class="num"><input class="cell" data-fmt="money" data-k="${r.a.id}:balance"`
@@ -2548,7 +2577,7 @@ const SHEET_COLS=[
 
   /* The obligation, as the statement states it. Editable on every debt
      — including cards, which carried no minimum at all until now. */
-  {k:'minAmt',label:'Min due /mo',
+  {k:'minAmt',grp:true,label:'Min due /mo',
    cell:r=>r.isRollup||r.a.kind==='income'?'<td></td>'
      :`<td class="num"><input class="cell${n0(r.minAmt)===0?' is-zero':''}" data-fmt="money"`
        +`${isLocked(currentWeek())?' readonly':''}`
@@ -2560,7 +2589,7 @@ const SHEET_COLS=[
   {k:'close',label:'Stmt close',cell:r=>cellDate(r,'close')},
   {k:'due',   label:'Due',  cell:r=>cellDate(r,'due')},
 
-  {k:'min',   label:'Min',   cell:r=>cellNum(r,'min')},
+  {k:'min',   grp:true,label:'Min',cell:r=>cellNum(r,'min')},
   {k:'attack',label:'Attack',cell:r=>cellNum(r,'attack','is-attack')},
   {k:'other', label:'Other', cell:r=>cellNum(r,'other')},
   {k:'total',label:'Total',
@@ -2574,8 +2603,9 @@ const SHEET_COLS=[
      :r.a.autoOut
        ?`<td class="num dim" title="Auto: drawn down by whatever was paid to ${esc((acct(r.a.autoOut)||{}).name||r.a.autoOut)} this week">${money(n0(r.out))}</td>`
        :cellNum(r,'out')},
-  {k:'interest',label:'Interest',
-   cell:r=>`<td class="num ${r.inGrace?'pos':'dim'}"${r.inGrace?' title="In grace — no interest while the statement balance is paid in full"':''}>`
+  {k:'interest',grp:true,label:'Interest',
+   cell:r=>`<td class="num ${r.inGrace?'pos':'dim'}${KIND_DEBT(r.a.kind)?'':' is-absent'}"`
+     +`${r.inGrace?' title="In grace — no interest while the statement balance is paid in full"':''}>`
      +`${KIND_DEBT(r.a.kind)?(r.inGrace?'grace':money(r.weekInterest)):'—'}</td>`},
   {k:'after',label:'After',
    cell:r=>`<td class="num ${r.a.kind==='card'&&r.after>n0(r.a.limit)?'neg':r.after<0?'neg':''}"`
@@ -2590,7 +2620,8 @@ const SHEET_COLS=[
 const sheetCols=()=>SHEET_COLS;
 
 function gridHead(cols){
-  return `<tr>${cols.map((c,i)=>`<th scope="col"${i?' class="num"':''}>${c.label}</th>`).join('')}</tr>`;
+  return `<tr>${cols.map((c,i)=>
+    `<th scope="col" class="${i?'num':''}${c.grp?' grp':''}">${c.label}</th>`).join('')}</tr>`;
 }
 function gridBody(C){
   const cols=sheetCols(),out=[],byId=C.byId,rendered=new Set();
@@ -2612,8 +2643,12 @@ function gridBody(C){
 }
 function rowHTML(r,cols,child){
   const cls=(r.isRollup?'rollup':'')+(child?' child':'')+(r.e&&r.e.paid?' is-paid':'');
-  return `<tr class="${cls}">${cols.map(c=>c.cell(r)).join('')}</tr>`;
+  return `<tr class="${cls}">${cols.map(c=>markGroup(c.cell(r),c)).join('')}</tr>`;
 }
+/* The column spec says where a subject starts; the cell renderers do not need
+   to know about it, so the class is added to whatever they returned. */
+const markGroup=(html,c)=>c.grp?html.replace(/^<t([dh])( class="([^"]*)")?/,
+  (m,tag,_a,cls)=>`<t${tag} class="${cls||''} grp"`):html;
 /* The cards subtotal, keyed by column so it cannot fall out of step with
    the header the way a hand-counted run of <td>s does. */
 function totalRow(C,cols){
@@ -2636,7 +2671,7 @@ function totalRow(C,cols){
     usageAfter:`<td class="num">${pct(T.usageAfter)}</td>`,
     availAfter:`<td class="num">${money(T.availAfter)}</td>`,
   };
-  return `<tr class="tot">${cols.map(c=>cell[c.k]||'<td></td>').join('')}</tr>`;
+  return `<tr class="tot">${cols.map(c=>markGroup(cell[c.k]||'<td></td>',c)).join('')}</tr>`;
 }
 const sum=(C,f,kind)=>r2(C.rows.filter(r=>r.a.kind===kind).reduce((s,r)=>s+n0(r[f]),0));
 </script>
