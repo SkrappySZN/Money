@@ -1332,6 +1332,9 @@ function loadUI(){
     for(const k of UI_SESSION)if(b[k]!=null)UI[k]=b[k];
   }catch(e){}
   /* Never restore onto something that is no longer there. */
+  /* An order set on the Plan tab is a decision; a default of `avalanche` is
+     not. Only applies when nothing was stored — an explicit choice stands. */
+  if(a.strategy===undefined&&(S&&S.plan&&(S.plan.order||[]).length))UI.strategy='custom';
   if(UI.tab&&!TABS.some(t=>t.id===UI.tab))UI.tab='week';
   if(UI.week&&!(S&&S.weeks&&S.weeks[UI.week]))UI.week=null;
   if(UI.month&&!monthKeys().includes(UI.month))UI.month=null;
@@ -2685,6 +2688,18 @@ function viewAttack(el){
   if(T.attack<=0)notes.push({s:'warn',t:`No attack money assigned this week. Minimums alone leave <b>${money(T.weekInterest)}</b> of interest on the table over the next 7 days.`});
   else if(onTarget)notes.push({s:'ok',t:`This week's <b>${money(T.attack)}</b> is already going to ${esc(top.name)}.`});
   else notes.push({s:'warn',t:`This week's attack is on <b>${attackRows.map(r=>esc(r.a.name)).join(', ')||'nothing'}</b>. ${esc(top.name)} is what your ${strat==='custom'?'order':strat} says.`});
+  /* Attack ranks by whichever strategy is selected; Plan always shows the
+     order you set. When those disagree the two tabs tell you to pay different
+     accounts and neither mentions the other, which is how you end up putting
+     money somewhere your own plan did not ask for. */
+  if(strat!=='custom'&&(S.plan.order||[]).length){
+    const mine=[...debts].sort((a,b)=>(rank[a.id]??999)-(rank[b.id]??999))[0];
+    if(mine&&mine.id!==top.id)
+      notes.push({s:'warn',t:`<b>This is the ${strat} ranking, not your order.</b> `
+        +`Your order on the Plan tab leads with ${esc(mine.name)}; ${strat} leads with `
+        +`${esc(top.name)} because it sorts by ${strat==='snowball'?'balance':'rate'} alone. `
+        +`Switch to <b>My order</b> above to see the one you decided on.`});
+  }
   if(strat==='custom'&&cus.weeks!==Infinity&&av.weeks!==Infinity)
     /* Severity keys on DIRECTION, not magnitude. Beating avalanche by $279 is not a
        thing that needs attention, and R9 keeps oxblood for what is actually wrong.
