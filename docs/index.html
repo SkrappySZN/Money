@@ -3160,10 +3160,25 @@ function rerenderKeepFocus(){
 }
 
 /* the pay week rolls forward: balances projected, recurring allocations kept */
-function rollDate(d,from){
+/* Advance a statement or due date by whole months until it is no longer in
+   the past — the card's cycle, carried forward without being retyped.
+
+   `setMonth(+1)` cannot do this. It overflows: Jan 31 becomes Mar 3, because
+   Feb 31 does not exist, and the date then sticks on the 3rd for good. A due
+   date on the 30th or 31st drifted permanently the first time it met a short
+   month. The day of the month is an anchor, so it is held separately and
+   clamped to each month's last day rather than allowed to spill into the
+   next one — Jan 31 → Feb 28 → Mar 31, not Feb 28 → Mar 28. */
+function rollDate(d,from,anchorDay){
   if(!d)return'';
-  let x=d,guard=0;
-  while(x<from&&guard++<36){const t=parseISO(x);t.setMonth(t.getMonth()+1);x=iso(t)}
+  if(d>=from)return d;
+  const src=parseISO(d),anchor=anchorDay||src.getDate();
+  let y=src.getFullYear(),m=src.getMonth(),x=d,guard=0;
+  while(x<from&&guard++<600){
+    m++;                                       /* Date rolls m>11 into next year */
+    const last=new Date(y,m+1,0).getDate();    /* last day of month m */
+    x=iso(new Date(y,m,Math.min(anchor,last)));
+  }
   return x;
 }
 /* ── finalizing a week ────────────────────────────────────────────
@@ -3293,7 +3308,14 @@ function newWeek(){
       e.balance=proj;e.projected=proj;
     }
     e.minAmt=r.minAmt;
-    e.close=rollDate(r.close,nk);e.due=rollDate(r.due,nk);
+    /* The anchor day is remembered on the account, because a date that has
+       been clamped through a short month can no longer say what it was: once
+       the 31st becomes Feb 28 it would stay the 28th for good. Recorded here
+       rather than during compute — this is the one place already writing. */
+    if(r.close&&!a.closeDay)a.closeDay=parseISO(r.close).getDate();
+    if(r.due&&!a.dueDay)a.dueDay=parseISO(r.due).getDate();
+    e.close=rollDate(r.close,nk,a.closeDay);
+    e.due=rollDate(r.due,nk,a.dueDay);
     /* sinking funds and loan minimums repeat every week; attack is a fresh decision */
     if(KIND_INFLOW(a.kind))e.other=r.other;
     if(a.kind==='loan')e.min=r.min;
