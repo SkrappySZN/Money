@@ -1447,6 +1447,7 @@ function migrate(){
   migrateV8();
   migrateV9();
   migrateV10();
+  migrateV11();
 }
 /* v2 — grouping corrections, Sept 10 2026. Runs against the ledger already
    in the browser, not just the seed: editing SEED alone would have changed
@@ -1494,6 +1495,17 @@ function migrate(){
    already implied and nothing read. */
 /* v10 — the subscription schedule, so the sheet knows what lands and when
    rather than only that a bucket exists to pay for it. */
+/* v11 — the two savings accounts earn interest and the sheet was treating
+   them as inert. Stored as a rate on the account, the same field a card uses;
+   the row's kind decides whether it costs or earns. */
+function migrateV11(){
+  if(S.v>=11)return;
+  const rates={'apple-card-savings':0.034,'capital-one-savings':0.03};
+  for(const [id,rate] of Object.entries(rates)){
+    const a=acct(id); if(a&&!a.apr)a.apr=rate;
+  }
+  S.v=11;
+}
 function migrateV10(){
   if(S.v>=10)return;
   S.plan=S.plan||{};
@@ -1647,8 +1659,15 @@ function computeWeek(k){
     r.inGrace=!!(r.a.grace&&r.a.kind==='card'&&r.balance>0);
     /* BUG 1 from the handoff: the sheet computed balance − payment and never applied
        interest, under-forecasting by ~$214/week. End-of-week = opening + interest − paid. */
-    r.weekInterest=(KIND_DEBT(r.a.kind)&&!r.inGrace&&S.settings.accrueInterest)
-      ?r2(r.balance*r.dpr*7):0;
+    /* Debt costs interest and savings earn it — the same arithmetic with the
+       sign reversed. Stored on the account as a rate either way; the row's
+       kind decides which direction it moves the balance. Held at the account's
+       APY against a simple daily rate, which overstates by roughly $0.55 a
+       year per $1,000 — smaller than the rounding on a single week. */
+    r.weekInterest=S.settings.accrueInterest
+      ?(KIND_DEBT(r.a.kind)&&!r.inGrace ? r2(r.balance*r.dpr*7)
+        :KIND_INFLOW(r.a.kind)&&r.a.apr ? r2(r.balance*r.dpr*7) : 0)
+      :0;
     if(r.a.kind==='income'){r.after=r.balance}
     /* A bucket's balance is what went in less what has since left it. `out` is
        money leaving on its way somewhere else — a subscription hitting the
@@ -1659,7 +1678,8 @@ function computeWeek(k){
        A passthrough is the same idea with the typing removed: funded and
        emptied every week, so it never holds anything. */
     else if(KIND_INFLOW(r.a.kind)){
-      r.after=r.a.passthrough?r2(r.balance):r2(r.balance+r.total-n0(r.out));
+      r.after=r.a.passthrough?r2(r.balance)
+        :r2(r.balance+r.total-n0(r.out)+n0(r.weekInterest));
     }
     else{r.after=r2(r.balance+r.weekInterest-r.total)}
     if(r.a.limit>0&&r.a.kind==='card'){
@@ -1676,8 +1696,15 @@ function computeWeek(k){
       r.targetWeeks=r.targetDone?0:(r.total>0?Math.ceil(r.targetShort/r.total):Infinity);
     }
     /* 6 months out at this week's rate — the sheet's Q column, ×26 weeks */
-    if(KIND_INFLOW(r.a.kind))r.sixMo=r.a.passthrough?r2(r.balance)
-      :r2(r.balance+(r.total-(n0(r.out)||n0(r.a.weeklyOutflow)))*26);
+    if(KIND_INFLOW(r.a.kind)){
+      if(r.a.passthrough)r.sixMo=r2(r.balance);
+      else{
+        const net=r.total-(n0(r.out)||n0(r.a.weeklyOutflow));
+        let b=r.balance;
+        for(let i=0;i<26;i++)b=b+net+b*r.dpr*7;   /* earning compounds; a flat multiply would not */
+        r.sixMo=r2(b);
+      }
+    }
     else if(KIND_DEBT(r.a.kind))r.sixMo=r2(Math.max(0,projectDebt(r.balance,r.dpr,r.total,26)));
     r.drift=(r.e.projected!=null)?r2(r.balance-n0(r.e.projected)):null;
   }
@@ -1725,6 +1752,8 @@ function computeWeek(k){
     attack:r2(debts.reduce((s,r)=>s+r.attack,0)),
     otherDebt:r2(debts.reduce((s,r)=>s+r.other,0)),
     weekInterest:r2(debts.reduce((s,r)=>s+r.weekInterest,0)),
+    interestEarned:r2(rows.filter(r=>!r.isRollup&&KIND_INFLOW(r.a.kind))
+      .reduce((s,r)=>s+n0(r.weekInterest),0)),
     availAfter:r2(cards.reduce((s,r)=>s+n0(r.availAfter),0)),
   };
   totals.usage=totals.limit?totals.cardBalance/totals.limit:0;
@@ -2636,7 +2665,7 @@ const SHEET_COLS=[
        +` data-a="${r.a.id}:limit" value="${r.a.limit?moneyInput(n0(r.a.limit)):''}" placeholder="—"></td>`
      :dimCell('—')},
   {k:'apr',label:'APR %',
-   cell:r=>KIND_DEBT(r.a.kind)
+   cell:r=>KIND_DEBT(r.a.kind)||(r.a.kind==='savings'&&!r.isRollup)
      ?`<td class="num"><input class="cell is-registry${r.a.apr?'':' is-zero'}"`
        +` data-a="${r.a.id}:aprPct" value="${r.a.apr?r2(r.a.apr*100):''}" placeholder="—"></td>`
      :dimCell('—')},
