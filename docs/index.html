@@ -1409,6 +1409,7 @@ function migrate(){
   migrateV4();
   migrateV5();
   migrateV6();
+  migrateV7();
 }
 /* v2 — grouping corrections, Sept 10 2026. Runs against the ledger already
    in the browser, not just the seed: editing SEED alone would have changed
@@ -1440,6 +1441,21 @@ function migrate(){
    where the subscriptions now bill. Linking them means paying that card draws
    the bucket down on its own, rather than the balance sitting there looking
    untouched. */
+/* v7 — the Apple Card Savings target declares `frees: 50`, but nothing ever
+   read it as a budget step: the field drove the wording on This Week and
+   stopped there. So the buffer reached $1,000 and the $50 a week kept going
+   into a pot that was already full, in every projection. The lease bucket had
+   this step and the buffer did not. */
+function migrateV7(){
+  if(S.v>=7)return;
+  S.plan=S.plan||{}; S.plan.steps=S.plan.steps||[];
+  if(acct('apple-card-savings')&&!S.plan.steps.some(x=>x.id==='buffer')){
+    S.plan.steps.push({id:'buffer',label:'Emergency buffer funded',weekly:50,
+      trigger:{type:'target',acct:'apple-card-savings'},
+      note:'$1,000 reached — refill only when drawn down'});
+  }
+  S.v=7;
+}
 function migrateV6(){
   if(S.v>=6)return;
   const a=acct('subscriptions');
@@ -2803,8 +2819,9 @@ function viewPayoff(el){
 
   <section class="band" aria-labelledby="steps-h">
     <h2 class="sect-label" id="steps-h">Attack steps up as these land</h2>
-    <p class="lede muted">Each one permanently frees a weekly line. The date above already
-      assumes them — untick a step to see what it is worth.</p>
+    <p class="lede muted">Each one permanently frees a weekly line, and the date above already
+      assumes them. The ones with a trigger fire on their own; a manual step only counts
+      once you tick it.</p>
     <ul class="rank">
       ${steps.map(st=>`<li class="${st.fired?'lead':''}">
         <span class="n"><input type="checkbox" data-step="${st.id}"
