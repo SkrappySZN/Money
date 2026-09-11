@@ -1445,6 +1445,7 @@ function migrate(){
   migrateV6();
   migrateV7();
   migrateV8();
+  migrateV9();
 }
 /* v2 — grouping corrections, Sept 10 2026. Runs against the ledger already
    in the browser, not just the seed: editing SEED alone would have changed
@@ -1487,6 +1488,21 @@ function migrate(){
    made a weekly figure read as monthly and the derived /wk column divide a
    weekly number by four. Car Lease Savings is left alone: its $714.30 is one
    lease payment, and its own Min column has always been a quarter of it. */
+/* v9 — the motorcycle premium is fully funded, so its $14.50 a week is free
+   for attack. Same shape as the lease and buffer steps, which the target
+   already implied and nothing read. */
+function migrateV9(){
+  if(S.v>=9)return;
+  S.plan=S.plan||{}; S.plan.steps=S.plan.steps||[];
+  if(acct('motorcycle-insurance')&&!S.plan.steps.some(x=>x.id==='moto')){
+    S.plan.steps.push({id:'moto',label:'Motorcycle insurance funded',weekly:14.50,
+      trigger:{type:'target',acct:'motorcycle-insurance'},
+      note:'premium covered — the weekly is free until the next term'});
+  }
+  const a=acct('motorcycle-insurance');
+  if(a&&a.target&&a.target.frees==null)a.target.frees=14.50;
+  S.v=9;
+}
 function migrateV8(){
   if(S.v>=8)return;
   for(const id of ['credit-card-minimums','subscriptions','motorcycle-insurance']){
