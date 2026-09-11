@@ -1893,10 +1893,28 @@ function runChecks(k,rows,T){
 /* Everything paid toward this debt in the cycle the current minimum belongs to.
    The cycle is anchored on the due date (loans have no statement close) and runs
    the month before it — so four weekly payments of a quarter-minimum add up. */
+/* What has gone to this account since its statement last closed.
+
+   This took the stored date and stepped back exactly one month, which puts
+   the window's start AFTER the current week whenever the next due date is
+   more than a month out — an empty range, a sum of zero, and a minimum that
+   reads as unpaid no matter what you actually paid. A card due in November
+   could never register a payment made in September.
+
+   It walks back a month at a time until the cycle start is not in the future,
+   and anchors to the pay week containing it rather than to the bare date:
+   weeks are keyed by their Friday, so a close falling mid-week would
+   otherwise exclude the very week it belongs to. `close` leads because the
+   cycle is defined by the statement closing, not by when it comes due. */
 function paidSinceClose(k,r){
-  const anchor=r.due||r.close;
+  const anchor=r.close||r.due;
   let from=k;
-  if(anchor){const d=parseISO(anchor);d.setMonth(d.getMonth()-1);from=iso(d)}
+  if(anchor){
+    const d=parseISO(anchor);
+    let guard=0;
+    do{d.setMonth(d.getMonth()-1)}while(weekStartOf(d)>k&&guard++<60);
+    from=weekStartOf(d);
+  }
   return r2(weekKeys().filter(w=>w>=from&&w<=k)
     .reduce((s,w)=>{const e=S.weeks[w].entries[r.a.id];return s+(e?n0(e.min)+n0(e.attack)+n0(e.other):0)},0));
 }
