@@ -1763,6 +1763,20 @@ function runChecks(k,rows,T){
     else
       out.push({s:'warn',t:`${esc(r.a.name)} needs ${money(short)} more before ${r.due?dueLabel(r.due):'its due date'} to clear the ${money(r.minAmt)} minimum.`});
   }
+  /* The shortfall loop above skips anything with no minimum recorded, so a
+     card sitting at $0 produces no check at all — silence exactly where the
+     sheet knows least. It cannot know the figure, but it does know when the
+     statement closes, which is when you find out. Asked for only in the week
+     a statement closes, or the week after if it is still missing, so it is a
+     prompt at the right moment rather than a standing complaint. */
+  for(const r of rows){
+    if(!KIND_DEBT(r.a.kind)||r.balance<=0.005||n0(r.minAmt)||!r.close)continue;
+    if(r.close<addDays(k,-7)||r.close>=addDays(k,7))continue;
+    const already=r.close<k;
+    out.push({s:'warn',t:`<b>${esc(r.a.name)} ${already?`closed ${dueLabel(r.close)}`:`closes ${dueLabel(r.close)}`} `
+      +`and has no minimum recorded.</b> Put it in Min due /mo — until it is there nothing can tell you `
+      +`if it goes unpaid, and the payoff date assumes you are paying it nothing.`});
+  }
   /* over limit, and utilization that'll get reported */
   for(const r of rows.filter(x=>x.a.kind==='card'&&x.a.limit>0)){
     if(r.after>r.a.limit)out.push({s:'bad',t:`<b>${esc(r.a.name)} is over its limit</b> — ${money(r.after)} against ${money0(r.a.limit)} after this week's payment.`});
