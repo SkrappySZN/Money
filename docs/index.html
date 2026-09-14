@@ -3425,7 +3425,8 @@ function viewPlan(el){
   const calRow=c=>`<div class="acct" style="grid-template-columns:22px 92px 1fr;align-items:start">
     <div><input type="checkbox" data-cal="${c.id}" ${c.done?'checked':''}
       style="accent-color:var(--accent);width:15px;height:15px;margin-top:3px"></div>
-    <div class="num ${!c.done&&c.d<today?'neg':'dim'}" style="text-align:left;font-size:var(--t-xs);padding-top:2px">${dueLabel(c.d)}</div>
+    <div><input type="date" data-caldate="${c.id}" value="${c.d}" aria-label="Date for ${esc(c.t)}" title="Change the date"
+      class="num ${!c.done&&c.d<today?'neg':'dim'}" style="font:inherit;font-size:var(--t-xs);width:100%;padding:2px 0;background:none;border:0;border-bottom:1px dotted currentColor;color:inherit"></div>
     <div style="${c.done?'opacity:.45;text-decoration:line-through':''}">
       <div style="font-weight:600">${esc(c.t)}</div>
       ${c.n?`<div class="meta" style="color:var(--muted);font-size:var(--t-xs);line-height:1.45">${esc(c.n)}</div>`:''}</div></div>`;
@@ -4001,6 +4002,11 @@ document.addEventListener('change',e=>{
     pushUndo(null);entryOf(currentWeek(),d.paid).paid=t.checked;save();render();return}
   if(d.step){const st=planSteps().find(x=>x.id===d.step);if(st){st.on=t.checked;save();render()}return}
   if(d.cal){const c=S.plan.calendar.find(x=>x.id===d.cal);if(c){c.done=t.checked;save();render()}return}
+  /* A reminder's date moves when the thing it waits on moves — a charge that
+     posts later, a payment pushed to the next payday. */
+  if(d.caldate){const c=S.plan.calendar.find(x=>x.id===d.caldate);
+    if(c&&t.value&&t.value!==c.d){pushUndo(null);c.d=t.value;save();render();toast(`Moved to ${dueLabel(t.value)} — ⌘Z to undo`)}
+    return}
   if(d.open){const o=S.plan.open.find(x=>x.id===d.open);if(o){o.done=t.checked;save();render()}return}
   if(d.k!=null&&d.k!==''||d.a){
     /* The `input` handler above has already committed this field and re-rendered.
