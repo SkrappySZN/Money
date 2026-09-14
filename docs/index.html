@@ -880,12 +880,15 @@ button.cal-pay:focus-visible{outline:none;color:var(--focus-ink);text-decoration
 .ev-sub .mk{border:0;width:0.55em}
 .ev-sub .mk::before{content:'·'}
 .ev-note .mk{border-radius:50%}
+.ev-paid{color:var(--positive);font-weight:var(--weight-medium)}
+.ev-paid .mk{background:currentColor}
 .ev.is-done{color:var(--ink-muted);font-weight:var(--weight-regular)}
 .ev.is-done .en{text-decoration:line-through;text-decoration-color:var(--rule-strong)}
 .ev.is-late{color:var(--negative)}
 .cal-legend .mk{display:inline-block;width:0.6em;height:0.6em;border:var(--rule-width) solid currentColor}
 .cal-legend .mk.fill{background:currentColor}
 .cal-legend .mk.dot{border-radius:50%}
+.cal-legend .k.paid{color:var(--positive)}
 table.cmp td .sk-meta{display:block;font-size:var(--text-1);color:var(--ink-muted);
   font-weight:var(--weight-regular)}
 table.cmp td.sk-yes{color:var(--positive);font-weight:var(--weight-medium)}
@@ -1688,7 +1691,7 @@ function currentWeek(){
 }
 const isPlanned=k=>k>thisWeek();
 
-function blankEntry(){return{balance:0,min:0,attack:0,other:0,out:0,minAmt:0,close:'',due:'',projected:null,paid:false}}
+function blankEntry(){return{balance:0,min:0,attack:0,other:0,out:0,minAmt:0,close:'',due:'',projected:null,paid:false,paidOn:null}}
 function entryOf(k,id){const w=S.weeks[k];if(!w)return blankEntry();
   if(!w.entries[id])w.entries[id]=blankEntry();
   const e=w.entries[id];for(const[p,d]of Object.entries(blankEntry()))if(e[p]===undefined)e[p]=d;
@@ -3296,11 +3299,31 @@ function viewCalendar(el){
     if(!w.some(x=>words(e.name).includes(x))||w.some(x=>!known.has(x)))return false;
     return amounts(part).every(v=>e.amt&&Math.abs(v-e.amt)<0.01);
   };
+  /* A payoff is shown when it happens, not when it was hoped for: a debt ticked
+     paid on the sheet whose payments clear its balance. It lands on the day
+     the box was ticked, or — for a box ticked before that was recorded — on
+     the payday the sheet is done on. */
+  const debtAccts=liveAccounts().filter(a=>KIND_DEBT(a.kind));
+  for(const k of weekKeys()){
+    for(const a of debtAccts){
+      const e=S.weeks[k].entries[a.id];
+      if(!e||!e.paid)continue;
+      const bal=n0(e.balance),paidAmt=r2(n0(e.min)+n0(e.attack)+n0(e.other));
+      if(bal<=0.005||paidAmt+0.005<bal)continue;
+      const on=e.paidOn||addWeeks(k,1);
+      put(on,{rank:-1,cls:'ev-paid',name:`${a.name} paid in full`,amt:r2(bal),
+        title:`${a.name} paid in full ${dueLabel(on)} · ${money(bal)} — ticked paid on the ${weekLabel(k)} sheet`});
+    }
+  }
+  /* "…in full" reminders were the plan for exactly that event, so they are
+     not drawn; the payoff above appears instead once it is real. */
+  const namesAcct=(part,a)=>{const w=words(part);return words(a.name).every(x=>w.includes(x))};
   for(const c of (S.plan&&S.plan.calendar)||[]){
     if(c.done)continue;
     const auto=(byDay[c.d]||[]).filter(e=>e.rank!==2);
     const left=[];
     for(const part of c.t.split(/\s+·\s+/)){
+      if(/\bin full\b/i.test(part)&&debtAccts.some(a=>namesAcct(part,a)))continue;
       const dup=auto.find(e=>saysNoMore(part,e));
       if(dup){if(c.n)dup.title+=` — ${c.n}`}
       else left.push(part);
@@ -3389,6 +3412,7 @@ function viewCalendar(el){
     <div class="cal">${grid}</div>
     <div class="legend cal-legend">
       <span class="k"><span class="mk fill"></span>Due</span>
+      <span class="k paid"><span class="mk fill"></span>Paid in full</span>
       <span class="k"><span class="mk"></span>Statement closes</span>
       <span class="k"><span class="mk dot"></span>Reminder from Plan</span>
       <span class="k">· Subscription</span>
@@ -3999,7 +4023,10 @@ document.addEventListener('change',e=>{
   }
   if(d.paid!=null&&d.paid!==''){
     if(isLocked(currentWeek())){t.checked=!t.checked;toast('This week is finalized');return}
-    pushUndo(null);entryOf(currentWeek(),d.paid).paid=t.checked;save();render();return}
+    pushUndo(null);
+    /* the day it was ticked is the day the Calendar shows a payoff on */
+    const pe=entryOf(currentWeek(),d.paid);pe.paid=t.checked;pe.paidOn=t.checked?iso(new Date()):null;
+    save();render();return}
   if(d.step){const st=planSteps().find(x=>x.id===d.step);if(st){st.on=t.checked;save();render()}return}
   if(d.cal){const c=S.plan.calendar.find(x=>x.id===d.cal);if(c){c.done=t.checked;save();render()}return}
   /* A reminder's date moves when the thing it waits on moves — a charge that
