@@ -872,6 +872,8 @@ button.cal-pay:focus-visible{outline:none;color:var(--focus-ink);text-decoration
 .ev .mk{flex:0 0 auto;width:0.55em;height:0.55em;transform:translateY(-0.05em);
   border:var(--rule-width) solid currentColor;border-radius:0}
 .ev .en{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* a reminder is free text with nothing to line up against, so it wraps */
+.ev-note .en{white-space:normal;overflow:visible;overflow-wrap:anywhere}
 .ev .ea{flex:0 0 auto;font-variant-numeric:tabular-nums}
 .ev-due{color:var(--ink);font-weight:var(--weight-medium)}
 .ev-due .mk{background:currentColor}
@@ -3328,9 +3330,10 @@ function viewCalendar(el){
       if(dup){if(c.n)dup.title+=` — ${c.n}`}
       else left.push(part);
     }
-    if(!left.length)continue;
-    const t=left.join(' · ');
-    put(c.d,{rank:2,cls:'ev-note'+(c.d<today?' is-done':''),name:t,amt:0,title:t+(c.n?` — ${c.n}`:'')});
+    /* one line per part: a cell is a seventh of the page, and three payments
+       run together on one line only ever showed the first of them */
+    for(const t of left)
+      put(c.d,{rank:2,cls:'ev-note'+(c.d<today?' is-done':''),name:t,amt:0,title:t+(c.n?` — ${c.n}`:'')});
   }
 
   const inMonth=d=>d>=first&&d<=last;
