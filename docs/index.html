@@ -3278,9 +3278,35 @@ function viewCalendar(el){
     for(const x of subsInWeek(k))
       put(x.date,{rank:3,cls:'ev-sub'+(x.date<today?' is-done':''),name:x.name,amt:x.amount,
         title:`${x.name} bills ${dueLabel(x.date)} · ${money(x.amount)}`});
-  for(const c of (S.plan&&S.plan.calendar)||[])
-    if(!c.done)put(c.d,{rank:2,cls:'ev-note'+(c.d<today?' is-done':''),name:c.t,amt:0,
-      title:c.t+(c.n?` — ${c.n}`:'')});
+  /* Plan reminders were written by hand before the calendar could see due
+     dates, closes and subscriptions for itself, so many of them now say the
+     same thing twice on the same day. A reminder is split on its " · "
+     separators and each part is dropped when it says nothing beyond an event
+     already on that day — the same name, the same amount, and only the words
+     that event implies. Whatever says more ("in full", "rises to") stays. A
+     note on a dropped part moves onto the event it duplicated. */
+  const words=t=>String(t).toLowerCase().replace(/\$[\d,]+(\.\d+)?/g,' ').match(/[a-z0-9+]+/g)||[];
+  const amounts=t=>(String(t).match(/\$[\d,]+(\.\d+)?/g)||[]).map(x=>n0(x.replace(/[$,]/g,'')));
+  const IMPLIED={0:['due','payment','pay','minimum','min'],1:['statement','closes','close','closing'],3:['bills','charge']};
+  const saysNoMore=(part,e)=>{
+    const known=new Set([...words(e.name),...(IMPLIED[e.rank]||[])]);
+    const w=words(part);
+    if(!w.some(x=>words(e.name).includes(x))||w.some(x=>!known.has(x)))return false;
+    return amounts(part).every(v=>e.amt&&Math.abs(v-e.amt)<0.01);
+  };
+  for(const c of (S.plan&&S.plan.calendar)||[]){
+    if(c.done)continue;
+    const auto=(byDay[c.d]||[]).filter(e=>e.rank!==2);
+    const left=[];
+    for(const part of c.t.split(/\s+·\s+/)){
+      const dup=auto.find(e=>saysNoMore(part,e));
+      if(dup){if(c.n)dup.title+=` — ${c.n}`}
+      else left.push(part);
+    }
+    if(!left.length)continue;
+    const t=left.join(' · ');
+    put(c.d,{rank:2,cls:'ev-note'+(c.d<today?' is-done':''),name:t,amt:0,title:t+(c.n?` — ${c.n}`:'')});
+  }
 
   const inMonth=d=>d>=first&&d<=last;
   const paydays=[];for(let k=gridFrom;k<=gridTo;k=addWeeks(k,1))if(inMonth(k))paydays.push(k);
