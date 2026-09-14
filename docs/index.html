@@ -1996,7 +1996,8 @@ function runChecks(k,rows,T){
   for(const r of rows.filter(x=>x.a.target&&!x.isRollup)){
     const t=r.a.target;
     if(r.targetDone){
-      out.push({s:'ok',t:`${esc(r.a.name)} is funded at ${money(r.after)} of ${money(t.amount)}${t.frees?` — <b>${money(t.frees)}/week frees up</b>`:''}.`});
+      const fr=weeklyOf(r)||n0(t.frees);
+      out.push({s:'ok',t:`${esc(r.a.name)} is funded at ${money(r.after)} of ${money(t.amount)}${fr?` — <b>${money(fr)}/week frees up</b>`:''}.`});
       continue;
     }
     if(!t.by)continue;
@@ -2385,7 +2386,7 @@ function viewWeek(el){
         <div class="fnum">${money0(r.after)} / ${money0(t.amount)}</div></div>`}).join('')}
     <div class="legend">${tg.map(r=>{const t=r.a.target;
       return `<span class="k">${esc(r.a.name)}: ${r.targetDone
-        ?`<b>funded</b>${t.frees?` — ${money(t.frees)}/wk frees up`:''}`
+        ?`<b>funded</b>${(weeklyOf(r)||n0(t.frees))?` — ${money(weeklyOf(r)||n0(t.frees))}/wk frees up`:''}`
         :`${money(r.targetShort)} to go${t.by?` by ${dueLabel(t.by)}`:''}`}</span>`}).join('')}
     </div></section>`})()}
 
@@ -2740,6 +2741,20 @@ const dimCell=v=>`<td class="num dim${v==='—'?' is-absent':''}">${v}</td>`;
 /* Monthly unless the account says otherwise — that is what a statement
    minimum is, and what every debt here uses. */
 const statedWeekly=a=>a.minPeriod==='week';
+/* A row's weekly obligation, whichever period it is stated in — rounded up,
+   since a quarter of a monthly figure can land on a half-cent. */
+const weeklyOf=r=>!r?0:statedWeekly(r.a)?r2(n0(r.minAmt)):Math.ceil(n0(r.minAmt)/MIN_DIVISOR*100-1e-6)/100;
+/* A sinking fund's step frees whatever the fund actually takes each week.
+   The step carries its own figure from when the plan was written; once the
+   weekly amount is changed on the sheet, that is the number that comes free. */
+function stepsFor(k){
+  const C=computeWeek(k);
+  return planSteps().map(st=>{
+    if(!st.trigger||st.trigger.type!=='target'||!C)return st;
+    const w=weeklyOf(C.byId[st.trigger.acct]);
+    return w>0?{...st,weekly:w}:st;
+  });
+}
 
 function cellNum(r,f,cls=''){
   const a=r.a,id=a.id;
@@ -2948,7 +2963,7 @@ const stratSeg=cur=>`<div class="seg">${STRATS.map(x=>
   `<button data-strat="${x.id}" class="${cur===x.id?'on':''}" aria-pressed="${cur===x.id}">${x.l}</button>`).join('')}</div>`;
 const planSteps=()=>(S.plan&&S.plan.steps)||[];
 /* the budget the plan actually reaches once every step has fired */
-function simOpts(k,budget,strategy){return{strategy,budget,fromWeek:k,steps:planSteps()}}
+function simOpts(k,budget,strategy){return{strategy,budget,fromWeek:k,steps:stepsFor(k)}}
 
 /* ── Attack ───────────────────────────────────────────────────────── */
 function viewAttack(el){
@@ -3089,7 +3104,7 @@ function viewPayoff(el){
   const cus=simulate(debts,simOpts(k,budget,'custom'));
   const flat=simulate(debts,{strategy:strat,budget,fromWeek:k,steps:[]});
   const maxW=Math.max(...sim.debts.map(d=>d.paidOff||(sim.weeks===Infinity?520:sim.weeks)),1);
-  const steps=planSteps().map(st=>({...st,fireWeek:stepFireWeek(st,k),
+  const steps=stepsFor(k).map(st=>({...st,fireWeek:stepFireWeek(st,k),
     fired:sim.fired.find(f=>f.id===st.id)}));
   const bleed=r2(debts.reduce((s,d)=>s+d.weekInterest,0));
   const saved=(flat.weeks===Infinity||sim.weeks===Infinity)
