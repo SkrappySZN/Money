@@ -2727,9 +2727,13 @@ const SHEET_COLS=[
 
      Direction cannot be read from the sign alone: a debt above its projection
      is bad news and a bucket above its projection is good, so the colour keys
-     off kind. */
+     off kind.
+
+     Not shown for Loans: a loan takes no new spending, and its balance moves
+     by the servicer's own accounting, so the gap there says nothing useful. */
   {k:'drift',label:'Unplanned',
    cell:r=>{
+     if((r.a.group||'buckets')==='loans')return dimCell('—');
      if(r.drift==null||Math.abs(r.drift)<0.005)return dimCell('—');
      const up=r.drift>0;
      const cls=KIND_DEBT(r.a.kind)?(up?'is-bad':'is-good'):(up?'is-good':'is-plain');
