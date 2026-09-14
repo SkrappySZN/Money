@@ -1460,6 +1460,7 @@ function migrate(){
   migrateV9();
   migrateV10();
   migrateV11();
+  migrateV12();
 }
 /* v2 — grouping corrections, Sept 10 2026. Runs against the ledger already
    in the browser, not just the seed: editing SEED alone would have changed
@@ -1510,6 +1511,28 @@ function migrate(){
 /* v11 — the two savings accounts earn interest and the sheet was treating
    them as inert. Stored as a rate on the account, the same field a card uses;
    the row's kind decides whether it costs or earns. */
+/* v12 — weeks now carry forward without the interest estimate. Every stored
+   projection was made with it, so each one is restated against the week
+   before, or Unplanned keeps showing the estimate on rows already corrected.
+   computeWeek writes derived fields back into entries, so the ledger is
+   snapshotted and restored around it: `projected` is the only thing changed. */
+function migrateV12(){
+  if(S.v>=12)return;
+  const ks=Object.keys(S.weeks).sort(),snap=JSON.stringify(S.weeks),carries={};
+  for(let i=1;i<ks.length;i++){
+    const P=computeWeek(ks[i-1]); if(!P)continue;
+    carries[ks[i]]=Object.fromEntries(P.rows.filter(r=>!r.isRollup&&r.a.kind!=='income')
+      .map(r=>[r.a.id,KIND_DEBT(r.a.kind)?r2(Math.max(0,r.after)):r2(r.after)]));
+  }
+  S.weeks=JSON.parse(snap);
+  for(const [k,c] of Object.entries(carries)){
+    const ents=S.weeks[k].entries||{};
+    for(const [id,proj] of Object.entries(c)){
+      const e=ents[id]; if(e&&e.projected!=null)e.projected=proj;
+    }
+  }
+  S.v=12;
+}
 function migrateV11(){
   if(S.v>=11)return;
   const rates={'apple-card-savings':0.034,'capital-one-savings':0.03};
@@ -1691,9 +1714,15 @@ function computeWeek(k){
        emptied every week, so it never holds anything. */
     else if(KIND_INFLOW(r.a.kind)){
       r.after=r.a.passthrough?r2(r.balance)
-        :r2(r.balance+r.total-n0(r.out)+n0(r.weekInterest));
+        :r2(r.balance+r.total-n0(r.out));
     }
-    else{r.after=r2(r.balance+r.weekInterest-r.total)}
+    else{r.after=r2(r.balance-r.total)}
+    /* After is the balance with this week's payments applied and nothing else.
+       Interest is left out of it on purpose: every balance is typed by hand
+       from the real account each week, so the actual charge is already in the
+       next figure typed. Adding an estimate on top put it into After, carried
+       it into the next week, and then showed it as Unplanned the moment the
+       real balance went in. Interest stays its own column, for reference. */
     if(r.a.limit>0&&r.a.kind==='card'){
       r.usage=r.balance/r.a.limit;
       r.usageAfter=r.after/r.a.limit;
@@ -1914,17 +1943,20 @@ function runChecks(k,rows,T){
     out.push({s:'warn',t:`<b>${dueLabel(c.d)} — ${esc(c.t)}</b>${c.n?` · ${esc(c.n)}`:''}`});
 
   /* the thing the old sheet could never show: are you actually going backwards? */
-  if(T.debtBalance>0&&T.debtAfter>T.debtBalance+0.005)
-    out.push({s:'bad',t:`<b>Total debt grows ${money(r2(T.debtAfter-T.debtBalance))} this week.</b> ${money(T.debtPaid)} of payments against ${money(T.weekInterest)} of interest — you end the week owing ${money(T.debtAfter)}.`});
+  /* After no longer includes interest, so these forecasts add it back
+     themselves — they are about interest, and say so. */
+  const debtWithInterest=r2(T.debtBalance+T.weekInterest-T.debtPaid);
+  if(T.debtBalance>0&&debtWithInterest>T.debtBalance+0.005)
+    out.push({s:'bad',t:`<b>Total debt grows ${money(r2(debtWithInterest-T.debtBalance))} this week.</b> ${money(T.debtPaid)} of payments against ${money(T.weekInterest)} of interest — you end the week owing ${money(debtWithInterest)}.`});
   else if(T.debtBalance>0&&T.debtPaid>0)
-    out.push({s:'ok',t:`Debt drops ${money(r2(T.debtBalance-T.debtAfter))} — ${money(T.debtPaid)} paid clears the ${money(T.weekInterest)} of interest and ${money(r2(T.debtPaid-T.weekInterest))} of principal.`});
+    out.push({s:'ok',t:`Debt drops ${money(r2(T.debtBalance-debtWithInterest))} — ${money(T.debtPaid)} paid clears the ${money(T.weekInterest)} of interest and ${money(r2(T.debtPaid-T.weekInterest))} of principal.`});
 
   /* a maxed card creeping toward its limit on interest alone */
-  for(const r of rows.filter(x=>x.a.kind==='card'&&x.a.limit>0&&x.balance>0&&x.after>x.balance+0.005)){
-    let b=r.after,w=1;
+  for(const r of rows.filter(x=>x.a.kind==='card'&&x.a.limit>0&&x.balance>0&&x.weekInterest>x.total+0.005)){
+    let b=r2(r.balance+r.weekInterest-r.total),w=1;
     while(b<=r.a.limit&&w<520){b=b*(1+r.dpr*7)-r.total;w++}
     if(w<520&&w<=26)
-      out.push({s:w<=8?'bad':'warn',t:`<b>${esc(r.a.name)} breaches its limit in about ${w} week${w===1?'':'s'}</b> — ${money(r.after)} against ${money0(r.a.limit)}, growing ${money(r.weekInterest)}/week with ${money(r.total)} going in. Nothing new should go on this card.`});
+      out.push({s:w<=8?'bad':'warn',t:`<b>${esc(r.a.name)} breaches its limit in about ${w} week${w===1?'':'s'}</b> — ${money(b)} against ${money0(r.a.limit)}, growing ${money(r.weekInterest)}/week with ${money(r.total)} going in. Nothing new should go on this card.`});
   }
 
   if(T.attack<=0&&T.debtBalance>0)
@@ -3536,7 +3568,8 @@ function deleteWeeks(){
 }
 
 /* ── pull balances forward ────────────────────────────────────────
-   `+ Next week` carries After into the next week's Balance, but it only
+   `+ Next week` carries each balance, less its payments, into the next
+   week's Balance, but it only
    builds a week that does not exist yet. Four weeks were imported from the
    spreadsheet already forward-planned, so stepping into one of those gives
    figures typed weeks ago rather than a projection of what actually
@@ -3562,7 +3595,7 @@ function pullForward(){
   const list=changes.slice(0,6).map(c=>
     `<li><span>${esc(c.name)}</span><b>${money(c.from)} → ${money(c.to)}</b></li>`).join('');
   modal(`<h3>Pull balances forward</h3>
-    <p>Rewrites this week's Balance column from ${esc(weekLabel(prev))}'s After column.
+    <p>Rewrites this week's Balance column from ${esc(weekLabel(prev))}'s balances with its payments applied (no interest).
       <b>${changes.length}</b> ${changes.length===1?'balance changes':'balances change'};
       minimums, dates and allocations are left alone. ⌘Z undoes it.</p>
     <ul class="pulllist">${list}${changes.length>6
@@ -3588,7 +3621,7 @@ function newWeek(){
     let proj=0;
     if(a.kind==='income'){e.balance=C.totals.income;e.projected=C.totals.income}
     else{
-      /* `after` already includes this week's interest, so the next opening balance is just that */
+      /* `after` is balance less payments — no interest — so it opens the next week as is */
       proj=KIND_DEBT(a.kind)?r2(Math.max(0,r.after)):r.after;
       e.balance=proj;e.projected=proj;
       /* Everything assigned last week carries. It used to carry `other` only
