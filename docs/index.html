@@ -844,21 +844,19 @@ table.cmp tr.planned td:first-child::after{content:'planned';margin-left:var(--s
 /* ══ Calendar ═══════════════════════════════════════════════════════
    Rows are pay weeks, so the grid starts on Friday. Every row is one
    paycheck and what lands before the next one. */
-.cal{display:grid;grid-template-columns:5.5ch repeat(7,minmax(0,1fr));
+.cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));
   border-top:var(--rule-width) solid var(--rule-strong)}
 .cal-hd{font-size:var(--text-1);line-height:var(--leading-1);font-weight:var(--weight-medium);
   letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted);
   padding:var(--space-1) var(--space-1);border-bottom:var(--rule-width) solid var(--rule)}
-.cal-wk{border-bottom:var(--rule-width) solid var(--rule);padding:var(--space-1) 0}
-.cal-wk button{font:inherit;font-size:var(--text-1);line-height:var(--leading-1);
-  color:var(--ink-muted);background:none;border:0;padding:0;cursor:pointer;
-  font-variant-numeric:tabular-nums;text-align:left}
-.cal-wk button:hover{color:var(--ink)}
-.cal-wk button:disabled{cursor:default;color:var(--ink-muted)}
-.cal-wk .pre{display:none}
-.cal-wk button:focus-visible{outline:none;color:var(--focus-ink);text-decoration:underline}
+button.cal-pay{background:none;border:0;padding:0;cursor:pointer;font-family:inherit}
+button.cal-pay:hover{color:var(--ink)}
+button.cal-pay:disabled{cursor:default}
+button.cal-pay:focus-visible{outline:none;color:var(--focus-ink);text-decoration:underline}
+.cal-pay .pre{display:none}
 .cal-day{min-height:6.5rem;padding:var(--space-1);min-width:0;
   border-bottom:var(--rule-width) solid var(--rule);border-left:var(--rule-width) solid var(--rule-faint)}
+.cal-day.is-wkstart{border-left:0}
 .cal-day.is-out .cal-n{color:var(--ink-muted)}
 .cal-day.is-today{box-shadow:inset 0 2px 0 var(--ink)}
 .cal-day.is-today .cal-n{color:var(--ink);font-weight:var(--weight-semibold)}
@@ -899,8 +897,8 @@ table.cmp td.sk-late{color:var(--negative);font-weight:var(--weight-medium)}
      a list: one block per pay week, and only the days that have something. */
   .cal{grid-template-columns:1fr}
   .cal-hd{display:none}
-  .cal-wk{padding-top:var(--space-2);border-bottom-color:var(--rule-strong)}
-  .cal-wk .pre{display:inline}
+  .cal-day.is-wkstart{border-top:var(--rule-width) solid var(--rule-strong)}
+  .cal-pay .pre{display:inline}
   .cal-day{min-height:0;border-left:0;display:grid;grid-template-columns:10ch 1fr;gap:var(--space-2)}
   .cal-day.is-quiet{display:none}
   .cal-n .dow{display:inline;color:var(--ink-muted);margin-right:var(--space-half)}
@@ -3257,7 +3255,11 @@ function viewCalendar(el){
   const ym=UI.calMonth||monthOf(today);
   const y=+ym.slice(0,4),m=+ym.slice(5,7)-1;
   const first=`${ym}-01`,last=monthlyOn(y,m,31);
-  const gridFrom=weekStartOf(parseISO(first)),gridTo=addDays(weekStartOf(parseISO(last)),6);
+  /* Laid out Sunday to Saturday like any wall calendar. The ledger still runs
+     Friday to Thursday; paydays are marked on their Fridays instead of being
+     the edge of every row, which made the month hard to read. */
+  const sundayOf=d=>addDays(d,-parseISO(d).getDay());
+  const gridFrom=sundayOf(first),gridTo=addDays(sundayOf(last),6);
   const rk=realWeek(),C=computeWeek(rk);
   const rows=C?C.rows.filter(r=>!r.isRollup&&r.a.kind!=='income'):[];
 
@@ -3309,24 +3311,26 @@ function viewCalendar(el){
   }
 
   const inMonth=d=>d>=first&&d<=last;
-  const paydays=[];for(let k=gridFrom;k<=gridTo;k=addWeeks(k,1))if(inMonth(k))paydays.push(k);
+  const paydays=[];for(let k=weekStartOf(parseISO(first));k<=last;k=addWeeks(k,1))if(inMonth(k))paydays.push(k);
   const dueSum=r2(Object.entries(byDay).filter(([d])=>inMonth(d))
     .reduce((t,[,evs])=>t+evs.filter(e=>e.rank===0&&!/is-done/.test(e.cls)).reduce((s,e)=>s+e.amt,0),0));
   const subSum=r2(Object.entries(byDay).filter(([d])=>inMonth(d))
     .reduce((t,[,evs])=>t+evs.filter(e=>e.rank===3).reduce((s,e)=>s+e.amt,0),0));
 
-  const DOW=['Fri','Sat','Sun','Mon','Tue','Wed','Thu'];
-  let grid=`<div class="cal-hd">Sheet</div>${DOW.map(x=>`<div class="cal-hd">${x}</div>`).join('')}`;
+  const DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  /* A payday is done on the sheet for the week that just ended, so the marker
+     names that sheet and opens it. */
+  const payMark=d=>{const sk=sheetFor(d),has=!!S.weeks[sk];
+    return `<button class="cal-pay" data-calweek="${sk}" ${has?`title="Done on the ${weekLabel(sk)} sheet — open it"`
+      :'disabled title="That sheet is not in the ledger yet"'}>Payday<span class="pre"> · ${weekLabel(sk)} sheet</span></button>`};
+  let grid=DOW.map(x=>`<div class="cal-hd">${x}</div>`).join('');
   for(let k=gridFrom;k<=gridTo;k=addWeeks(k,1)){
-    /* the row runs from payday to the day before the next one, so it is paid
-       out of the sheet that closed the day before it starts */
-    const sk=sheetFor(k),has=!!S.weeks[sk];
-    grid+=`<div class="cal-wk"><button data-calweek="${sk}" ${has?`title="Paid from the ${weekLabel(sk)} sheet — open it"`:'disabled title="That sheet is not in the ledger yet"'}><span class="pre">Sheet </span>${weekLabel(sk)}</button></div>`;
     for(let i=0;i<7;i++){
       const d=addDays(k,i),evs=(byDay[d]||[]).sort((a,b)=>a.rank-b.rank);
-      const quiet=!evs.length&&i!==0&&d!==today;
-      grid+=`<div class="cal-day${inMonth(d)?'':' is-out'}${d===today?' is-today':''}${quiet?' is-quiet':''}">
-        <div class="cal-top"><span class="cal-n"><span class="dow">${DOW[i]}</span>${inMonth(d)?parseISO(d).getDate():dueLabel(d)}</span>${i===0?'<span class="cal-pay">Payday</span>':''}</div>
+      const pay=parseISO(d).getDay()===WEEK_START;
+      const quiet=!evs.length&&!pay&&d!==today;
+      grid+=`<div class="cal-day${inMonth(d)?'':' is-out'}${d===today?' is-today':''}${quiet?' is-quiet':''}${i===0?' is-wkstart':''}">
+        <div class="cal-top"><span class="cal-n"><span class="dow">${DOW[i]}</span>${inMonth(d)?parseISO(d).getDate():dueLabel(d)}</span>${pay?payMark(d):''}</div>
         <div>${evs.map(e=>`<div class="ev ${e.cls}" title="${esc(e.title)}"><span class="mk"></span>`
           +`<span class="en">${esc(e.name)}</span>${e.amt?`<span class="ea">${money(e.amt)}</span>`:''}</div>`).join('')}</div>
       </div>`;
@@ -3381,7 +3385,7 @@ function viewCalendar(el){
   </section>`:''}
 
   <section class="band" aria-labelledby="cal-h">
-    <h2 class="sect-label" id="cal-h">Pay weeks</h2>
+    <h2 class="sect-label" id="cal-h">${monthLabel(ym)}</h2>
     <div class="cal">${grid}</div>
     <div class="legend cal-legend">
       <span class="k"><span class="mk fill"></span>Due</span>
