@@ -93,6 +93,8 @@
   --negative-wash:rgba(140,58,46,0.07);
   --positive:#3E6B4F;                          /* dull forest        */
   --positive-wash:rgba(62,107,79,0.07);
+  --positive-tint:#DADDD2;       /* positive at 15% on paper, opaque */
+  --positive-tint-deep:#CED4C8;  /* 22% — the same, under hover      */
   --attention:#8A6516;                         /* raw sienna         */
   --attention-wash:rgba(138,101,22,0.08);
 

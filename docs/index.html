@@ -104,6 +104,8 @@
   --negative-wash:rgba(140,58,46,0.07);
   --positive:#3E6B4F;                          /* dull forest        */
   --positive-wash:rgba(62,107,79,0.07);
+  --positive-tint:#DADDD2;       /* positive at 15% on paper, opaque */
+  --positive-tint-deep:#CED4C8;  /* 22% — the same, under hover      */
   --attention:#8A6516;                         /* raw sienna         */
   --attention-wash:rgba(138,101,22,0.08);
 
@@ -397,9 +399,10 @@ td.dcell input:focus{color:var(--ink)}
   text-transform:uppercase;color:var(--ink-muted);font-weight:var(--weight-medium);
   margin-left:auto}
 
-/* A paid row keeps the green the spreadsheet used, at wash strength rather
-   than fill: the sheet is read as a whole and 20 saturated rows would drown
-   the figures. The tick sits in the account cell so it costs no column. */
+/* A paid row keeps the green the spreadsheet used, as a tint rather than a
+   fill: the sheet is read as a whole and 20 saturated rows would drown the
+   figures. A bar at the left edge carries it when the tint alone is too
+   quiet. The tick sits in the account cell so it costs no column. */
 .paidbox{appearance:none;width:13px;height:13px;margin:0 var(--space-1) 0 0;
   vertical-align:-2px;border:var(--rule-width) solid var(--rule-strong);
   border-radius:var(--radius);background:var(--paper);cursor:pointer;flex:0 0 auto}
@@ -408,8 +411,12 @@ td.dcell input:focus{color:var(--ink)}
 .paidbox:checked::after{content:'';display:block;width:3px;height:6px;margin:1px auto 0;
   border:solid var(--paper);border-width:0 1.5px 1.5px 0;transform:rotate(45deg)}
 .paidbox:focus-visible{outline:var(--focus-ring-width) solid var(--accent);outline-offset:1px}
-tr.is-paid > th,tr.is-paid > td{background:var(--positive-wash)}
-tr.is-paid:hover > th,tr.is-paid:hover > td{background:var(--positive-wash)}
+/* Opaque, not the wash: the account cell is sticky, and a translucent fill
+   there lets the figures scrolling beneath it show through. Specificity
+   matches the grid's hover rule so paid rows stay green under the pointer. */
+table.grid tbody tr.is-paid > th,table.grid tbody tr.is-paid > td{background:var(--positive-tint)}
+table.grid tbody tr.is-paid > th{box-shadow:inset 3px 0 0 var(--positive)}
+table.grid tbody tr.is-paid:hover > th,table.grid tbody tr.is-paid:hover > td{background:var(--positive-tint-deep)}
 tr.is-paid .acct{color:var(--ink-secondary)}
 
 /* The pull-forward preview: what changes, before it changes. */
