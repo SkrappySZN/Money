@@ -855,6 +855,7 @@ table.cmp tr.planned td:first-child::after{content:'planned';margin-left:var(--s
   font-variant-numeric:tabular-nums;text-align:left}
 .cal-wk button:hover{color:var(--ink)}
 .cal-wk button:disabled{cursor:default;color:var(--ink-muted)}
+.cal-wk .pre{display:none}
 .cal-wk button:focus-visible{outline:none;color:var(--focus-ink);text-decoration:underline}
 .cal-day{min-height:6.5rem;padding:var(--space-1);min-width:0;
   border-bottom:var(--rule-width) solid var(--rule);border-left:var(--rule-width) solid var(--rule-faint)}
@@ -899,6 +900,7 @@ table.cmp td.sk-late{color:var(--negative);font-weight:var(--weight-medium)}
   .cal{grid-template-columns:1fr}
   .cal-hd{display:none}
   .cal-wk{padding-top:var(--space-2);border-bottom-color:var(--rule-strong)}
+  .cal-wk .pre{display:inline}
   .cal-day{min-height:0;border-left:0;display:grid;grid-template-columns:10ch 1fr;gap:var(--space-2)}
   .cal-day.is-quiet{display:none}
   .cal-n .dow{display:inline;color:var(--ink-muted);margin-right:var(--space-half)}
@@ -3220,21 +3222,25 @@ const centsUp=n=>Math.ceil(n*100-1e-6)/100;   /* a quarter can land on a half-ce
 
 /* Can a payday be skipped before the next due date?
 
+   A sheet is worked on the Friday AFTER the week it is named for: the
+   9.11–9.17 sheet is done, and paid, on payday the 18th. So each payday reads
+   the sheet that ended the day before it — `sheetFor(payday)`.
+
    Paydays that have already happened count only if they fall on or after the
    previous due date — before that, they paid the previous month. Paydays
-   still to come all count, because moving the due date forward on the sheet
-   is how a paid month is recorded. A week already in the ledger contributes
-   what its Min actually says, so a skip entered there is seen here; a week
-   not built yet is assumed to get the usual weekly amount. */
+   still to come, today's included, all count, because moving the due date
+   forward on the sheet is how a paid month is recorded. A sheet already in
+   the ledger contributes what its Min actually says, so a skip entered there
+   is seen here; one not built yet is assumed to get the usual weekly amount. */
+const sheetFor=payday=>addWeeks(payday,-1);
 function skipCheck(r,today){
   const amount=r2(n0(r.minAmt)),weekly=centsUp(amount/MIN_DIVISOR),due=r.due;
-  const prev=monthBefore(due,r.a.dueDay),tw=thisWeek();
+  const prev=monthBefore(due,r.a.dueDay);
   let setAside=0;const future=[];
   for(let f=weekStartOf(parseISO(prev));f<due;f=addWeeks(f,1)){
-    const e=S.weeks[f]&&S.weeks[f].entries[r.a.id];
-    const happened=f<tw||(f===tw&&S.weeks[f]);
-    if(happened){if(f>=prev&&e)setAside=r2(setAside+n0(e.min))}
-    else future.push({f,amt:S.weeks[f]?n0(e&&e.min):weekly,planned:!!S.weeks[f]});
+    const sk=sheetFor(f),e=S.weeks[sk]&&S.weeks[sk].entries[r.a.id];
+    if(f<today){if(f>=prev&&e)setAside=r2(setAside+n0(e.min))}
+    else future.push({f,sheet:sk,amt:S.weeks[sk]?n0(e&&e.min):weekly,planned:!!S.weeks[sk]});
   }
   const plan=r2(setAside+future.reduce((t,x)=>t+x.amt,0));
   const slack=r2(plan-amount);
@@ -3243,7 +3249,7 @@ function skipCheck(r,today){
   const canSkip=slack<-0.005?0:Math.min(live.length,Math.floor((slack+0.005)/weekly));
   return{amount,weekly,due,late:due<today,setAside,future,skipped,
     short:slack<-0.005?r2(-slack):0,canSkip,spare:r2(slack-canSkip*weekly),
-    first:live[0]&&live[0].f,last:future.length?future[future.length-1].f:null};
+    first:live[0],last:future.length?future[future.length-1].f:null};
 }
 
 function viewCalendar(el){
@@ -3284,10 +3290,12 @@ function viewCalendar(el){
     .reduce((t,[,evs])=>t+evs.filter(e=>e.rank===3).reduce((s,e)=>s+e.amt,0),0));
 
   const DOW=['Fri','Sat','Sun','Mon','Tue','Wed','Thu'];
-  let grid=`<div class="cal-hd"></div>${DOW.map(x=>`<div class="cal-hd">${x}</div>`).join('')}`;
+  let grid=`<div class="cal-hd">Sheet</div>${DOW.map(x=>`<div class="cal-hd">${x}</div>`).join('')}`;
   for(let k=gridFrom;k<=gridTo;k=addWeeks(k,1)){
-    const has=!!S.weeks[k];
-    grid+=`<div class="cal-wk"><button data-calweek="${k}" ${has?`title="Open ${weekLabel(k)} on the sheet"`:'disabled title="Not in the ledger yet"'}>${weekLabel(k)}</button></div>`;
+    /* the row runs from payday to the day before the next one, so it is paid
+       out of the sheet that closed the day before it starts */
+    const sk=sheetFor(k),has=!!S.weeks[sk];
+    grid+=`<div class="cal-wk"><button data-calweek="${sk}" ${has?`title="Paid from the ${weekLabel(sk)} sheet — open it"`:'disabled title="That sheet is not in the ledger yet"'}><span class="pre">Sheet </span>${weekLabel(sk)}</button></div>`;
     for(let i=0;i<7;i++){
       const d=addDays(k,i),evs=(byDay[d]||[]).sort((a,b)=>a.rank-b.rank);
       const quiet=!evs.length&&i!==0&&d!==today;
@@ -3305,7 +3313,7 @@ function viewCalendar(el){
     if(k.late)return `<td class="sk-late">Due date passed<span class="sk-meta">move it forward on the sheet</span></td>`;
     if(k.short)return `<td class="sk-short">Short ${money(k.short)}<span class="sk-meta">every payday is needed</span></td>`;
     if(k.canSkip)return `<td class="sk-yes">${k.canSkip} payday${k.canSkip>1?'s':''}`
-      +`<span class="sk-meta">earliest ${dueLabel(k.first)} · ${money(k.spare)} spare after</span></td>`;
+      +`<span class="sk-meta">earliest ${dueLabel(k.first.f)}, the ${weekLabel(k.first.sheet)} sheet · ${money(k.spare)} spare after</span></td>`;
     return `<td>None<span class="sk-meta">${k.skipped?`${k.skipped} already skipped · `:''}${money(k.spare)} spare</span></td>`;
   };
 
@@ -3333,7 +3341,7 @@ function viewCalendar(el){
   ${loans.length?`<section class="band" aria-labelledby="skip-h">
     <h2 class="sect-label" id="skip-h">Can a payday be skipped?</h2>
     <p class="lede muted">Counts the paydays left before each due date against what is still owed on it.
-      A week already on the sheet counts what its Min says, so a skip you enter there shows up here.</p>
+      Each payday reads the sheet for the week that just ended, so a $0 Min entered there shows up here.</p>
     <div class="cmp-wrap"><table class="cmp">
       <thead><tr><th>Loan</th><th>Due</th><th>Amount</th><th>Per week</th><th>Paydays left</th><th>Can skip</th></tr></thead>
       <tbody>${loans.map(x=>{const k=x.k;return `<tr>
