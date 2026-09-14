@@ -3271,7 +3271,13 @@ function viewCalendar(el){
   /* everything dated, keyed by day */
   const byDay={};
   const put=(d,ev)=>{if(d<gridFrom||d>gridTo)return;(byDay[d]=byDay[d]||[]).push(ev)};
+  /* A debt at $0 with nothing billing to it gets no statement and no minimum,
+     so its close and due dates are noise. The exception is a card a bucket
+     exists to pay — it reads $0 on the sheet while charges build on it all
+     month, and its dates are when that bucket has to pay. */
+  const paidByBucket=new Set(liveAccounts().map(a=>a.autoOut).filter(Boolean));
   for(const r of rows){
+    if(KIND_DEBT(r.a.kind)&&r.balance<=0.005&&!paidByBucket.has(r.a.id))continue;
     const amt=n0(r.minAmt)>0&&!statedWeekly(r.a)?r2(r.minAmt):0;
     for(const d of recurring(r.due,r.a.dueDay,gridFrom,gridTo))
       put(d,{rank:0,cls:'ev-due'+(d<r.due?' is-done':d<today?' is-late':''),
