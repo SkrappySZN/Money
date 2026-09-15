@@ -1836,6 +1836,20 @@ function computeWeek(k){
       const paidDirect=cardRows.reduce((s,c)=>s+c.min,0);
       r.other=r2(Math.max(0,r.minAmt-paidDirect));
       r.e.other=r.other;
+      /* ...and the way out. Minimums paid past this week's contribution came
+         out of what the bucket had saved, so they draw it down and net off
+         the paycheck, as `autoOut` does for a bucket linked to one account.
+         Without it a $300 minimum left the bucket untouched and read as $137
+         over-allocated. The spreadsheet did this with a negative Other.
+         Weeks finalized before this existed keep the Out they were closed
+         with. The entry is marked the first time it draws, so finalizing a
+         week later does not undo the netting and turn it over-allocated. */
+      if(!isLocked(k)||r.e.drawsForCards){
+        r.out=r2(Math.min(Math.max(0,paidDirect-r.minAmt),Math.max(0,r.balance)));
+        r.e.out=r.out;
+        r.e.drawsForCards=true;
+        r.drawsForCards=true;
+      }
     }
     /* `autoOut` names the account this bucket exists to pay. Whatever goes to
        that account this week is drawn out of the bucket, because that is where
@@ -1948,8 +1962,10 @@ function computeWeek(k){
      still balances. Only linked buckets net off: a hand-typed Out is money
      leaving for something the sheet does not otherwise record, and there is
      nothing to double count. */
-  const fundedFromBuckets=r2(rows.filter(r=>r.a.autoOut&&!r.isRollup)
+  const drawnForCardMins=r2(rows.filter(r=>r.drawsForCards&&!r.isRollup)
     .reduce((s,r)=>s+n0(r.out),0));
+  const fundedFromBuckets=r2(rows.filter(r=>r.a.autoOut&&!r.isRollup)
+    .reduce((s,r)=>s+n0(r.out),0)+drawnForCardMins);
   const allocated=r2(rows.filter(r=>!r.isRollup&&r.a.kind!=='income')
     .reduce((s,r)=>s+r.total,0)-fundedFromBuckets);
   const unallocated=r2(income-allocated);
@@ -1993,7 +2009,10 @@ function computeWeek(k){
   const debtBuckets=buckets.filter(r=>r.a.fundsDebt);
   totals.savingsIn=r2(buckets.filter(r=>!r.a.fundsDebt).reduce((s,r)=>s+r.total,0));
   totals.debtBucket=r2(debtBuckets.reduce((s,r)=>s+r.total,0));
-  totals.debtFunded=r2(totals.debtPaid+totals.debtBucket);
+  /* Minimums the bucket paid from savings are in debtPaid but not new money
+     from this paycheck, so they come off what the paycheck committed. */
+  totals.cardMinDraw=drawnForCardMins;
+  totals.debtFunded=r2(totals.debtPaid+totals.debtBucket-drawnForCardMins);
 
   return {key:k, rows, byId, totals, checks:runChecks(k,rows,totals)};
 }
@@ -2606,7 +2625,7 @@ function viewWeek(el){
 const ALLOC_SEGS=T=>[
   ['Attack',            T.attack,     'var(--fill-emphasis)'],
   ['Other debt',        T.otherDebt,  'var(--fill-strong)'],
-  ['Minimums',          r2(T.minPaid+n0(T.debtBucket)), 'var(--fill-mid)'],
+  ['Minimums',          r2(T.minPaid+n0(T.debtBucket)-n0(T.cardMinDraw)), 'var(--fill-mid)'],
   ['Buckets & savings', T.savingsIn,  'var(--fill-faint)'],
 ];
 function allocSegments(T){
@@ -3075,6 +3094,8 @@ const SHEET_COLS=[
      :r.isRollup?`<td class="num dim">${money(n0(r.out))}</td>`
      :r.a.autoOut
        ?`<td class="num dim" title="Auto: drawn down by whatever was paid to ${esc((acct(r.a.autoOut)||{}).name||r.a.autoOut)} this week">${money(n0(r.out))}</td>`
+     :r.drawsForCards
+       ?`<td class="num dim" title="Auto: card minimums paid beyond this week's contribution">${money(n0(r.out))}</td>`
        :cellNum(r,'out')},
   /* A debt is charged interest and savings earn it. Both land here, marked
      apart by sign and colour so a gain cannot be read as a cost. */
