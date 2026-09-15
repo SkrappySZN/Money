@@ -885,6 +885,11 @@ table.ref button.del:hover{color:var(--negative)}
   border-radius:var(--radius);padding:var(--space-1);margin-top:var(--space-2)}
 .ref-import .row{display:flex;flex-wrap:wrap;gap:var(--space-2);align-items:center;margin-top:var(--space-1);
   font-size:var(--text-2);color:var(--ink-secondary)}
+.ref-rates table.ref{margin-top:var(--space-3);table-layout:fixed}
+.ref-rates table.ref th:first-child{width:46%}
+.ref-rates table.ref th:first-child{color:var(--ink-secondary)}
+.ref-notes{margin:var(--space-3) 0 0;padding-left:1.2em;color:var(--ink-muted);font-size:var(--text-2);max-width:var(--measure-prose)}
+.ref-notes li{margin-bottom:var(--space-half)}
 .ref-import select{font:inherit;background:none;border:0;border-bottom:var(--rule-width) solid var(--rule);color:var(--ink)}
 
 /* ══ Projections ════════════════════════════════════════════════════
@@ -3415,6 +3420,46 @@ function viewPayoff(el){
    Games refereed, what each pays, and whether the money has arrived. A season
    runs September through August, which is how the old spreadsheet was cut. */
 const refGames=()=>((S.reffing=S.reffing||{games:[]}).games=S.reffing.games||[]);
+
+/* LAHOA's published pay, copied from lahoa.com/rates for the 2026–27 season.
+   That page cannot be read from here (it refuses scripted requests and sends
+   no cross-origin headers), so it is kept as data: copied into the ledger the
+   first time it is needed, edited there when LAHOA changes it, and restorable
+   from this copy. `fee` is the league's single-game fee; `noFee` marks rows it
+   never applies to. */
+const LAHOA_RATES={season:'2026–27',source:'lahoa.com/rates',groups:[
+  {id:'scaha',name:'SCAHA & CAHA',league:'SCAHA',fee:20,rows:[
+    {div:'8u (Cross & Half-Ice)',ref:62,lines:null,noFee:true,note:'each'},
+    {div:'10u A/B/BB',ref:60,lines:44},{div:'12u A/B/BB',ref:60,lines:44},{div:'12u AA',ref:58,lines:42},
+    {div:'11u/12u AAA',ref:72,lines:52,noFee:true},{div:'14u A/B',ref:70,lines:50},{div:'14u AA',ref:72,lines:52},
+    {div:'13u/14u AAA',ref:75,lines:55,noFee:true},{div:'16u/18u A/B',ref:72,lines:52},{div:'16u/18u AA',ref:75,lines:55},
+    {div:'15u/16u/18u AAA',ref:110,lines:90,noFee:true}]},
+  {id:'caha',name:'CAHA weekends & state championships',league:'CAHA',fee:0,rows:[
+    {div:'14u AA',ref:75,lines:55},{div:'13u/14u AAA',ref:80,lines:60},{div:'16u/18u AA',ref:80,lines:60},
+    {div:'15u/16u/18u AAA',ref:110,lines:90},{div:'High School 1A & 2A',ref:90,lines:70}]},
+  {id:'hs',name:'High school, ACHA & USPHL',league:'',fee:0,rows:[
+    {div:'ADHSHL Varsity 1',ref:80,lines:60,fee:10},{div:'ADHSHL Varsity 2 & 3',ref:75,lines:60,fee:10},
+    {div:'ADHSHL JV',ref:70,lines:55,fee:10},{div:'LAKHSHL Varsity',ref:75,lines:57,fee:15},
+    {div:'LAKHSHL JV',ref:72,lines:55,fee:15},{div:'ACHA',ref:150,lines:110},
+    {div:'USPHL – Premier',ref:175,lines:120},{div:'USPHL – NCDC',ref:null,lines:null}]}],
+  notes:['2-official games pay the referee rate.',
+    'Single game fee: for each single game when at different rinks or more than 1.5 hours apart; two single games 0.5–1.5 hours apart at the same rink earn one fee. Not for AAA, 8 & under, or CAHA weekends.',
+    'SCAHA & CAHA travel: federal mileage after 90 miles, capped at 200 miles round trip — Santa Barbara, Bakersfield and Palm Springs only. LAKHSHL: Santa Barbara & Bakersfield $100, Mammoth $200 + one hotel night.']};
+const refRates=()=>{const R=S.reffing=S.reffing||{games:[]};
+  if(!R.rates)R.rates=JSON.parse(JSON.stringify(LAHOA_RATES));return R.rates};
+const rateKey=(gi,ri)=>`${gi}:${ri}`;
+const rateRow=key=>{if(!key)return null;const[gi,ri]=key.split(':').map(Number);
+  const g=refRates().groups[gi];return g&&g.rows[ri]?{g,r:g.rows[ri]}:null};
+/* what a game pays: the division's rate for the role, plus the single-game fee if claimed */
+function refPay(key,role,fee){
+  const x=rateRow(key);if(!x)return null;
+  const base=role==='lines'&&x.r.lines!=null?x.r.lines:x.r.ref;
+  if(base==null)return null;
+  const f=fee&&!x.r.noFee?n0(x.r.fee!=null?x.r.fee:x.g.fee):0;
+  return r2(n0(base)+f);
+}
+const refFeeFor=key=>{const x=rateRow(key);return !x||x.r.noFee?0:n0(x.r.fee!=null?x.r.fee:x.g.fee)};
+const refLevelName=key=>{const x=rateRow(key);return x?`${x.g.league?x.g.league+' ':''}${x.r.div}`:''};
 const seasonOf=d=>{const y=+d.slice(0,4),m=+d.slice(5,7);return m>=9?y:y-1};
 const seasonLabel=y=>`${y}–${String(y+1).slice(2)}`;
 function viewReffing(el){
@@ -3475,6 +3520,17 @@ function viewReffing(el){
       <select id="refPasteSeason">${Array.from({length:6},(_,j)=>seasonOf(today)-j).map(y=>`<option value="${y}" ${y===sy?'selected':''}>${seasonLabel(y)}</option>`).join('')}</select>
       season <button class="ctl" data-act="refimport">Import</button></div>
   </details>
+
+  ${(()=>{const R=refRates();const cell=(v,gi,ri,f)=>`<input class="rf money" data-rr="${gi}:${ri}:${f}" inputmode="decimal" value="${v==null?'':money(n0(v))}" placeholder="TBD" aria-label="${f}">`;
+    return `<details class="ref-import ref-rates">
+    <summary>Pay rates · ${esc(R.season)} · from ${esc(R.source)}</summary>
+    ${R.groups.map((g,gi)=>`<table class="ref"><thead><tr><th>${esc(g.name)}</th><th class="r">Referee</th><th class="r">Linesperson</th><th class="r">Single game fee</th></tr></thead>
+      <tbody>${g.rows.map((r,ri)=>`<tr><td>${esc(r.div)}${r.note?` <span class="wi-now">${esc(r.note)}</span>`:''}</td>
+        <td class="r">${cell(r.ref,gi,ri,'ref')}</td><td class="r">${r.lines===null&&r.note?'—':cell(r.lines,gi,ri,'lines')}</td>
+        <td class="r wi-now">${r.noFee||!refFeeFor(rateKey(gi,ri))?'—':money(refFeeFor(rateKey(gi,ri)))}</td></tr>`).join('')}</tbody></table>`).join('')}
+    <ul class="ref-notes">${R.notes.map(n=>`<li>${esc(n)}</li>`).join('')}</ul>
+    <div class="row">Edit any rate when LAHOA changes it. <button class="ctl" data-act="refratesreset">Reset to LAHOA's ${esc(LAHOA_RATES.season)} rates</button></div>
+  </details>`})()}
 </main>`;
 }
 /* the rate a level paid last time — at this rink if it has been reffed here */
@@ -3486,24 +3542,51 @@ function refRateFor(rink,level){
 function addRefGame(){
   const games=refGames(),last=[...games].sort((a,b)=>b.date.localeCompare(a.date))[0]||{};
   const rinks=[...new Set(games.map(g=>g.rink).filter(Boolean))],levels=[...new Set(games.map(g=>g.level).filter(Boolean))];
+  const R=refRates();
   modal(`<h3>Add a game</h3>
     <div class="f2"><div class="fieldrow"><label for="rgD">Date</label><input type="date" id="rgD" value="${iso(new Date())}"></div>
-      <div class="fieldrow"><label for="rgR">Rate</label><input id="rgR" inputmode="decimal" placeholder="0.00"></div></div>
-    <div class="fieldrow"><label for="rgK">Rink</label><input id="rgK" list="rgKs" value="${esc(last.rink||'')}"><datalist id="rgKs">${rinks.map(x=>`<option value="${esc(x)}">`).join('')}</datalist></div>
+      <div class="fieldrow"><label for="rgO">Role</label><select id="rgO"><option value="ref">Referee</option><option value="lines" ${last.role==='lines'?'selected':''}>Linesperson</option></select></div></div>
+    <div class="fieldrow"><label for="rgV">Division</label><select id="rgV"><option value="">Not on the rate sheet</option>
+      ${R.groups.map((g,gi)=>`<optgroup label="${esc(g.name)}">${g.rows.map((r,ri)=>`<option value="${rateKey(gi,ri)}">${esc(r.div)}</option>`).join('')}</optgroup>`).join('')}</select></div>
     <div class="fieldrow"><label for="rgL">Level</label><input id="rgL" list="rgLs"><datalist id="rgLs">${levels.map(x=>`<option value="${esc(x)}">`).join('')}</datalist></div>
-    <div class="fieldrow"><label><input type="checkbox" id="rgP" style="width:auto;margin-right:6px">Already paid</label></div>`,
+    <div class="fieldrow"><label for="rgK">Rink</label><input id="rgK" list="rgKs" value="${esc(last.rink||'')}"><datalist id="rgKs">${rinks.map(x=>`<option value="${esc(x)}">`).join('')}</datalist></div>
+    <div class="f2"><div class="fieldrow"><label for="rgR">Rate</label><input id="rgR" inputmode="decimal" placeholder="0.00"></div>
+      <div class="fieldrow"><label>&nbsp;</label><label id="rgFw" style="text-transform:none;letter-spacing:0;font-size:var(--text-2)"><input type="checkbox" id="rgF" style="width:auto;margin-right:6px"><span id="rgFt">Single game fee</span></label></div></div>
+    <div class="fieldrow"><label style="text-transform:none;letter-spacing:0;font-size:var(--text-2)"><input type="checkbox" id="rgP" style="width:auto;margin-right:6px">Already paid</label></div>`,
     'Add game',()=>{
       const date=$('#rgD').value,rate=n0(String($('#rgR').value).replace(/[$,]/g,''));
       if(!date){toast('Needs a date');return false}
       pushUndo(null);
-      const paid=$('#rgP').checked;
-      games.push({id:nextId(games,'g'),date,rink:$('#rgK').value.trim(),level:$('#rgL').value.trim(),rate:r2(rate),paid,paidOn:paid?iso(new Date()):null});
+      const paid=$('#rgP').checked,div=$('#rgV').value;
+      games.push({id:nextId(games,'g'),date,rink:$('#rgK').value.trim(),level:$('#rgL').value.trim(),rate:r2(rate),
+        role:$('#rgO').value,div,fee:!!(div&&$('#rgF').checked&&refFeeFor(div)),paid,paidOn:paid?iso(new Date()):null});
       UI.refSeason=seasonOf(date);save();render();toast('Game added — ⌘Z to undo');
     });
-  /* picking a level fills in what it paid last time, unless a rate is typed */
-  const fill=()=>{const r=refRateFor($('#rgK').value.trim(),$('#rgL').value.trim());
-    if(r!=null&&!$('#rgR').value)$('#rgR').value=r.toFixed(2)};
-  setTimeout(()=>{$('#rgL')?.addEventListener('change',fill);$('#rgK')?.addEventListener('change',fill);$('#rgL')?.focus()},40);
+  /* A division on the rate sheet sets the level's name and the rate for the
+     role, and says whether a single-game fee can apply. Off the sheet, the
+     rate a level paid last time is offered instead. A rate typed by hand is
+     kept: the division only overwrites a rate it filled in itself. */
+  let auto=null;
+  const sync=()=>{
+    const div=$('#rgV').value,role=$('#rgO').value,fee=refFeeFor(div);
+    $('#rgFw').style.visibility=div&&fee?'visible':'hidden';
+    $('#rgFt').textContent=fee?`Single game fee (+${money(fee)})`:'Single game fee';
+    const rv=$('#rgR').value;
+    if(div){
+      if(!$('#rgL').value||$('#rgL').dataset.auto==='1'){$('#rgL').value=refLevelName(div);$('#rgL').dataset.auto='1'}
+      const pay=refPay(div,role,$('#rgF').checked);
+      if(pay!=null&&(!rv||rv===auto)){auto=pay.toFixed(2);$('#rgR').value=auto}
+    }else{
+      const r=refRateFor($('#rgK').value.trim(),$('#rgL').value.trim());
+      if(r!=null&&(!rv||rv===auto)){auto=r.toFixed(2);$('#rgR').value=auto}
+    }
+  };
+  setTimeout(()=>{
+    ['rgV','rgO','rgF','rgK'].forEach(i=>$('#'+i)?.addEventListener('change',sync));
+    $('#rgL')?.addEventListener('input',()=>{$('#rgL').dataset.auto='0'});
+    $('#rgL')?.addEventListener('change',sync);
+    sync();$('#rgV')?.focus();
+  },40);
 }
 /* Rows copied out of the spreadsheet arrive tab-separated: date, rink, level,
    rate, and the checkbox as TRUE/FALSE. Month headings, the column headings
@@ -4610,6 +4693,15 @@ document.addEventListener('change',e=>{
   if(d.cal){const c=S.plan.calendar.find(x=>x.id===d.cal);if(c){c.done=t.checked;save();render()}return}
   /* A reminder's date moves when the thing it waits on moves — a charge that
      posts later, a payment pushed to the next payday. */
+  if(d.rr){
+    const[gi,ri,f]=d.rr.split(':'),row=(refRates().groups[+gi]||{rows:[]}).rows[+ri];if(!row)return;
+    pushUndo(null);const v=String(t.value).replace(/[$,]/g,'').trim();
+    row[f]=v===''?null:r2(n0(v));save();
+    setTimeout(()=>{const ae=document.activeElement,key=ae&&ae.dataset?ae.dataset.rr:null;
+      render();const det=document.querySelector('.ref-rates');if(det)det.open=true;
+      if(key){const n=document.querySelector(`[data-rr="${CSS.escape(key)}"]`);if(n)n.focus({preventScroll:true})}},0);
+    return;
+  }
   if(d.rf){
     const[gid,field]=d.rf.split(':'),g=refGames().find(x=>x.id===gid);if(!g)return;
     pushUndo(null);
@@ -4719,6 +4811,8 @@ document.addEventListener('click',e=>{
     case'addacct':addAccount();break;
     case'addref':addRefGame();break;
     case'refimport':importRefGames();break;
+    case'refratesreset':confirmModal('Reset pay rates',`Every rate goes back to LAHOA's published ${LAHOA_RATES.season} figures. Games already logged keep what they were paid. ⌘Z undoes it.`,
+      'Reset rates',()=>{pushUndo(null);S.reffing.rates=JSON.parse(JSON.stringify(LAHOA_RATES));save();render();toast('Rates reset')});break;
     case'export':exportBackup();break;
     case'import':$('#filepick').click();break;
     case'csv':exportCSV();break;
