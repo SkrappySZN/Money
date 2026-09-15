@@ -4795,8 +4795,26 @@ function setAcctField(key,val){
    string appends to it, and n0() would read "$12,500.005" as twelve and a
    half thousand and change. */
 const isMoneyCell=t=>t&&t.dataset&&t.dataset.fmt==='money';
+/* A number field takes the whole figure on the way in, so typing replaces it.
+   With the caret left wherever the click landed, typing 300 into "0|.00" came
+   out as 3000.00. Selecting in focusin is not enough on its own: the mouseup
+   that ends the same click collapses the selection back to a caret, so that
+   one mouseup is swallowed. A click into a field already being edited still
+   places the caret. rerenderKeepFocus refocuses programmatically and restores
+   its own selection straight after, so mid-typing it is unaffected. */
+const isNumField=t=>t&&t.tagName==='INPUT'&&t.type!=='date'
+  &&(isMoneyCell(t)||t.inputMode==='decimal');
+let swallowMouseup=null;
+document.addEventListener('mousedown',e=>{
+  swallowMouseup=isNumField(e.target)&&document.activeElement!==e.target?e.target:null;
+});
+document.addEventListener('mouseup',e=>{
+  if(swallowMouseup&&e.target===swallowMouseup)e.preventDefault();
+  swallowMouseup=null;
+});
 document.addEventListener('focusin',e=>{
   if(isMoneyCell(e.target))e.target.value=n0(e.target.value).toFixed(2);
+  if(isNumField(e.target))e.target.select();
 });
 document.addEventListener('focusout',e=>{
   if(isMoneyCell(e.target))e.target.value=moneyInput(n0(e.target.value));
