@@ -885,6 +885,12 @@ table.ref button.del:hover{color:var(--negative)}
   border-radius:var(--radius);padding:var(--space-1);margin-top:var(--space-2)}
 .ref-import .row{display:flex;flex-wrap:wrap;gap:var(--space-2);align-items:center;margin-top:var(--space-1);
   font-size:var(--text-2);color:var(--ink-secondary)}
+.role-seg{display:inline-flex;gap:var(--space-1)}
+.role-seg button{background:none;border:0;border-bottom:var(--rule-width) solid transparent;cursor:pointer;
+  font:inherit;font-size:var(--text-2);color:var(--ink-muted);padding:var(--space-half) 0}
+.role-seg button:hover{color:var(--ink-secondary)}
+.role-seg button[aria-pressed="true"]{color:var(--ink);border-bottom-color:var(--ink);font-weight:var(--weight-medium)}
+.role-seg button:focus-visible{outline:none;color:var(--focus-ink);border-bottom-color:var(--focus-ink)}
 .ref-rates table.ref{margin-top:var(--space-3);table-layout:fixed}
 .ref-rates table.ref th:first-child{width:46%}
 .ref-rates table.ref th:first-child{color:var(--ink-secondary)}
@@ -3477,6 +3483,8 @@ function viewReffing(el){
     <td><input class="rf" type="date" data-rf="${g.id}:date" value="${g.date}" aria-label="Date"></td>
     <td><input class="rf" data-rf="${g.id}:rink" value="${esc(g.rink||'')}" list="refRinks" aria-label="Rink"></td>
     <td><input class="rf" data-rf="${g.id}:level" value="${esc(g.level||'')}" list="refLevels" aria-label="Level"></td>
+    <td><span class="role-seg" role="group" aria-label="Role">${['ref','lines'].map(x=>`<button data-refrole="${g.id}:${x}" aria-pressed="${g.role===x}"
+      title="${x==='ref'?'Referee':'Linesperson'}${g.div&&!g.rateManual?' — reprices from the rate sheet':''}">${x==='ref'?'Ref':'Lines'}</button>`).join('')}</span></td>
     <td class="r"><input class="rf money" data-rf="${g.id}:rate" inputmode="decimal" value="${money(n0(g.rate))}" aria-label="Rate"></td>
     <td class="pd"><label><input type="checkbox" class="paidbox" data-rf="${g.id}:paid" ${g.paid?'checked':''}>${g.paid?`paid${g.paidOn?' '+dueLabel(g.paidOn):''}`:'waiting'}</label></td>
     <td class="r"><button class="del" data-refdel="${g.id}" title="Remove this game — ⌘Z undoes it" aria-label="Remove game">×</button></td></tr>`;
@@ -3503,10 +3511,10 @@ function viewReffing(el){
 
   <section class="band tight">
     ${inS.length?`<div class="cmp-wrap"><table class="ref">
-      <thead><tr><th>Date</th><th>Rink</th><th>Level</th><th class="r">Rate</th><th>Payment</th><th></th></tr></thead>
+      <thead><tr><th>Date</th><th>Rink</th><th>Level</th><th>Role</th><th class="r">Rate</th><th>Payment</th><th></th></tr></thead>
       <tbody>${months.map(m=>{const g=inS.filter(x=>x.date.startsWith(m)),t=sum(g),o=r2(t-sum(g.filter(x=>x.paid)));
         return `<tr class="mo"><td colspan="3"><span class="mn">${MONTH_NAMES[+m.slice(5,7)-1]}</span></td>
-          <td colspan="3" class="mt">Total <b>${money(t)}</b> · ${o>0.005?`<span class="owed">${money(o)} owed</span>`:'nothing owed'}</td></tr>`
+          <td colspan="4" class="mt">Total <b>${money(t)}</b> · ${o>0.005?`<span class="owed">${money(o)} owed</span>`:'nothing owed'}</td></tr>`
           +g.map(row).join('')}).join('')}</tbody></table></div>`
       :`<p class="lede">No games in the ${seasonLabel(sy)} season yet. Add one with <b>+ Game</b>, or paste them in from the spreadsheet below.</p>`}
     <datalist id="refRinks">${[...new Set(games.map(g=>g.rink).filter(Boolean))].map(x=>`<option value="${esc(x)}">`).join('')}</datalist>
@@ -3682,22 +3690,40 @@ function importTimetoscore(text,sy){
   if(!me){toast('Type your name as it appears on the portal, then import again');$('#refMe')?.focus();return}
   if(!rows.length){toast(skipped.length?`None of those games have ${me} on them`:'No games found in that paste');return}
   const games=refGames(),known=new Set(games.map(g=>g.gameNo).filter(Boolean));
-  const fresh=rows.filter(r=>!known.has(r.gameNo)),dup=rows.length-fresh.length;
-  if(!fresh.length){toast(`Nothing new — ${dup} game${dup===1?' is':'s are'} already here`);return}
-  modal(`<h3>Import ${fresh.length} game${fresh.length===1?'':'s'}</h3>
-    <p>Read as <b>${esc(me)}</b>.${dup?` ${dup} already here, left out.`:''}${skipped.length?` ${skipped.length} without you on them, left out.`:''} Check the rates, then import — anything can be edited afterwards.</p>
-    <div class="cmp-wrap"><table class="ref"><thead><tr><th>Date</th><th>Level</th><th>Role</th><th class="r">Rate</th></tr></thead><tbody>
+  const fresh=rows.filter(r=>!known.has(r.gameNo));
+  /* A game already here whose role the portal now shows differently from the
+     last time it was read — the crew settled after it was first posted. Only
+     a change on the portal's side counts: a role switched here by hand, ahead
+     of the portal catching up, is not undone by pasting the old schedule. */
+  const byNo=Object.fromEntries(games.filter(g=>g.gameNo).map(g=>[g.gameNo,g]));
+  const portalWas=g=>g.portalRole!=null?g.portalRole:g.role;
+  const moved=rows.filter(r=>known.has(r.gameNo)&&portalWas(byNo[r.gameNo])!==r.role&&byNo[r.gameNo].role!==r.role);
+  let caught=false;
+  for(const r of rows)if(known.has(r.gameNo)&&portalWas(byNo[r.gameNo])!==r.role&&byNo[r.gameNo].role===r.role){byNo[r.gameNo].portalRole=r.role;caught=true}
+  if(caught)save();   /* the portal caught up with a switch made here — nothing to ask */
+  const dup=rows.length-fresh.length-moved.length;
+  if(!fresh.length&&!moved.length){toast(`Nothing new — ${dup} game${dup===1?' is':'s are'} already here`);return}
+  const title=[fresh.length?`import ${fresh.length} game${fresh.length===1?'':'s'}`:'',moved.length?`update ${moved.length} role${moved.length===1?'':'s'}`:''].filter(Boolean).join(', ');
+  modal(`<h3>${title[0].toUpperCase()+title.slice(1)}</h3>
+    <p>Read as <b>${esc(me)}</b>.${dup?` ${dup} already here, unchanged.`:''}${skipped.length?` ${skipped.length} without you on them, left out.`:''} Check the rates, then import — anything can be edited afterwards.</p>
+    ${moved.length?`<div class="cmp-wrap"><table class="ref"><thead><tr><th>Role changed</th><th>Level</th><th>Now</th><th class="r">Rate</th></tr></thead><tbody>
+    ${moved.map(r=>{const g=byNo[r.gameNo],pay=g.div&&!g.rateManual?refPay(g.div,r.role,g.fee):null;
+      return `<tr><td>${dueLabel(r.date)} · ${esc(r.time)}</td><td>${esc(r.level)}</td><td>${r.role==='ref'?'Referee':'Linesperson'}</td>
+      <td class="r">${money(n0(g.rate))} → ${money(pay!=null?pay:n0(g.rate))}</td></tr>`}).join('')}</tbody></table></div>`:''}
+    ${fresh.length?`<div class="cmp-wrap"><table class="ref"><thead><tr><th>Date</th><th>Level</th><th>Role</th><th class="r">Rate</th></tr></thead><tbody>
     ${fresh.map(r=>`<tr><td>${dueLabel(r.date)} · ${esc(r.time)}</td><td>${esc(r.level)}${r.div?'':' <span class="wi-now">not on the rate sheet</span>'}</td>
       <td>${r.role==='ref'?'Referee':'Linesperson'}</td>
       <td class="r">${r.rate==null?'<span class="wi-now">set after</span>':money(r.rate)}${r.fee?` <span class="wi-now">incl. ${money(refFeeFor(r.div))} fee</span>`:''}</td></tr>`).join('')}
-    </tbody></table></div>`,
-    `Import ${fresh.length}`,()=>{
+    </tbody></table></div>`:''}`,
+    fresh.length?`Import ${fresh.length}`:'Update',()=>{
       pushUndo(null);
       R.me=me;
+      for(const r of moved){const g=byNo[r.gameNo];g.role=r.role;g.portalRole=r.role;
+        const pay=g.div&&!g.rateManual?refPay(g.div,r.role,g.fee):null;if(pay!=null)g.rate=pay}
       for(const r of fresh)games.push({id:nextId(games,'g'),gameNo:r.gameNo,date:r.date,time:r.time,rink:r.rink,
-        level:r.level,rate:r.rate==null?0:r2(r.rate),role:r.role,div:r.div,fee:r.fee,paid:false,paidOn:null});
+        level:r.level,rate:r.rate==null?0:r2(r.rate),role:r.role,portalRole:r.role,div:r.div,fee:r.fee,paid:false,paidOn:null});
       UI.refSeason=sy;save();render();
-      toast(`${fresh.length} game${fresh.length===1?'':'s'} imported — ⌘Z to undo`);
+      toast(`${[fresh.length?`${fresh.length} imported`:'',moved.length?`${moved.length} role${moved.length===1?'':'s'} updated`:''].filter(Boolean).join(', ')} — ⌘Z to undo`);
     });
 }
 function importRefGames(){
@@ -4813,7 +4839,7 @@ document.addEventListener('change',e=>{
     const[gid,field]=d.rf.split(':'),g=refGames().find(x=>x.id===gid);if(!g)return;
     pushUndo(null);
     if(field==='paid'){g.paid=t.checked;g.paidOn=t.checked?iso(new Date()):null}
-    else if(field==='rate')g.rate=r2(n0(String(t.value).replace(/[$,]/g,'')));
+    else if(field==='rate'){g.rate=r2(n0(String(t.value).replace(/[$,]/g,'')));g.rateManual=true}
     else if(field==='date'){if(t.value)g.date=t.value}
     else g[field]=t.value.trim();
     save();
@@ -4876,6 +4902,15 @@ document.addEventListener('click',e=>{
   }
   if(d.calweek){if(S.weeks[d.calweek]){UI.week=d.calweek;UI.tab='sheet';render()}return}
   if(d.refseason!=null){if(d.refseason!==''){UI.refSeason=+d.refseason;render()}return}
+  /* A role switch reprices the game from the rate sheet — the crew is often
+     settled after the portal first posts it. A rate typed by hand is kept. */
+  if(d.refrole){const[gid,role]=d.refrole.split(':'),g=refGames().find(x=>x.id===gid);
+    if(g&&g.role!==role){pushUndo(null);
+      if(g.gameNo&&g.portalRole==null)g.portalRole=g.role;   /* remember what the portal said before the switch */
+      g.role=role;
+      const pay=g.div&&!g.rateManual?refPay(g.div,role,g.fee):null;if(pay!=null)g.rate=pay;
+      save();render();toast(`${role==='ref'?'Referee':'Linesperson'} — ${money(n0(g.rate))}${pay==null&&g.rateManual?' (your rate kept)':''}`)}
+    return}
   if(d.refdel){const gs=refGames(),j=gs.findIndex(g=>g.id===d.refdel);
     if(j>=0){pushUndo(null);gs.splice(j,1);save();render();toast('Game removed — ⌘Z to undo')}return}
   if(d.strat){UI.strategy=d.strat;render();return}
