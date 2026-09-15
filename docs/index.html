@@ -2258,7 +2258,8 @@ function simulate(debts,{strategy='avalanche',budget=0,fromWeek=thisWeek(),cap=5
     /* one-time money — a sale, a refund — joins that week's pool after the
        minimums, so it goes wherever attack goes. It is not a weekly amount and
        stays out of `weekBudget`. */
-    const lump=lumps.reduce((t,l)=>t+(l.w===w?n0(l.amount):0),0);
+    const lump=lumps.reduce((t,l)=>t+(l.w===w&&!l.cards?n0(l.amount):0),0);
+    const cardLump=lumps.reduce((t,l)=>t+(l.w===w&&l.cards?n0(l.amount):0),0);
     if(sheetFirst&&w===0){
       pool=budget+extra;
       for(const d of D){const p=Math.min(n0(d.current),d.balance,pool);d.balance-=p;pool-=p}
@@ -2289,6 +2290,16 @@ function simulate(debts,{strategy='avalanche',budget=0,fromWeek=thisWeek(),cap=5
       for(const d of live){if(pool<=0.005)break;if(d.grace)continue;
         const p=Math.min(pool,d.balance);d.balance-=p;pool-=p}
     }
+    }
+    /* Money earmarked for cards goes to them in the week's order once the
+       week's own payments are made; only when every card is clear does any of
+       it move on to a loan. */
+    if(cardLump>0.005){
+      let lp=cardLump;const live=order();
+      for(const d of live){if(lp<=0.005)break;if(d.kind!=='card'||d.grace)continue;
+        const p=Math.min(lp,d.balance);d.balance-=p;lp-=p}
+      for(const d of live){if(lp<=0.005)break;if(d.grace)continue;
+        const p=Math.min(lp,d.balance);d.balance-=p;lp-=p}
     }
     w++;
     for(const d of D)if(d.balance<=0.005&&d.paidOff==null){d.balance=0;d.paidOff=w}
@@ -3278,7 +3289,7 @@ function viewPayoff(el){
   const av =simulate(debts,sheetSimOpts(k,budget,'avalanche',funds));
   const sn =simulate(debts,sheetSimOpts(k,budget,'snowball',funds));
   const cus=simulate(debts,sheetSimOpts(k,budget,'custom',funds));
-  const flat=simulate(debts,{strategy:strat,budget,fromWeek:k,steps:[],sheetFirst:true});
+  const flat=simulate(debts,{strategy:strat,budget,fromWeek:k,steps:[],sheetFirst:true,lumps:sheetLumps(k)});
   const fundOf=Object.fromEntries(funds.map(f=>[f.id,f]));
   /* What each step really does once the sheet is the starting point. */
   const stepSays=st=>{
@@ -3560,7 +3571,21 @@ function sheetFunds(k){
         if(wk>=1)renew.add(wk)}
       return{id:r.a.id,every:t.every,amount:n0(t.amount),weekly:weeklyOf(r),after:r.after,baseline:r.total,renew}});
 }
-const sheetSimOpts=(k,budget,strategy,funds)=>({...simOpts(k,budget,strategy),sheetFirst:true,funds:funds||sheetFunds(k)});
+/* Reffing pay not yet received, from games already logged. Each lands two
+   weeks after its game and goes to the cards; one long overdue lands in the
+   first week after the sheet. Paid games are left out — that money has
+   already been placed on a sheet. Games are grouped by the week they land. */
+const REF_LAG_DAYS=14;
+function sheetLumps(k){
+  const by={};
+  for(const g of ((S.reffing&&S.reffing.games)||[])){
+    if(g.paid||n0(g.rate)<=0||!g.date)continue;
+    const w=Math.max(1,Math.floor(daysBetween(k,addDays(g.date,REF_LAG_DAYS))/7));
+    (by[w]=by[w]||{w,amount:0,n:0,cards:true}).amount+=n0(g.rate);by[w].n++;
+  }
+  return Object.values(by).map(l=>({...l,amount:r2(l.amount),label:`Reffing pay — ${l.n} game${l.n===1?'':'s'}`}));
+}
+const sheetSimOpts=(k,budget,strategy,funds)=>({...simOpts(k,budget,strategy),sheetFirst:true,funds:funds||sheetFunds(k),lumps:sheetLumps(k)});
 
 function viewProjections(el){
   const k=currentWeek(),C=computeWeek(k),T=C.totals;
@@ -3579,7 +3604,9 @@ function viewProjections(el){
   if(car.insurance==null)car.insurance=25;
   const carDate=car.date||addWeeks(k,1);
   const carW=Math.max(0,Math.floor(daysBetween(k,carDate)/7));
-  const lumps=car.on&&n0(car.amount)>0?[{w:carW,amount:n0(car.amount),label:'Other car sold'}]:[];
+  const carLumps=car.on&&n0(car.amount)>0?[{w:carW,amount:n0(car.amount),label:'Other car sold'}]:[];
+  const refLumps=sheetLumps(k),refOwed=r2(refLumps.reduce((t,l)=>t+l.amount,0)),refN=refLumps.reduce((t,l)=>t+l.n,0);
+  const lumps=[...refLumps,...carLumps];
   /* With the car gone, its insurance drops to what is typed here, from the
      week after the sale. What it costs now is read off the sheet, so the
      saving follows whatever the sheet sends it. */
@@ -3587,7 +3614,8 @@ function viewProjections(el){
   const insSave=r2(Math.max(0,insNow-n0(car.insurance)));
   const raises=car.on&&insSave>0?[{from:carW+1,weekly:insSave,label:`Car insurance drops to ${money(n0(car.insurance))}/wk`}]:[];
   const sim=simulate(debts,{...sheetSimOpts(k,budget,UI.strategy),lumps,raises});
-  const base=lumps.length||raises.length?simulate(debts,sheetSimOpts(k,budget,UI.strategy)):sim;
+  const isWhatIf=carLumps.length>0||raises.length>0;
+  const base=isWhatIf?simulate(debts,sheetSimOpts(k,budget,UI.strategy)):sim;
   const never=sim.weeks===Infinity;
   const when=w=>addWeeks(k,w);
   const accts=[...sim.debts].sort((a,b)=>(a.paidOff??1e9)-(b.paidOff??1e9));
@@ -3619,7 +3647,7 @@ function viewProjections(el){
        of the starting point, not something that happens later */
     for(const d of sim.debts)
       if(w>1&&d.paidOff===w&&n0(minOf[d.id])>0.005)here.push({what:`${d.name} paid off — its minimum joins attack`,gain:n0(minOf[d.id])});
-    for(const l of lumps)if(l.w===w)here.unshift({what:`${l.label} — ${money(l.amount)} to debt, once`,gain:l.amount,once:true});
+    for(const l of lumps)if(l.w===w)here.unshift({what:`${l.label} — ${money(l.amount)} to ${l.cards?'cards':'debt'}, once`,gain:l.amount,once:true});
     if(here.length)events.push({w,here,after:attackAt(w)});
   }
   events.forEach((e,i)=>e.n=String(i+1));
@@ -3658,10 +3686,10 @@ function viewProjections(el){
       ${insRow?`<label class="wi-f">car insurance then <span class="mark">$</span><input class="cell inline" data-wi="insurance" inputmode="decimal"
         style="${figureWidth(n0(car.insurance).toFixed(2))}" value="${n0(car.insurance).toFixed(2)}" aria-label="Car insurance per week after the sale">/wk
         <span class="wi-now">now ${money(insNow)}</span></label>`:''}
-      <span class="wi-says">${lumps.length
+      <span class="wi-says">${isWhatIf
         ?(base.weeks===Infinity||sim.weeks===Infinity?'':`Debt free <b>${longDate(sim.debtFreeDate)}</b> instead of ${longDate(base.debtFreeDate)}`
           +` — ${monthsLabel(weeksToMonths(base.weeks)-weeksToMonths(sim.weeks))} sooner, ${money0(base.totalInterest-sim.totalInterest)} less interest`)
-        :'Off — the projection below is without it.'}${lumps.length&&raises.length?`<span class="wi-now"> · includes ${money(insSave)}/wk off insurance</span>`:''}</span>
+        :'Off — the projection below is without it.'}${carLumps.length&&raises.length?`<span class="wi-now"> · includes ${money(insSave)}/wk off insurance</span>`:''}</span>
     </div>
   </section>
 
@@ -3670,7 +3698,8 @@ function viewProjections(el){
     <p class="lede muted">The first week is this sheet exactly as entered. After that, the same total goes to
       debt every week with nothing new charged, interest at each account's rate, card minimums paid from the
       card-minimum bucket, and attack moving down the order as each debt clears. A fund that renews takes its weekly
-      amount back while it refills. It updates whenever the sheet does.</p>
+      amount back while it refills. It updates whenever the sheet does.${refN?` Includes <b>${money(refOwed)}</b> of reffing
+      pay still owed for ${refN} game${refN===1?'':'s'}, going to the cards two weeks after each game.`:''}</p>
     <div class="chart" id="projTotal"></div>
   </section>
 
