@@ -2415,17 +2415,20 @@ function sparkline(pts,{w=190,h=38,accent='var(--s1)'}={}){
    Views
    ═══════════════════════════════════════════════════════════════════ */
 const TABS=[
-  {id:'week',    label:'This Week',  k:'1'},
-  {id:'sheet',   label:'Allocation', k:'2'},
-  {id:'calendar',label:'Calendar',   k:'3'},
-  {id:'attack',  label:'Attack',     k:'4'},
-  {id:'payoff',  label:'Payoff',     k:'5'},
-  {id:'projections',label:'Projections',k:'6'},
-  {id:'plan',    label:'Plan',       k:'7'},
-  {id:'history', label:'History',    k:'8'},
-  {id:'accounts',label:'Accounts',   k:'9'},
-  {id:'reffing', label:'Reffing',    k:'0'},
+  {id:'week',    label:'This Week'},
+  {id:'sheet',   label:'Allocation'},
+  {id:'calendar',label:'Calendar'},
+  {id:'attack',  label:'Attack',     hidden:true},
+  {id:'payoff',  label:'Payoff',     hidden:true},
+  {id:'projections',label:'Projections'},
+  {id:'plan',    label:'Plan'},
+  {id:'history', label:'History',    hidden:true},
+  {id:'accounts',label:'Accounts'},
+  {id:'reffing', label:'Reffing'},
 ];
+/* Hidden views keep their code and still render if reached, but have no place
+   in the nav and no key. Keys number whatever is left, in order. */
+TABS.filter(t=>!t.hidden).forEach((t,i)=>t.k=String((i+1)%10));
 const CONVERTED=new Set(['week','sheet','calendar','attack','payoff','projections','reffing']);   // grows as each view lands
 /* Replacing #view.innerHTML removes whatever input is focused, and if the user
    has typed in it the browser fires `change` at it SYNCHRONOUSLY, mid-render.
@@ -2442,7 +2445,8 @@ function render(){
 function renderInner(){
   /* a copy published without seed data starts here — nothing personal ships in the page */
   if(!S.accounts.length||!weekKeys().length){renderWelcome();return}
-  $('#nav').innerHTML=TABS.map(t=>
+  if((TABS.find(t=>t.id===UI.tab)||{}).hidden)UI.tab='week';   /* a remembered tab that is no longer in the nav */
+  $('#nav').innerHTML=TABS.filter(t=>!t.hidden).map(t=>
     `<button data-tab="${t.id}"${UI.tab===t.id?' aria-current="page"':''}>${t.label}<span class="key">${t.k}</span></button>`).join('');
   const k=currentWeek(),C=computeWeek(k);
   if(C)$('#railstat').innerHTML=
