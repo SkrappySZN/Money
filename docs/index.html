@@ -878,6 +878,7 @@ table.cmp tr.planned td:first-child::after{content:'planned';margin-left:var(--s
   border-bottom:var(--rule-width) solid var(--rule);padding:0 0 1px;min-width:4ch;font-variant-numeric:tabular-nums}
 .wi-f input.cell:focus{outline:none;border-bottom-color:var(--accent)}
 .wi-says{color:var(--ink-secondary);font-size:var(--text-2)}
+.wi-now{color:var(--ink-muted);font-size:var(--text-2)}
 .wi-says b{color:var(--positive);font-weight:var(--weight-semibold)}
 
 /* ══ Calendar ═══════════════════════════════════════════════════════
@@ -2154,7 +2155,7 @@ function stepFireWeek(st,fromWeek){
   }
   return null;
 }
-function simulate(debts,{strategy='avalanche',budget=0,fromWeek=thisWeek(),cap=5200,steps=[],sheetFirst=false,funds=[],lumps=[]}={}){
+function simulate(debts,{strategy='avalanche',budget=0,fromWeek=thisWeek(),cap=5200,steps=[],sheetFirst=false,funds=[],lumps=[],raises=[]}={}){
   const D=debts.map(d=>({...d,paidOff:null,interest:0}));
   if(!D.length)return{weeks:0,totalInterest:0,debts:D,series:[{w:0,total:0}],fired:[],endBudget:budget};
   const rank=Object.fromEntries((S.plan?.order||[]).map((id,i)=>[id,i]));
@@ -2214,7 +2215,10 @@ function simulate(debts,{strategy='avalanche',budget=0,fromWeek=thisWeek(),cap=5
        goes where the strategy points. The strategy runs everything after. */
     let pool;
     const delta=fundDelta(w);
-    lastBudget=r2(budget+extra+delta);weekBudget.push(lastBudget);
+    /* a lasting change to what goes to debt from a given week on — a cost that
+       stops or shrinks. Unlike a lump it is weekly money, so it is in the total. */
+    const raise=raises.reduce((t,r)=>t+(w>=r.from?n0(r.weekly):0),0);
+    lastBudget=r2(budget+extra+delta+raise);weekBudget.push(lastBudget);
     /* one-time money — a sale, a refund — joins that week's pool after the
        minimums, so it goes wherever attack goes. It is not a weekly amount and
        stays out of `weekBudget`. */
@@ -2240,7 +2244,7 @@ function simulate(debts,{strategy='avalanche',budget=0,fromWeek=thisWeek(),cap=5
       pool=0;
     }else{
       const live=order();
-      pool=Math.max(0,budget+extra+delta)+lump;
+      pool=Math.max(0,budget+extra+delta+raise)+lump;
       /* a grace balance is cleared in full or not at all — never partially */
       for(const d of live){if(!d.grace||d.balance<=0.005)continue;
         if(pool+0.005>=d.balance){pool-=d.balance;d.balance=0}}
@@ -3408,11 +3412,18 @@ function viewProjections(el){
      in the chosen order. */
   S.plan.whatIf=S.plan.whatIf||{};
   const car=S.plan.whatIf.carSale=S.plan.whatIf.carSale||{on:false,amount:12000,date:''};
+  if(car.insurance==null)car.insurance=25;
   const carDate=car.date||addWeeks(k,1);
   const carW=Math.max(0,Math.floor(daysBetween(k,carDate)/7));
   const lumps=car.on&&n0(car.amount)>0?[{w:carW,amount:n0(car.amount),label:'Other car sold'}]:[];
-  const sim=simulate(debts,{...sheetSimOpts(k,budget,UI.strategy),lumps});
-  const base=lumps.length?simulate(debts,sheetSimOpts(k,budget,UI.strategy)):sim;
+  /* With the car gone, its insurance drops to what is typed here, from the
+     week after the sale. What it costs now is read off the sheet, so the
+     saving follows whatever the sheet sends it. */
+  const insRow=C.byId['car-insurance'],insNow=insRow?r2(n0(insRow.total)):0;
+  const insSave=r2(Math.max(0,insNow-n0(car.insurance)));
+  const raises=car.on&&insSave>0?[{from:carW+1,weekly:insSave,label:`Car insurance drops to ${money(n0(car.insurance))}/wk`}]:[];
+  const sim=simulate(debts,{...sheetSimOpts(k,budget,UI.strategy),lumps,raises});
+  const base=lumps.length||raises.length?simulate(debts,sheetSimOpts(k,budget,UI.strategy)):sim;
   const never=sim.weeks===Infinity;
   const when=w=>addWeeks(k,w);
   const accts=[...sim.debts].sort((a,b)=>(a.paidOff??1e9)-(b.paidOff??1e9));
@@ -3432,12 +3443,13 @@ function viewProjections(el){
     const here=[];
     for(const f of sim.fired)
       if(f.week===w&&(f.trigger||{}).type!=='payoff')here.push({what:f.label,gain:n0(f.weekly)});
+    for(const r of raises)if(r.from===w)here.push({what:`${r.label} — the rest joins attack`,gain:r.weekly});
     const stepGain=here.reduce((t,e)=>t+e.gain,0);
     const diff=r2(n0(WB[w])-n0(WB[w-1])-stepGain);
     if(Math.abs(diff)>0.005){
-      const f=funds.find(x=>x.renew.has(w));
+      const f=funds.find(x=>x.renew.has(w))||(funds.length===1?funds[0]:null);
       here.push(f&&diff<0?{what:`${acctName(f.id)} renews — its weekly goes back to the premium`,gain:diff}
-        :{what:`${f?acctName(f.id):'A renewing fund'} is refilled`,gain:diff});
+        :{what:`${f?acctName(f.id):'A renewing fund'} is refilled — its weekly returns to attack`,gain:diff});
     }
     /* a debt clearing in week 1 was paid off by the sheet itself — it is part
        of the starting point, not something that happens later */
@@ -3479,10 +3491,13 @@ function viewProjections(el){
       <label class="wi-f">for <span class="mark">$</span><input class="cell inline" data-wi="amount" inputmode="decimal"
         style="${figureWidth(n0(car.amount).toFixed(2))}" value="${n0(car.amount).toFixed(2)}" aria-label="Sale amount"></label>
       <label class="wi-f">money in <input class="cell cell-date" type="date" data-wi="date" value="${carDate}" aria-label="Date the money arrives"></label>
+      ${insRow?`<label class="wi-f">car insurance then <span class="mark">$</span><input class="cell inline" data-wi="insurance" inputmode="decimal"
+        style="${figureWidth(n0(car.insurance).toFixed(2))}" value="${n0(car.insurance).toFixed(2)}" aria-label="Car insurance per week after the sale">/wk
+        <span class="wi-now">now ${money(insNow)}</span></label>`:''}
       <span class="wi-says">${lumps.length
         ?(base.weeks===Infinity||sim.weeks===Infinity?'':`Debt free <b>${longDate(sim.debtFreeDate)}</b> instead of ${longDate(base.debtFreeDate)}`
           +` — ${monthsLabel(weeksToMonths(base.weeks)-weeksToMonths(sim.weeks))} sooner, ${money0(base.totalInterest-sim.totalInterest)} less interest`)
-        :'Off — the projection below is without it.'}</span>
+        :'Off — the projection below is without it.'}${lumps.length&&raises.length?`<span class="wi-now"> · includes ${money(insSave)}/wk off insurance</span>`:''}</span>
     </div>
   </section>
 
@@ -4409,6 +4424,7 @@ document.addEventListener('change',e=>{
     if(d.wi==='on')car.on=t.checked;
     else if(d.wi==='amount'){const v=n0(String(t.value).replace(/[$,]/g,''));if(v>=0)car.amount=r2(v)}
     else if(d.wi==='date')car.date=t.value||'';
+    else if(d.wi==='insurance'){const v=n0(String(t.value).replace(/[$,]/g,''));if(v>=0)car.insurance=r2(v)}
     save();render();return;
   }
   if(d.caldate){const c=S.plan.calendar.find(x=>x.id===d.caldate);
