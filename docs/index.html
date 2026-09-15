@@ -1277,7 +1277,7 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;
 .legacy .tlbar i{display:block;height:100%;border-radius:6px;background:var(--s1);transition:width var(--d3) var(--ease)}
 .legacy .tlbar i.never{background:repeating-linear-gradient(45deg,var(--bad),var(--bad) 4px,var(--bad-bg) 4px,var(--bad-bg) 9px)}
 .legacy .tlv{text-align:right;color:var(--ink-2);font-variant-numeric:tabular-nums}
-.legacy .acct{display:grid;grid-template-columns:1fr 116px 96px 98px 100px 88px 88px 64px 100px;gap:var(--sp-2);
+.legacy .acct{display:grid;grid-template-columns:1fr 116px 96px 98px 100px 88px 88px 132px 64px 100px;gap:var(--sp-2);
  align-items:center;padding:10px var(--sp-3);border-bottom:1px solid var(--row-hair);font-size:var(--t-sm)}
 .legacy .acct.hd{color:var(--muted);font-size:var(--t-xs);font-weight:600;border-bottom:1px solid var(--hair)}
 .legacy .acct input,.legacy .acct select{width:100%;padding:6px 8px}
@@ -1549,6 +1549,7 @@ function migrate(){
   migrateV10();
   migrateV11();
   migrateV12();
+  migrateV13();
 }
 /* v2 — grouping corrections, Sept 10 2026. Runs against the ledger already
    in the browser, not just the seed: editing SEED alone would have changed
@@ -1604,6 +1605,15 @@ function migrate(){
    before, or Unplanned keeps showing the estimate on rows already corrected.
    computeWeek writes derived fields back into entries, so the ledger is
    snapshotted and restored around it: `projected` is the only thing changed. */
+/* v13 — the motorcycle premium renews every six months. `every` on a target
+   marks a goal that is spent and has to be saved again each term, with `by`
+   as the next renewal. */
+function migrateV13(){
+  if(S.v>=13)return;
+  const a=acct('motorcycle-insurance');
+  if(a&&a.target&&a.target.every==null)a.target.every=6;
+  S.v=13;
+}
 function migrateV12(){
   if(S.v>=12)return;
   const ks=Object.keys(S.weeks).sort(),snap=JSON.stringify(S.weeks),carries={};
@@ -2119,7 +2129,7 @@ function stepFireWeek(st,fromWeek){
   }
   return null;
 }
-function simulate(debts,{strategy='avalanche',budget=0,fromWeek=thisWeek(),cap=5200,steps=[],sheetFirst=false}={}){
+function simulate(debts,{strategy='avalanche',budget=0,fromWeek=thisWeek(),cap=5200,steps=[],sheetFirst=false,funds=[]}={}){
   const D=debts.map(d=>({...d,paidOff:null,interest:0}));
   if(!D.length)return{weeks:0,totalInterest:0,debts:D,series:[{w:0,total:0}],fired:[],endBudget:budget};
   const rank=Object.fromEntries((S.plan?.order||[]).map((id,i)=>[id,i]));
@@ -2130,7 +2140,22 @@ function simulate(debts,{strategy='avalanche',budget=0,fromWeek=thisWeek(),cap=5
     if(strategy==='custom')return live.sort((a,b)=>(rank[a.id]??999)-(rank[b.id]??999)||b.apr-a.apr);
     return live.sort((a,b)=>b.apr-a.apr||b.balance-a.balance);
   };
-  const ST=steps.map(st=>({...st,fireWeek:stepFireWeek(st,fromWeek)}));
+  /* A fund that renews is tracked week by week instead of switching on once:
+     each renewal takes the goal back out of it, and until it is refilled its
+     weekly amount goes to the fund rather than to debt. `baseline` is what the
+     sheet sends the fund, so the difference from it is what debt gains or loses. */
+  const FU=funds.map(f=>({...f,b:n0(f.after)}));
+  const fundIds=new Set(FU.map(f=>f.id));
+  const fundDelta=w=>{let d=0;
+    for(const f of FU){
+      if(w===0)continue;
+      if(f.renew.has(w))f.b-=f.amount;
+      const c=f.b<f.amount-0.005?Math.min(f.weekly,f.amount-f.b):0;
+      f.b+=c;d+=f.baseline-c;
+    }
+    return d};
+  let lastBudget=budget;
+  const ST=steps.filter(st=>!fundIds.has((st.trigger||{}).acct)).map(st=>({...st,fireWeek:stepFireWeek(st,fromWeek)}));
   const firedIds=new Set(),fired=[];
   let w=0,totalInterest=0,extra=0;
   const byDebt=()=>Object.fromEntries(D.map(d=>[d.id,r2(Math.max(0,d.balance))]));
@@ -2163,6 +2188,8 @@ function simulate(debts,{strategy='avalanche',budget=0,fromWeek=thisWeek(),cap=5
        holds beyond that (the card-minimum bucket) pays card minimums and then
        goes where the strategy points. The strategy runs everything after. */
     let pool;
+    const delta=fundDelta(w);
+    lastBudget=r2(budget+extra+delta);
     if(sheetFirst&&w===0){
       pool=budget+extra;
       for(const d of D){const p=Math.min(n0(d.current),d.balance,pool);d.balance-=p;pool-=p}
@@ -2183,7 +2210,7 @@ function simulate(debts,{strategy='avalanche',budget=0,fromWeek=thisWeek(),cap=5
       pool=0;
     }else{
       const live=order();
-      pool=budget+extra;
+      pool=Math.max(0,budget+extra+delta);
       /* a grace balance is cleared in full or not at all — never partially */
       for(const d of live){if(!d.grace||d.balance<=0.005)continue;
         if(pool+0.005>=d.balance){pool-=d.balance;d.balance=0}}
@@ -2202,7 +2229,7 @@ function simulate(debts,{strategy='avalanche',budget=0,fromWeek=thisWeek(),cap=5
   }
   const done=D.every(d=>d.balance<=0.005);
   return{weeks:done?w:Infinity,totalInterest:r2(totalInterest),debts:D,series,fromWeek,fired,
-    endBudget:r2(budget+extra),
+    endBudget:FU.length?lastBudget:r2(budget+extra),
     debtFreeDate:done?dateAfterWeeks(fromWeek,w):null};
 }
 
@@ -3281,7 +3308,16 @@ function viewProjections(el){
     <p class="lede">Nothing left to project — every loan and card is at $0.</p></main>`;return}
   const floor=r2(debts.reduce((t,d)=>t+d.weeklyMin,0));
   const budget=Math.max(n0(T.debtFunded),floor);
-  const sim=simulate(debts,{...simOpts(k,budget,UI.strategy),sheetFirst:true});
+  /* funds whose goal is spent and saved again every term */
+  const funds=C.rows.filter(r=>!r.isRollup&&r.a.target&&r.a.target.every&&r.a.target.by&&n0(r.a.target.amount)>0&&weeklyOf(r)>0)
+    .map(r=>{const t=r.a.target,renew=new Set();
+      const anchor=parseISO(t.by).getDate();
+      for(let i=0;i<240;i++){const d0=parseISO(t.by);
+        const x=monthlyOn(d0.getFullYear(),d0.getMonth()+i*t.every,anchor);
+        const wk=Math.floor(daysBetween(k,x)/7);
+        if(wk>=1)renew.add(wk)}
+      return{id:r.a.id,amount:n0(t.amount),weekly:weeklyOf(r),after:r.after,baseline:r.total,renew}});
+  const sim=simulate(debts,{...simOpts(k,budget,UI.strategy),sheetFirst:true,funds});
   const never=sim.weeks===Infinity;
   const span=sim.series.length;
   const step=Math.max(1,Math.ceil(span/104));
@@ -3311,7 +3347,8 @@ function viewProjections(el){
     <h2 class="sect-label" id="pt-h">All loans and cards</h2>
     <p class="lede muted">The first week is this sheet exactly as entered. After that, the same total goes to
       debt every week with nothing new charged, interest at each account's rate, card minimums paid from the
-      card-minimum bucket, and attack moving down the order as each debt clears. It updates whenever the sheet does.</p>
+      card-minimum bucket, and attack moving down the order as each debt clears. A fund that renews takes its weekly
+      amount back while it refills. It updates whenever the sheet does.</p>
     <div class="chart" id="projTotal"></div>
   </section>
 
@@ -3836,6 +3873,7 @@ function viewAccounts(el){
     <div class="acct hd"><div>Name</div><div>Type</div><div class="hideS">Limit</div><div class="hideS">APR</div>
       <div class="hideS">Min / month</div><div class="hideS">Weekly out</div>
       <div class="hideS" title="What a sinking fund is saving toward. Reaching it is what frees the weekly amount.">Goal</div>
+      <div class="hideS" title="When the goal is needed by — for a bill that renews, the next renewal">Goal by</div>
       <div class="hideS" title="No interest while the statement balance is paid in full">Grace</div><div></div></div>
     ${GROUPS.map(g=>{
       const rows=list.filter(a=>(a.group||KIND_GROUP[a.kind])===g.id);
@@ -3852,6 +3890,7 @@ function viewAccounts(el){
         <div class="hideS"><input type="text" inputmode="decimal" data-a="${a.id}:minAmt" value="${n0(a.minAmt)||''}" placeholder="—"></div>
         <div class="hideS">${KIND_INFLOW(a.kind)?`<input type="text" inputmode="decimal" data-a="${a.id}:weeklyOutflow" value="${n0(a.weeklyOutflow)||''}" placeholder="0">`:''}</div>
         <div class="hideS">${a.target?`<input type="text" inputmode="decimal" data-a="${a.id}:targetAmt" value="${n0(a.target.amount)||''}" placeholder="—" title="Goal for ${esc(a.name)}">`:''}</div>
+        <div class="hideS">${a.target?`<input type="date" data-a="${a.id}:targetBy" value="${a.target.by||''}" title="${a.target.every?`Renews every ${a.target.every} months — this is the next renewal`:'Needed by'}">`:''}</div>
         <div class="hideS">${a.kind==='card'?`<label class="gracebox" title="No interest while the whole statement balance is paid by the due date. A partial payment ends it and the APR applies to everything, retroactively."><input type="checkbox" class="paidbox" data-grace="${a.id}"${a.grace?' checked':''}><span>${a.grace?'on':'off'}</span></label>`:''}</div>
         <div style="display:flex;gap:4px;justify-content:flex-end">
           <button class="btn sm ghost" data-move="${a.id}:-1" title="Move up">↑</button>
@@ -4152,6 +4191,7 @@ function setAcctField(key,val){
      are left as they are. This writes on every keystroke, so a field emptied
      on the way to a new figure is ignored rather than wiping the goal. */
   else if(field==='targetAmt'){if(a.target&&n0(val)>0)a.target.amount=r2(n0(val))}
+  else if(field==='targetBy'){if(a.target){if(val)a.target.by=val;else delete a.target.by}}
   else a[field]=n0(val);
 }
 /* A money cell carries "$12,500.00" at rest and a bare number while it is
