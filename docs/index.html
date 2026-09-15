@@ -386,6 +386,9 @@ td.dcell.is-empty input{color:transparent}
 td.dcell.is-empty:hover::after,tr:hover td.dcell.is-empty::after{opacity:0}
 td.dcell.is-empty:hover input,tr:hover td.dcell.is-empty input{color:var(--ink-muted)}
 td.dcell input:focus{color:var(--ink)}
+td.dcell.is-thisweek{background:var(--attention-wash)}
+td.dcell.is-thisweek input{color:var(--attention);font-weight:var(--weight-semibold)}
+td.dcell.is-thisweek input:focus{color:var(--attention)}
 
 /* This Week hands off to the sheet rather than repeating it. */
 .sheet-link{display:flex;width:100%;align-items:baseline;gap:var(--space-3);text-align:left;
@@ -2875,9 +2878,15 @@ function cellDate(r,f){
   const a=r.a,id=a.id;
   if(r.isRollup||a.kind==='income')return '<td></td>';
   if(!KIND_DEBT(a.kind))return dimCell('—');
-  const v=r[f]||'';
-  return `<td class="num dcell${v?'':' is-empty'}"><input class="cell cell-date" type="date"`
-    +`${isLocked(currentWeek())?' disabled':''}`
+  const v=r[f]||'',k=currentWeek();
+  /* A close or due date inside this sheet's own week is the one to act on
+     while the sheet is being worked — a statement minimum to enter, a
+     payment to make. Worth noticing, not wrong, so it takes attention. */
+  const now=v&&v>=k&&v<=addDays(k,6);
+  return `<td class="num dcell${v?'':' is-empty'}${now?' is-thisweek':''}"`
+    +`${now?` title="${f==='close'?'Statement closes':'Due'} ${dueLabel(v)} — this week"`:''}>`
+    +`<input class="cell cell-date" type="date"`
+    +`${isLocked(k)?' disabled':''}`
     +` data-k="${id}:${f}" value="${v}"></td>`;
 }
 
