@@ -2115,7 +2115,7 @@ function stepFireWeek(st,fromWeek){
   }
   return null;
 }
-function simulate(debts,{strategy='avalanche',budget=0,fromWeek=thisWeek(),cap=5200,steps=[]}={}){
+function simulate(debts,{strategy='avalanche',budget=0,fromWeek=thisWeek(),cap=5200,steps=[],sheetFirst=false}={}){
   const D=debts.map(d=>({...d,paidOff:null,interest:0}));
   if(!D.length)return{weeks:0,totalInterest:0,debts:D,series:[{w:0,total:0}],fired:[],endBudget:budget};
   const rank=Object.fromEntries((S.plan?.order||[]).map((id,i)=>[id,i]));
@@ -2141,12 +2141,32 @@ function simulate(debts,{strategy='avalanche',budget=0,fromWeek=thisWeek(),cap=5
         const d=D.find(x=>x.id===tr.acct);
         go=d?(d.paidOff!=null&&w>=d.paidOff):true;   // already clear → already freed
       }else go=(st.fireWeek!=null&&w>=st.fireWeek);
-      if(go){firedIds.add(st.id);extra+=n0(st.weekly);fired.push({...st,week:w})}
+      /* a step already in effect when the sheet was written is already in the
+         sheet's own allocation — the money it freed has been placed — so
+         starting from the sheet, only steps that land later add to it */
+      if(go){firedIds.add(st.id);if(!(sheetFirst&&w===0))extra+=n0(st.weekly);fired.push({...st,week:w})}
     }
+    /* `sheetFirst`: the opening week is the sheet itself, not a strategy's
+       idea of it. Each debt gets exactly what the sheet sends it — a payoff
+       lands, a skipped payment stays skipped — on payday, before that week's
+       interest, the way the sheet's own After has it. Whatever the budget
+       holds beyond that (the card-minimum bucket) pays card minimums and then
+       goes where the strategy points. The strategy runs everything after. */
+    let pool;
+    if(sheetFirst&&w===0){
+      pool=budget+extra;
+      for(const d of D){const p=Math.min(n0(d.current),d.balance,pool);d.balance-=p;pool-=p}
+      for(const d of D){if(d.balance<=0.005)continue;
+        const i=d.balance*d.dpr*7;d.balance+=i;d.interest+=i;totalInterest+=i}
+      const live=order();
+      for(const d of live){if(d.kind!=='card'||d.grace)continue;
+        const p=Math.min(d.weeklyMin,d.balance,pool);d.balance-=p;pool-=p}
+      for(const d of live){if(pool<=0.005)break;if(d.grace)continue;
+        const p=Math.min(pool,d.balance);d.balance-=p;pool-=p}
+    }else{
     /* interest first, the way a card does it */
     for(const d of D){if(d.balance<=0.005)continue;
       const i=d.balance*d.dpr*7;d.balance+=i;d.interest+=i;totalInterest+=i}
-    let pool;
     if(strategy==='current'){
       for(const d of D){if(d.balance<=0.005)continue;
         const p=Math.min(d.current,d.balance);d.balance-=p}
@@ -2161,6 +2181,7 @@ function simulate(debts,{strategy='avalanche',budget=0,fromWeek=thisWeek(),cap=5
         const p=Math.min(d.weeklyMin,d.balance,pool);d.balance-=p;pool-=p}
       for(const d of live){if(pool<=0.005)break;if(d.grace)continue;
         const p=Math.min(pool,d.balance);d.balance-=p;pool-=p}
+    }
     }
     w++;
     for(const d of D)if(d.balance<=0.005&&d.paidOff==null){d.balance=0;d.paidOff=w}
@@ -3250,7 +3271,7 @@ function viewProjections(el){
     <p class="lede">Nothing left to project — every loan and card is at $0.</p></main>`;return}
   const floor=r2(debts.reduce((t,d)=>t+d.weeklyMin,0));
   const budget=Math.max(n0(T.debtFunded),floor);
-  const sim=simulate(debts,simOpts(k,budget,UI.strategy));
+  const sim=simulate(debts,{...simOpts(k,budget,UI.strategy),sheetFirst:true});
   const never=sim.weeks===Infinity;
   const span=sim.series.length;
   const step=Math.max(1,Math.ceil(span/104));
@@ -3278,9 +3299,9 @@ function viewProjections(el){
 
   <section class="band" aria-labelledby="pt-h">
     <h2 class="sect-label" id="pt-h">All loans and cards</h2>
-    <p class="lede muted">Every week repeats this sheet's payments with nothing new charged, interest at each
-      account's rate, card minimums paid from the card-minimum bucket, and attack moving to the next debt as each
-      one clears. It updates whenever the sheet does.</p>
+    <p class="lede muted">The first week is this sheet exactly as entered. After that, the same total goes to
+      debt every week with nothing new charged, interest at each account's rate, card minimums paid from the
+      card-minimum bucket, and attack moving down the order as each debt clears. It updates whenever the sheet does.</p>
     <div class="chart" id="projTotal"></div>
   </section>
 
