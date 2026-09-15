@@ -665,6 +665,11 @@ input.cell.is-attack.is-zero{color:var(--ink-muted);font-weight:var(--weight-reg
 .markdot{fill:var(--paper);stroke:var(--ink);stroke-width:1.5}
 .marknum{fill:var(--ink-secondary);font-size:11px;font-family:var(--font-sans);
   font-weight:var(--weight-medium);font-variant-numeric:tabular-nums}
+.mark.on .markdot{fill:var(--ink);stroke:var(--paper);stroke-width:2}
+.mark.on .marknum{fill:var(--ink);font-weight:var(--weight-semibold)}
+.mark{pointer-events:none}
+/* a paper halo so the crosshair passing through a number does not strike it out */
+.marknum{paint-order:stroke;stroke:var(--paper);stroke-width:3px;stroke-linejoin:round}
 
 /* C7, amended: no elevation AND no fills beyond the single accent block.
    An ink ground was justifiable as a printed callout, but a panel that tracks
@@ -2272,14 +2277,15 @@ function lineChart(el,pts,{h=210,fmt=money0,label='',accent='var(--s1)',zeroFloo
     ${ticks.map(t=>`<line class="gridline" x1="${PL}" x2="${W-PR}" y1="${Y(t).toFixed(1)}" y2="${Y(t).toFixed(1)}"/>
       <text class="axl" x="${PL-8}" y="${(Y(t)+3.5).toFixed(1)}" text-anchor="end">${fmt(t)}</text>`).join('')}
     <path class="chartline" d="${line}"/>
-    ${(()=>{let lastX=-1e9,lift=0;
-      /* numbered event marks; a label within reach of the last one steps up a row */
-      return marks.map(m=>{const x=X(m.i),y=Y(pts[m.i].v);
-        lift=x-lastX<18?lift+1:0;lastX=x;
-        return `<circle class="markdot" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4"/>`
-          +`<text class="marknum" x="${x.toFixed(1)}" y="${(y-9-lift*12).toFixed(1)}" text-anchor="middle">${esc(m.n)}</text>`}).join('')})()}
     <g class="hov" style="opacity:0"><line class="crosshair" y1="${PT}" y2="${h-PB}"/>
       <circle class="chartdot" r="4"/></g>
+    ${(()=>{let lastX=-1e9,lift=0;
+      /* Numbered event marks, drawn over the hover layer so the one being read
+         is never hidden by it. A label within reach of the last steps up a row. */
+      return marks.map(m=>{const x=X(m.i),y=Y(pts[m.i].v);
+        lift=x-lastX<18?lift+1:0;lastX=x;
+        return `<g class="mark" data-i="${m.i}"><circle class="markdot" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4"/>`
+          +`<text class="marknum" x="${x.toFixed(1)}" y="${(y-9-lift*12).toFixed(1)}" text-anchor="middle">${esc(m.n)}</text></g>`}).join('')})()}
     ${pts.map((p,i)=>i%Math.ceil(pts.length/xTicks)===0||i===pts.length-1
       ?`<text class="axl" x="${X(i).toFixed(1)}" y="${h-8}" text-anchor="middle">${esc(p.x)}</text>`:'').join('')}
     <rect x="${PL}" y="${PT}" width="${W-PL-PR}" height="${h-PT-PB}" fill="transparent" class="hit"/>
@@ -2289,17 +2295,27 @@ function lineChart(el,pts,{h=210,fmt=money0,label='',accent='var(--s1)',zeroFloo
   const move=ev=>{
     const box=svg.getBoundingClientRect(),sx=W/box.width;
     const px=(ev.clientX-box.left)*sx;
-    const i=clamp(Math.round((px-PL)/((W-PL-PR)/(pts.length-1))),0,pts.length-1);
+    let i=clamp(Math.round((px-PL)/((W-PL-PR)/(pts.length-1))),0,pts.length-1);
+    /* an event is a single week — within reach of a mark, land on it */
+    const near=marks.map(m=>m.i).sort((a,b)=>Math.abs(X(a)-px)-Math.abs(X(b)-px))[0];
+    if(near!=null&&Math.abs(X(near)-px)<=10)i=near;
     const p=pts[i];hov.style.opacity=1;
+    el.querySelectorAll('.mark').forEach(g=>g.classList.toggle('on',+g.dataset.i===i));
     cross.setAttribute('x1',X(i));cross.setAttribute('x2',X(i));
     dot.setAttribute('cx',X(i));dot.setAttribute('cy',Y(p.v));
     tip.className='tip on';tip.innerHTML=`<div class="tt">${esc(p.t||p.x)}</div>`+
       (p.rows||[[label||'Value',fmt(p.v)]]).map(([a,b])=>`<div class="tr"><span>${esc(a)}</span><span class="tv">${b}</span></div>`).join('');
-    const tw=tip.offsetWidth,left=clamp(X(i)/sx-tw/2,4,box.width-tw-4);
-    tip.style.left=left+'px';tip.style.top=Math.max(2,Y(p.v)/sx-tip.offsetHeight-12)+'px';
+    /* Beside the crosshair rather than over the point, on whichever side has
+       room, and on the far side of the line vertically — so the point, its
+       mark and the marks either side of it stay readable. */
+    const tw=tip.offsetWidth,th=tip.offsetHeight,cx=X(i)/sx,cy=Y(p.v)/sx,gap=14;
+    const left=cx+gap+tw<=box.width-4?cx+gap:Math.max(4,cx-gap-tw);
+    const top=cy<box.height/2?Math.min(box.height-th-2,cy+gap):Math.max(2,cy-gap-th);
+    tip.style.left=left+'px';tip.style.top=top+'px';
   };
   svg.addEventListener('pointermove',move);
-  svg.addEventListener('pointerleave',()=>{hov.style.opacity=0;tip.className='tip'});
+  svg.addEventListener('pointerleave',()=>{hov.style.opacity=0;tip.className='tip';
+    el.querySelectorAll('.mark.on').forEach(g=>g.classList.remove('on'))});
 }
 /* tiny inline trend for one account */
 function sparkline(pts,{w=190,h=38,accent='var(--s1)'}={}){
