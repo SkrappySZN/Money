@@ -724,7 +724,16 @@ input.cell.inline{width:8ch;min-width:3ch;max-width:12ch;font:inherit;font-size:
   align-items:start;padding:var(--space-1) 0;
   border-bottom:var(--rule-width) solid var(--rule-faint)}
 .plan-list li:last-child{border-bottom:0}
-.plan-list.dated li{grid-template-columns:20px 92px 1fr}
+.plan-list.dated li{grid-template-columns:20px 128px 1fr}
+.plan-list .pd input{font:inherit;color:inherit;background:none;border:0;padding:0;width:100%;
+  border-bottom:var(--rule-width) dotted var(--rule-strong);font-variant-numeric:tabular-nums}
+.plan-list .pd input:hover{border-bottom-style:solid}
+.plan-list .pd input:focus{outline:none;border-bottom:var(--rule-width) solid var(--accent);color:var(--ink)}
+.plan-list .pd.is-overdue input{color:var(--negative);font-weight:var(--weight-medium)}
+.pn-inline{color:var(--ink-muted);font-size:var(--text-2)}
+.rank li.is-clear .nm,.rank li.is-missing .nm{color:var(--ink-muted)}
+h2.sect-label .sect-action{margin-left:auto;min-height:0;text-transform:none;letter-spacing:0;
+  font-size:var(--text-2);font-weight:var(--weight-regular)}
 .plan-list input[type=checkbox]{accent-color:var(--accent);width:14px;height:14px;
   margin:5px 0 0}
 .plan-list .pt{color:var(--ink);font-weight:var(--weight-medium)}
@@ -2429,7 +2438,7 @@ const TABS=[
 /* Hidden views keep their code and still render if reached, but have no place
    in the nav and no key. Keys number whatever is left, in order. */
 TABS.filter(t=>!t.hidden).forEach((t,i)=>t.k=String((i+1)%10));
-const CONVERTED=new Set(['week','sheet','calendar','attack','payoff','projections','reffing']);   // grows as each view lands
+const CONVERTED=new Set(['week','sheet','calendar','attack','payoff','projections','plan','reffing']);   // grows as each view lands
 /* Replacing #view.innerHTML removes whatever input is focused, and if the user
    has typed in it the browser fires `change` at it SYNCHRONOUSLY, mid-render.
    Any handler that re-renders then re-enters us halfway through and the outer
@@ -4230,38 +4239,34 @@ function viewPlan(el){
   const byId=Object.fromEntries(debts.map(d=>[d.id,d]));
   const ordered=(P.order||[]).filter(id=>acct(id));
   const missing=debts.filter(d=>!ordered.includes(d.id)&&!d.grace);
+  const nowRows=[...overdue.map(c=>({c,late:true})),...soon.filter(c=>c.d<weekEnd).map(c=>({c,late:false}))];
 
-  const calRow=c=>`<div class="acct" style="grid-template-columns:22px 92px 1fr;align-items:start">
-    <div><input type="checkbox" data-cal="${c.id}" ${c.done?'checked':''}
-      style="accent-color:var(--accent);width:15px;height:15px;margin-top:3px"></div>
-    <div><input type="date" data-caldate="${c.id}" value="${c.d}" aria-label="Date for ${esc(c.t)}" title="Change the date"
-      class="num ${!c.done&&c.d<today?'neg':'dim'}" style="font:inherit;font-size:var(--t-xs);width:100%;padding:2px 0;background:none;border:0;border-bottom:1px dotted currentColor;color:inherit"></div>
-    <div style="${c.done?'opacity:.45;text-decoration:line-through':''}">
-      <div style="font-weight:600">${esc(c.t)}</div>
-      ${c.n?`<div class="meta" style="color:var(--muted);font-size:var(--t-xs);line-height:1.45">${esc(c.n)}</div>`:''}</div></div>`;
+  const calRow=c=>`<li class="${c.done?'done':''}">
+    <span><input type="checkbox" data-cal="${c.id}" ${c.done?'checked':''} aria-label="Done: ${esc(c.t)}"></span>
+    <span class="pd${!c.done&&c.d<today?' is-overdue':''}"><input type="date" data-caldate="${c.id}" value="${c.d}"
+      aria-label="Date for ${esc(c.t)}" title="Change the date"></span>
+    <span><div class="pt">${esc(c.t)}</div>${c.n?`<div class="pn">${esc(c.n)}</div>`:''}</span></li>`;
 
-  el.innerHTML=`
-  <div class="head"><div><h1>Plan</h1>
-    <div class="sub">${esc(P.source||'')}</div></div>
-    <div class="spacer"></div>
-    <div style="display:flex;gap:8px">
-      <button class="btn sm" data-act="addcal">+ Date</button>
-      <button class="btn sm" data-act="addopen">+ Open item</button>
+  el.innerHTML=`<main class="page">
+  <header class="masthead">
+    <div><h1 class="page-title">Plan</h1>
+      ${P.source?`<div class="dateline">${esc(P.source)}</div>`:''}</div>
+    <div class="controls">
+      <button class="ctl" data-act="addcal">+ Date</button>
+      <button class="ctl" data-act="addopen">+ Open item</button>
     </div>
-  </div>
+  </header>
 
-  ${overdue.length||soon.filter(c=>c.d<weekEnd).length?`
-  <div class="card">
-    <div class="cap">Needs you now</div>
-    <div class="checks">
-      ${overdue.map(c=>`<div class="chk bad">${icon('bad')}<div><b>${dueLabel(c.d)} — ${esc(c.t)}</b>${c.n?` · ${esc(c.n)}`:''} <span style="color:var(--muted)">(${Math.abs(daysBetween(c.d,today))} days ago)</span></div></div>`).join('')}
-      ${soon.filter(c=>c.d<weekEnd).map(c=>`<div class="chk warn">${icon('warn')}<div><b>${dueLabel(c.d)} — ${esc(c.t)}</b>${c.n?` · ${esc(c.n)}`:''}</div></div>`).join('')}
-    </div>
-  </div>`:''}
+  ${nowRows.length?`<section class="band tight" aria-labelledby="now-h">
+    <h2 class="sect-label" id="now-h">Needs you now</h2>
+    <ul class="attn-list">${nowRows.map(({c,late})=>`<li class="attn-row${late?'':' upcoming'}"><p>
+      <span class="${late?'fig-breach':'when'}">${dueLabel(c.d)}</span> — ${esc(c.t)}${c.n?`. ${esc(c.n)}`:''}${late
+        ?` <span class="pn-inline">${Math.abs(daysBetween(c.d,today))} days ago</span>`:''}</p></li>`).join('')}</ul>
+  </section>`:''}
 
-  ${subs.length?`<div class="card">
-    <div class="cap">Subscriptions · ${money(subsNow)}/month</div>
-    <p class="sub" style="margin:8px 0 14px;max-width:72ch">Every recurring charge and the day it bills.
+  ${subs.length?`<section class="band${nowRows.length?'':' tight'}" aria-labelledby="subs-h">
+    <h2 class="sect-label" id="subs-h">Subscriptions<span class="count">${money(subsNow)}/month</span></h2>
+    <p class="lede muted">Every recurring charge and the day it bills.
       They bill to ${esc((acct(subs[0].card)||{}).name||'a card')}, and the Subscriptions bucket is what clears it —
       ${(()=>{const b=C.rows.find(r=>r.a.id==='subscriptions');
         if(!b)return 'no bucket is funding them';
@@ -4270,87 +4275,82 @@ function viewPlan(el){
           +(Math.abs(gap)<0.005?'exactly what they cost'
             :gap>0?`<b>${money(gap)} more</b> than they cost`
                   :`<b>${money(-gap)} less</b> than they cost`)})()}.</p>
-    <div class="rank">
+    <ul class="rank">
       ${subs.map(x=>{const amtNow=subAmountOn(x,today);
         return `<li><span class="n">${n0(x.day)}</span>
         <span><span class="nm">${esc(x.name)}</span>
           <div class="meta">bills on the ${ordinal(n0(x.day))}${x.to
-            ? ` · ${money(n0(x.amt))} → <b>${money(n0(x.to.amt))}</b> from ${dueLabel(x.to.from)}`:''}</div></span>
+            ? ` · ${money(n0(x.amt))} → ${money(n0(x.to.amt))} from ${dueLabel(x.to.from)}`:''}</div></span>
         <span class="rt"><div class="rv">${money(amtNow)}</div><div class="rl">per month</div></span></li>`}).join('')}
-    </div>
-    <div class="cap" style="margin-top:var(--sp-5)">What lands, by pay week</div>
-    <div class="rank">
+    </ul>
+    <h3 class="sub-label">What lands, by pay week</h3>
+    <ul class="rank">
       ${subWeeks.map(w=>`<li><span class="n"></span>
         <span><span class="nm">${weekLabel(w.wk)}</span>
           <div class="meta">${w.hits.length?w.hits.map(h=>`${esc(h.name)} ${money(h.amount)}`).join(' · '):'nothing bills'}</div></span>
         <span class="rt"><div class="rv">${w.total?money(w.total):'—'}</div><div class="rl">${w.hits.length?`${w.hits.length} charge${w.hits.length===1?'':'s'}`:''}</div></span></li>`).join('')}
-    </div>
-  </div>`:''}
+    </ul>
+  </section>`:''}
 
-  <div class="card">
-    <div class="cap">Payoff order</div>
-    <p class="sub" style="margin:8px 0 14px;max-width:72ch">What the <b>My order</b> strategy follows on the Attack and Payoff tabs.
-      Rate-sorting can't see utilization or a freed minimum — this can.</p>
-    <div class="rank">
+  <section class="band" aria-labelledby="order-h">
+    <h2 class="sect-label" id="order-h">Payoff order</h2>
+    <p class="lede muted">What <b>My order</b> follows on Projections. Rate-sorting cannot see utilization
+      or a freed minimum; this can.</p>
+    <ul class="rank">
       ${ordered.map((id,i)=>{const a=acct(id),d=byId[id];
-        return`<div class="rrow" style="${d?'':'opacity:.45'}">
-        <div class="n">${i+1}</div>
-        <div><div class="nm">${esc(a.name)}${d?'':' <span class="tag">clear</span>'}</div>
-          <div class="meta">${d?`${money(d.balance)}${d.kind==='card'&&d.limit?` · ${pct(d.balance/d.limit,0)} used`:''} · ${pct(d.nominalApr,2)} APR · ${money(d.weekInterest)}/wk`:'nothing owed'}</div></div>
-        <div class="rt" style="display:flex;gap:4px">
-          <button class="btn sm ghost" data-porder="${id}:-1" ${i===0?'disabled':''}>↑</button>
-          <button class="btn sm ghost" data-porder="${id}:1" ${i===ordered.length-1?'disabled':''}>↓</button></div>
-      </div>`}).join('')}
-      ${missing.map(d=>`<div class="rrow" style="opacity:.6">
-        <div class="n">—</div>
-        <div><div class="nm">${esc(d.name)}</div><div class="meta">not in the order — falls to the end</div></div>
-        <div class="rt"><button class="btn sm" data-porderadd="${d.id}">Add</button></div></div>`).join('')}
-    </div>
-  </div>
+        return `<li class="${i===0&&d?'lead':''}${d?'':' is-clear'}">
+        <span class="n">${i+1}</span>
+        <span><span class="nm">${esc(a.name)}</span>${d?'':'<span class="state clear">clear</span>'}
+          <div class="meta">${d?`${money(d.balance)}${d.kind==='card'&&d.limit?` · ${pct(d.balance/d.limit,0)} used`:''} · ${pct(d.nominalApr,2)} APR · ${money(d.weekInterest)}/wk`:'nothing owed'}</div></span>
+        <span class="rt reorder">
+          <button data-porder="${id}:-1" aria-label="Move ${esc(a.name)} up" ${i===0?'disabled':''}>↑</button>
+          <button data-porder="${id}:1" aria-label="Move ${esc(a.name)} down" ${i===ordered.length-1?'disabled':''}>↓</button></span>
+      </li>`}).join('')}
+      ${missing.map(d=>`<li class="is-missing">
+        <span class="n">—</span>
+        <span><span class="nm">${esc(d.name)}</span><div class="meta">not in the order — falls to the end</div></span>
+        <span class="rt"><button class="ctl" data-porderadd="${d.id}">Add</button></span></li>`).join('')}
+    </ul>
+  </section>
 
-  <div class="card" style="padding:var(--sp-4)">
-    <div class="cap" style="margin-bottom:10px">Open items · ${openLeft.length} left</div>
-    ${openLeft.map(o=>`<div class="acct" style="grid-template-columns:22px 1fr;align-items:start">
-      <div><input type="checkbox" data-open="${o.id}" style="accent-color:var(--accent);width:15px;height:15px;margin-top:3px"></div>
-      <div><div style="font-weight:600">${esc(o.t)}</div>
-        ${o.n?`<div style="color:var(--muted);font-size:var(--t-xs);line-height:1.5">${esc(o.n)}</div>`:''}</div></div>`).join('')
-      ||'<div class="empty">Nothing open.</div>'}
-    ${openDone.length?`<div class="cap" style="margin:16px 0 8px">Done</div>`+openDone.map(o=>
-      `<div class="acct" style="grid-template-columns:22px 1fr;opacity:.45">
-       <div><input type="checkbox" data-open="${o.id}" checked style="accent-color:var(--accent);width:15px;height:15px"></div>
-       <div style="text-decoration:line-through">${esc(o.t)}</div></div>`).join(''):''}
-  </div>
+  <section class="band" aria-labelledby="open-h">
+    <h2 class="sect-label" id="open-h">Open items<span class="count">${openLeft.length} left</span></h2>
+    ${openLeft.length?`<ul class="plan-list">${openLeft.map(o=>`<li>
+      <span><input type="checkbox" data-open="${o.id}" aria-label="Done: ${esc(o.t)}"></span>
+      <span><div class="pt">${esc(o.t)}</div>${o.n?`<div class="pn">${esc(o.n)}</div>`:''}</span></li>`).join('')}</ul>`
+      :'<p class="lede muted">Nothing open.</p>'}
+    ${openDone.length?`<h3 class="sub-label">Done</h3><ul class="plan-list">${openDone.map(o=>`<li class="done">
+      <span><input type="checkbox" data-open="${o.id}" checked aria-label="Not done: ${esc(o.t)}"></span>
+      <span><div class="pt">${esc(o.t)}</div></span></li>`).join('')}</ul>`:''}
+  </section>
 
-  ${P.ref&&P.ref.show?`
-  <div class="card" style="padding:var(--sp-4)">
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
-      <div class="cap">Handoff snapshot · ${dueLabel(P.ref.asOf)}</div><div class="spacer"></div>
-      <button class="btn sm ghost" data-act="hideref">Hide</button>
-    </div>
-    <p class="sub" style="margin:0 0 12px;max-width:72ch">Reference only — <b>the weekly sheet is the source of truth</b>.
-      Kept so you can eyeball the two. Rows that differ are usually the sheet being ahead of the doc.</p>
-    <div style="overflow-x:auto"><table class="hist" style="min-width:520px">
-      <thead><tr><th>Account</th><th class="num">Sheet ${weekLabel(k)}</th><th class="num">Handoff</th><th class="num">Δ</th></tr></thead>
+  ${P.ref&&P.ref.show?`<section class="band" aria-labelledby="ref-h">
+    <h2 class="sect-label" id="ref-h">Handoff snapshot · ${dueLabel(P.ref.asOf)}
+      <button class="ctl sect-action" data-act="hideref">Hide</button></h2>
+    <p class="lede muted">Reference only — <b>the weekly sheet is the source of truth</b>.
+      Rows that differ are usually the sheet being ahead of the doc.</p>
+    <div class="cmp-wrap"><table class="cmp">
+      <thead><tr><th>Account</th><th>Sheet ${weekLabel(k)}</th><th>Handoff</th><th>Δ</th></tr></thead>
       <tbody>${Object.entries(P.ref.rows).map(([id,v])=>{
         const a=acct(id); if(!a)return'';
         const r=C.byId[id]; if(!r)return'';
         const d=r2(v-r.balance);
-        return`<tr><td>${esc(a.name)}</td><td class="num">${money(r.balance)}</td>
-          <td class="num dim">${money(v)}</td>
-          <td class="num ${Math.abs(d)<0.5?'dim':d>0?'neg':'pos'}">${Math.abs(d)<0.5?'—':(d>0?'+':'')+money(d)}</td></tr>`}).join('')}</tbody>
+        return `<tr><td>${esc(a.name)}</td><td>${money(r.balance)}</td><td>${money(v)}</td>
+          <td>${Math.abs(d)<0.5?'—':(d>0?'+':'−')+money(Math.abs(d))}</td></tr>`}).join('')}</tbody>
     </table></div>
-    ${(P.minsToVerify||[]).length?`<div class="checks">${P.minsToVerify.map(m=>{
+    ${(P.minsToVerify||[]).length?`<ul class="attn-list" style="margin-top:var(--space-3)">${P.minsToVerify.map(m=>{
       const a=acct(m.acct);if(!a)return'';
-      return`<div class="chk warn">${icon('warn')}<div><b>${esc(a.name)} minimum is an estimate</b> — ${money(m.est)} ${esc(m.n)}. Real number lands when the statement closes ${dueLabel(m.when)}.</div></div>`}).join('')}</div>`:''}
-  </div>`:''}
+      return `<li class="attn-row upcoming"><p><b>${esc(a.name)}</b> minimum is an estimate — <span class="fig">${money(m.est)}</span>, ${esc(m.n)}. Real number lands when the statement closes ${dueLabel(m.when)}.</p></li>`}).join('')}</ul>`:''}
+  </section>`:''}
 
-  <div class="card" style="padding:var(--sp-4)">
-    <div class="cap" style="margin-bottom:10px">Calendar</div>
-    ${soon.length?`<div class="cap" style="margin:4px 0 6px;color:var(--warn)">Next four weeks</div>`+soon.map(calRow).join(''):''}
-    ${later.length?`<div class="cap" style="margin:16px 0 6px">After that</div>`+later.map(calRow).join(''):''}
-    ${done.length?`<div class="cap" style="margin:16px 0 6px">Done</div>`+done.map(calRow).join(''):''}
-    ${cal.length?'':'<div class="empty">Nothing on the calendar.</div>'}
-  </div>`;
+  <section class="band" aria-labelledby="pcal-h">
+    <h2 class="sect-label" id="pcal-h">Calendar</h2>
+    ${soon.length?`<h3 class="sub-label">Next four weeks</h3><ul class="plan-list dated">${soon.map(calRow).join('')}</ul>`:''}
+    ${later.length?`<h3 class="sub-label">After that</h3><ul class="plan-list dated">${later.map(calRow).join('')}</ul>`:''}
+    ${done.length?`<h3 class="sub-label">Done</h3><ul class="plan-list dated">${done.map(calRow).join('')}</ul>`:''}
+    ${cal.length?'':'<p class="lede muted">Nothing on the calendar.</p>'}
+  </section>
+</main>`;
 }
 
 /* ── History ──────────────────────────────────────────────────────── */
