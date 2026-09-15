@@ -841,6 +841,24 @@ table.cmp tr.planned td:first-child::after{content:'planned';margin-left:var(--s
   letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--attention)}
 
 
+/* ══ Projections ════════════════════════════════════════════════════
+   Small multiples: one single-series chart per account, all on the same
+   span of time so where each line meets zero can be compared across them.
+   Each has its own vertical scale — a $300 card on a $16,000 axis is a
+   flat line. */
+.proj-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(20rem,1fr));
+  gap:var(--space-4) var(--space-4)}
+.proj{min-width:0;border-top:var(--rule-width) solid var(--rule)}
+.proj-hd{display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-2);
+  padding-top:var(--space-1)}
+.proj-hd .nm{font-weight:var(--weight-medium);color:var(--ink);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.proj-hd .when{font-size:var(--text-2);color:var(--ink-secondary);font-variant-numeric:tabular-nums;
+  white-space:nowrap}
+.proj-hd .when.never{color:var(--negative)}
+.proj-meta{font-size:var(--text-2);color:var(--ink-muted);font-variant-numeric:tabular-nums}
+.proj .chart{margin-top:var(--space-1)}
+
 /* ══ Calendar ═══════════════════════════════════════════════════════
    Rows are pay weeks, so the grid starts on Friday. Every row is one
    paycheck and what lands before the next one. */
@@ -2111,7 +2129,8 @@ function simulate(debts,{strategy='avalanche',budget=0,fromWeek=thisWeek(),cap=5
   const ST=steps.map(st=>({...st,fireWeek:stepFireWeek(st,fromWeek)}));
   const firedIds=new Set(),fired=[];
   let w=0,totalInterest=0,extra=0;
-  const series=[{w:0,total:r2(D.reduce((s,d)=>s+d.balance,0))}];
+  const byDebt=()=>Object.fromEntries(D.map(d=>[d.id,r2(Math.max(0,d.balance))]));
+  const series=[{w:0,total:r2(D.reduce((s,d)=>s+d.balance,0)),by:byDebt()}];
   while(D.some(d=>d.balance>0.005)&&w<cap){
     /* budget steps switch on as their trigger lands, and stay on */
     for(const st of ST){
@@ -2145,7 +2164,7 @@ function simulate(debts,{strategy='avalanche',budget=0,fromWeek=thisWeek(),cap=5
     }
     w++;
     for(const d of D)if(d.balance<=0.005&&d.paidOff==null){d.balance=0;d.paidOff=w}
-    series.push({w,total:r2(D.reduce((s,d)=>s+d.balance,0))});
+    series.push({w,total:r2(D.reduce((s,d)=>s+d.balance,0)),by:byDebt()});
     /* nothing moved and no step left to change that — the payment can't outrun the interest */
     if(w>260&&series[w].total>=series[w-1].total-0.005&&series[w].total>0.005
        &&ST.every(st=>firedIds.has(st.id)||st.fireWeek==null))break;
@@ -2169,7 +2188,7 @@ function niceTicks(min,max,n=4){
   return out;
 }
 /* single-series line + area over time; crosshair tooltip by default */
-function lineChart(el,pts,{h=210,fmt=money0,label='',accent='var(--s1)',zeroFloor=true}={}){
+function lineChart(el,pts,{h=210,fmt=money0,label='',accent='var(--s1)',zeroFloor=true,xTicks=7}={}){
   if(pts.length<2){el.innerHTML='<div class="empty">Not enough history yet.</div>';return}
   const W=el.clientWidth||760,PL=54,PR=14,PT=12,PB=26;
   const vals=pts.map(p=>p.v);
@@ -2190,7 +2209,7 @@ function lineChart(el,pts,{h=210,fmt=money0,label='',accent='var(--s1)',zeroFloo
     <path class="chartline" d="${line}"/>
     <g class="hov" style="opacity:0"><line class="crosshair" y1="${PT}" y2="${h-PB}"/>
       <circle class="chartdot" r="4"/></g>
-    ${pts.map((p,i)=>i%Math.ceil(pts.length/7)===0||i===pts.length-1
+    ${pts.map((p,i)=>i%Math.ceil(pts.length/xTicks)===0||i===pts.length-1
       ?`<text class="axl" x="${X(i).toFixed(1)}" y="${h-8}" text-anchor="middle">${esc(p.x)}</text>`:'').join('')}
     <rect x="${PL}" y="${PT}" width="${W-PL-PR}" height="${h-PT-PB}" fill="transparent" class="hit"/>
   </svg><div class="tip"></div>`;
@@ -2234,11 +2253,12 @@ const TABS=[
   {id:'calendar',label:'Calendar',   k:'3'},
   {id:'attack',  label:'Attack',     k:'4'},
   {id:'payoff',  label:'Payoff',     k:'5'},
-  {id:'plan',    label:'Plan',       k:'6'},
-  {id:'history', label:'History',    k:'7'},
-  {id:'accounts',label:'Accounts',   k:'8'},
+  {id:'projections',label:'Projections',k:'6'},
+  {id:'plan',    label:'Plan',       k:'7'},
+  {id:'history', label:'History',    k:'8'},
+  {id:'accounts',label:'Accounts',   k:'9'},
 ];
-const CONVERTED=new Set(['week','sheet','calendar','attack','payoff']);   // grows as each view lands
+const CONVERTED=new Set(['week','sheet','calendar','attack','payoff','projections']);   // grows as each view lands
 /* Replacing #view.innerHTML removes whatever input is focused, and if the user
    has typed in it the browser fires `change` at it SYNCHRONOUSLY, mid-render.
    Any handler that re-renders then re-enters us halfway through and the outer
@@ -2262,7 +2282,7 @@ function renderInner(){
     +`<br>${pct(C.totals.usage)} utilization`;
   if(typeof paintSync==='function')paintSync();
   const v=$('#view');
-  const fn={week:viewWeek,sheet:viewAllocation,calendar:viewCalendar,attack:viewAttack,payoff:viewPayoff,
+  const fn={week:viewWeek,sheet:viewAllocation,calendar:viewCalendar,attack:viewAttack,projections:viewProjections,payoff:viewPayoff,
             plan:viewPlan,history:viewHistory,accounts:viewAccounts}[UI.tab]||viewWeek;
   if(CONVERTED.has(UI.tab)){
     v.className=''; fn(v);
@@ -3202,6 +3222,89 @@ function viewPayoff(el){
   requestAnimationFrame(()=>{const c=$('#payChart');if(c)lineChart(c,pts,{h:220,label:'Remaining balance'})});
   const b=$('#budget');
   if(b)b.onchange=e=>{UI.extra=n0(e.target.value);render()};
+}
+
+/* ── Projections ──────────────────────────────────────────────────
+   The best case, restated every week from the sheet itself. Unlike Payoff,
+   nothing here is a what-if: the weekly amount is whatever this sheet commits
+   to debt, the card-minimum bucket included, and it is assumed to repeat
+   every week with no new charges. Interest is charged at each account's rate,
+   attack rolls onto the next debt as one clears, and the plan's steps free
+   their money as they land. Change the sheet and this changes with it. */
+function viewProjections(el){
+  const k=currentWeek(),C=computeWeek(k),T=C.totals;
+  const debts=debtSnapshot(k);
+  /* A card has no minimum on the sheet until its statement closes, so left
+     alone the simulator pays it nothing: the card-minimum bucket's money all
+     goes to whichever debt is being attacked, and every other card climbs on
+     interest — past its limit, in a chart meant to be the best case. That
+     money really does pay card minimums, so it is split across the cards
+     without one, weighted the way issuers set a minimum: a month's interest
+     plus 1% of the balance. Cards with a minimum entered are paid first. */
+  const noMin=debts.filter(d=>d.kind==='card'&&d.weeklyMin<=0&&!d.grace);
+  const spare=r2(n0(C.totals.debtBucket)-debts.filter(d=>d.kind==='card'&&d.weeklyMin>0).reduce((t,d)=>t+d.weeklyMin,0));
+  const weight=d=>d.balance*(d.nominalApr/12+0.01),totalW=noMin.reduce((t,d)=>t+weight(d),0);
+  if(spare>0&&totalW>0)for(const d of noMin)d.weeklyMin=r2(spare*weight(d)/totalW);
+  if(!debts.length){el.innerHTML=`<main class="page">
+    <header class="masthead"><div><h1 class="page-title">Projections</h1></div></header>
+    <p class="lede">Nothing left to project — every loan and card is at $0.</p></main>`;return}
+  const floor=r2(debts.reduce((t,d)=>t+d.weeklyMin,0));
+  const budget=Math.max(n0(T.debtFunded),floor);
+  const sim=simulate(debts,simOpts(k,budget,UI.strategy));
+  const never=sim.weeks===Infinity;
+  const span=sim.series.length;
+  const step=Math.max(1,Math.ceil(span/104));
+  const idx=[...Array(span).keys()].filter(i=>i%step===0||i===span-1);
+  const when=w=>addWeeks(k,w);
+  const accts=[...sim.debts].sort((a,b)=>(a.paidOff??1e9)-(b.paidOff??1e9));
+
+  el.innerHTML=`<main class="page">
+  <header class="masthead">
+    <div><h1 class="page-title">Projections</h1>
+      <div class="dateline">From the ${weekLabel(k)} sheet · best case</div></div>
+    <div class="controls">${stratSeg(UI.strategy)}</div>
+  </header>
+
+  <div class="strip">
+    <div class="metric"><div class="m-label">Debt free</div>
+      <span class="m-value">${never?'Not at this rate':longDate(sim.debtFreeDate)}</span>
+      <div class="m-note">${never?`${money(budget)}/wk can't outrun the interest`:monthsLabel(weeksToMonths(sim.weeks))+' from this sheet'}</div></div>
+    <div class="metric"><div class="m-label">To debt each week</div>
+      <span class="m-value">${money(budget)}</span>
+      <div class="m-note">${T.debtBucket?`${money(T.debtBucket)} of it through the card-minimum bucket`:'as this sheet has it'}${sim.endBudget>budget+0.005?` · ${money(sim.endBudget)} once the steps land`:''}</div></div>
+    <div class="metric"><div class="m-label">Interest along the way</div>
+      <span class="m-value">${never?'—':money0(sim.totalInterest)}</span></div>
+  </div>
+
+  <section class="band" aria-labelledby="pt-h">
+    <h2 class="sect-label" id="pt-h">All loans and cards</h2>
+    <p class="lede muted">Every week repeats this sheet's payments with nothing new charged, interest at each
+      account's rate, card minimums paid from the card-minimum bucket, and attack moving to the next debt as each
+      one clears. It updates whenever the sheet does.</p>
+    <div class="chart" id="projTotal"></div>
+  </section>
+
+  <section class="band" aria-labelledby="pa-h">
+    <h2 class="sect-label" id="pa-h">Each account<span class="count">same timeline · each on its own scale</span></h2>
+    <div class="proj-grid">${accts.map((d,i)=>`<div class="proj">
+      <div class="proj-hd"><span class="nm" title="${esc(d.name)}">${esc(d.name)}</span>
+        <span class="when${d.paidOff==null?' never':''}">${d.paidOff==null?'not cleared':'clears '+longDate(when(d.paidOff))}</span></div>
+      <div class="proj-meta">${money(debts.find(x=>x.id===d.id).balance)} now · ${money0(d.interest)} interest</div>
+      <div class="chart" id="projA${i}"></div></div>`).join('')}</div>
+  </section>
+</main>`;
+
+  requestAnimationFrame(()=>{
+    const tot=$('#projTotal');
+    if(tot)lineChart(tot,idx.map(i=>{const p=sim.series[i];return{x:shortMY(when(p.w)),t:dueLabel(when(p.w))+' '+when(p.w).slice(0,4),v:p.total,
+      rows:[['All debt',money0(p.total)],['From this sheet',monthsLabel(weeksToMonths(p.w))]]}}),{h:220,label:'All loans and cards'});
+    accts.forEach((d,i)=>{
+      const c=$('#projA'+i);if(!c)return;
+      lineChart(c,idx.map(j=>{const p=sim.series[j],v=n0(p.by&&p.by[d.id]);
+        return{x:shortMY(when(p.w)),t:dueLabel(when(p.w))+' '+when(p.w).slice(0,4),v,rows:[[d.name,money(v)]]}}),
+        {h:140,label:`${d.name} projected balance`,xTicks:4});
+    });
+  });
 }
 
 /* ── Calendar ─────────────────────────────────────────────────────
