@@ -662,6 +662,9 @@ input.cell.is-attack.is-zero{color:var(--ink-muted);font-weight:var(--weight-reg
 .chartline{fill:none;stroke:var(--data-ink);stroke-width:2;
   stroke-linejoin:round;stroke-linecap:round}
 .chartdot{fill:var(--data-ink);stroke:var(--paper);stroke-width:2}
+.markdot{fill:var(--paper);stroke:var(--ink);stroke-width:1.5}
+.marknum{fill:var(--ink-secondary);font-size:11px;font-family:var(--font-sans);
+  font-weight:var(--weight-medium);font-variant-numeric:tabular-nums}
 
 /* C7, amended: no elevation AND no fills beyond the single accent block.
    An ink ground was justifiable as a printed callout, but a panel that tracks
@@ -912,6 +915,10 @@ button.cal-pay:focus-visible{outline:none;color:var(--focus-ink);text-decoration
 table.cmp td .sk-meta{display:block;font-size:var(--text-1);color:var(--ink-muted);
   font-weight:var(--weight-regular)}
 table.cmp td.sk-yes{color:var(--positive);font-weight:var(--weight-medium)}
+table.ev-table td:nth-child(3),table.ev-table th:nth-child(3){text-align:left}
+table.ev-table td:nth-child(2),table.ev-table th:nth-child(2){text-align:left;white-space:nowrap}
+table.ev-table td.ev-up{color:var(--positive)}
+table.ev-table td:last-child{font-weight:var(--weight-medium);color:var(--ink)}
 table.cmp td.sk-short{color:var(--attention);font-weight:var(--weight-medium)}
 table.cmp td.sk-late{color:var(--negative);font-weight:var(--weight-medium)}
 .cmp-wrap{overflow-x:auto}
@@ -2154,7 +2161,7 @@ function simulate(debts,{strategy='avalanche',budget=0,fromWeek=thisWeek(),cap=5
       f.b+=c;d+=f.baseline-c;
     }
     return d};
-  let lastBudget=budget;
+  let lastBudget=budget;const weekBudget=[];
   const ST=steps.filter(st=>!fundIds.has((st.trigger||{}).acct)).map(st=>({...st,fireWeek:stepFireWeek(st,fromWeek)}));
   const firedIds=new Set(),fired=[];
   let w=0,totalInterest=0,extra=0;
@@ -2189,7 +2196,7 @@ function simulate(debts,{strategy='avalanche',budget=0,fromWeek=thisWeek(),cap=5
        goes where the strategy points. The strategy runs everything after. */
     let pool;
     const delta=fundDelta(w);
-    lastBudget=r2(budget+extra+delta);
+    lastBudget=r2(budget+extra+delta);weekBudget.push(lastBudget);
     if(sheetFirst&&w===0){
       pool=budget+extra;
       for(const d of D){const p=Math.min(n0(d.current),d.balance,pool);d.balance-=p;pool-=p}
@@ -2228,7 +2235,7 @@ function simulate(debts,{strategy='avalanche',budget=0,fromWeek=thisWeek(),cap=5
        &&ST.every(st=>firedIds.has(st.id)||st.fireWeek==null))break;
   }
   const done=D.every(d=>d.balance<=0.005);
-  return{weeks:done?w:Infinity,totalInterest:r2(totalInterest),debts:D,series,fromWeek,fired,
+  return{weeks:done?w:Infinity,totalInterest:r2(totalInterest),debts:D,series,fromWeek,fired,weekBudget,
     endBudget:FU.length?lastBudget:r2(budget+extra),
     debtFreeDate:done?dateAfterWeeks(fromWeek,w):null};
 }
@@ -2246,7 +2253,7 @@ function niceTicks(min,max,n=4){
   return out;
 }
 /* single-series line + area over time; crosshair tooltip by default */
-function lineChart(el,pts,{h=210,fmt=money0,label='',accent='var(--s1)',zeroFloor=true,xTicks=7}={}){
+function lineChart(el,pts,{h=210,fmt=money0,label='',accent='var(--s1)',zeroFloor=true,xTicks=7,marks=[]}={}){
   if(pts.length<2){el.innerHTML='<div class="empty">Not enough history yet.</div>';return}
   const W=el.clientWidth||760,PL=54,PR=14,PT=12,PB=26;
   const vals=pts.map(p=>p.v);
@@ -2265,6 +2272,12 @@ function lineChart(el,pts,{h=210,fmt=money0,label='',accent='var(--s1)',zeroFloo
     ${ticks.map(t=>`<line class="gridline" x1="${PL}" x2="${W-PR}" y1="${Y(t).toFixed(1)}" y2="${Y(t).toFixed(1)}"/>
       <text class="axl" x="${PL-8}" y="${(Y(t)+3.5).toFixed(1)}" text-anchor="end">${fmt(t)}</text>`).join('')}
     <path class="chartline" d="${line}"/>
+    ${(()=>{let lastX=-1e9,lift=0;
+      /* numbered event marks; a label within reach of the last one steps up a row */
+      return marks.map(m=>{const x=X(m.i),y=Y(pts[m.i].v);
+        lift=x-lastX<18?lift+1:0;lastX=x;
+        return `<circle class="markdot" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4"/>`
+          +`<text class="marknum" x="${x.toFixed(1)}" y="${(y-9-lift*12).toFixed(1)}" text-anchor="middle">${esc(m.n)}</text>`}).join('')})()}
     <g class="hov" style="opacity:0"><line class="crosshair" y1="${PT}" y2="${h-PB}"/>
       <circle class="chartdot" r="4"/></g>
     ${pts.map((p,i)=>i%Math.ceil(pts.length/xTicks)===0||i===pts.length-1
@@ -3351,11 +3364,44 @@ function viewProjections(el){
   const budget=Math.max(n0(T.debtFunded),floor);
   const sim=simulate(debts,sheetSimOpts(k,budget,UI.strategy));
   const never=sim.weeks===Infinity;
-  const span=sim.series.length;
-  const step=Math.max(1,Math.ceil(span/104));
-  const idx=[...Array(span).keys()].filter(i=>i%step===0||i===span-1);
   const when=w=>addWeeks(k,w);
   const accts=[...sim.debts].sort((a,b)=>(a.paidOff??1e9)-(b.paidOff??1e9));
+
+  /* When attack money frees up. Attack is what is left of the week's total
+     once every debt still open has had its minimum. It grows three ways — a
+     fund reaching its goal, a debt clearing so its minimum joins attack, a
+     renewing fund refilled — and shrinks when a renewal takes its weekly back.
+     The first two are read straight off the simulation; a change in the
+     week's total that no step explains belongs to a renewing fund. */
+  const WB=sim.weekBudget,minOf=Object.fromEntries(debts.map(d=>[d.id,d.weeklyMin]));
+  const attackAt=w=>r2(Math.max(0,n0(WB[w])-sim.debts
+    .filter(d=>!d.grace&&(d.paidOff==null||d.paidOff>w)).reduce((t,d)=>t+n0(minOf[d.id]),0)));
+  const funds=sheetFunds(k),acctName=id=>(acct(id)||{}).name||id;
+  const events=[];
+  for(let w=1;w<WB.length;w++){
+    const here=[];
+    for(const f of sim.fired)
+      if(f.week===w&&(f.trigger||{}).type!=='payoff')here.push({what:f.label,gain:n0(f.weekly)});
+    const stepGain=here.reduce((t,e)=>t+e.gain,0);
+    const diff=r2(n0(WB[w])-n0(WB[w-1])-stepGain);
+    if(Math.abs(diff)>0.005){
+      const f=funds.find(x=>x.renew.has(w));
+      here.push(f&&diff<0?{what:`${acctName(f.id)} renews — its weekly goes back to the premium`,gain:diff}
+        :{what:`${f?acctName(f.id):'A renewing fund'} is refilled`,gain:diff});
+    }
+    /* a debt clearing in week 1 was paid off by the sheet itself — it is part
+       of the starting point, not something that happens later */
+    for(const d of sim.debts)
+      if(w>1&&d.paidOff===w&&n0(minOf[d.id])>0.005)here.push({what:`${d.name} paid off — its minimum joins attack`,gain:n0(minOf[d.id])});
+    if(here.length)events.push({w,here,after:attackAt(w)});
+  }
+  events.forEach((e,i)=>e.n=String(i+1));
+  const dayYear=d=>`${dueLabel(d)}, ${d.slice(0,4)}`;
+
+  const span=sim.series.length;
+  const step=Math.max(1,Math.ceil(span/104));
+  const evW=new Set(events.map(e=>e.w).filter(w=>w<span));
+  const idx=[...Array(span).keys()].filter(i=>i%step===0||i===span-1||evW.has(i));
 
   el.innerHTML=`<main class="page">
   <header class="masthead">
@@ -3384,6 +3430,22 @@ function viewProjections(el){
     <div class="chart" id="projTotal"></div>
   </section>
 
+  ${events.length?`<section class="band" aria-labelledby="pe-h">
+    <h2 class="sect-label" id="pe-h">When attack money frees up</h2>
+    <p class="lede muted">Attack is what is left each week after every open debt gets its minimum. Numbers match the marks on the chart above.</p>
+    <div class="cmp-wrap"><table class="cmp ev-table">
+      <thead><tr><th>#</th><th>When</th><th>What changes</th><th>Attack gains</th><th>Attack each week</th></tr></thead>
+      <tbody>
+        <tr><td></td><td>${dayYear(when(1))}</td><td>Starting point, after this sheet${(()=>{const c=sim.debts.filter(d=>d.paidOff===1);
+          return c.length?` pays off ${c.map(d=>esc(d.name)).join(' and ')}`:''})()}</td><td></td><td>${money(attackAt(1))}</td></tr>
+        ${events.map(e=>e.here.map((x,j)=>`<tr>
+          <td>${j===0?e.n:''}</td><td>${j===0?dayYear(when(e.w)):''}</td><td>${esc(x.what)}</td>
+          <td class="${x.gain<0?'ev-down':'ev-up'}">${x.gain<0?'−':'+'}${money(Math.abs(x.gain))}</td>
+          <td>${j===e.here.length-1?money(e.after):''}</td></tr>`).join('')).join('')}
+      </tbody>
+    </table></div>
+  </section>`:''}
+
   <section class="band" aria-labelledby="pa-h">
     <h2 class="sect-label" id="pa-h">Each account<span class="count">same timeline · each on its own scale</span></h2>
     <div class="proj-grid">${accts.map((d,i)=>`<div class="proj">
@@ -3396,8 +3458,11 @@ function viewProjections(el){
 
   requestAnimationFrame(()=>{
     const tot=$('#projTotal');
-    if(tot)lineChart(tot,idx.map(i=>{const p=sim.series[i];return{x:shortMY(when(p.w)),t:dueLabel(when(p.w))+' '+when(p.w).slice(0,4),v:p.total,
-      rows:[['All debt',money0(p.total)],['From this sheet',monthsLabel(weeksToMonths(p.w))]]}}),{h:220,label:'All loans and cards'});
+    const evAt=Object.fromEntries(events.map(e=>[e.w,e]));
+    if(tot)lineChart(tot,idx.map(i=>{const p=sim.series[i],e=evAt[p.w];return{x:shortMY(when(p.w)),t:(e?e.n+' · ':'')+dayYear(when(p.w)),v:p.total,
+      rows:[['All debt',money0(p.total)],...(e?e.here.map(x=>[x.what,(x.gain<0?'−':'+')+money(Math.abs(x.gain))]):[]),
+        ...(e?[['Attack each week',money(e.after)]]:[])]}}),
+      {h:240,label:'All loans and cards',marks:events.filter(e=>evW.has(e.w)).map(e=>({i:idx.indexOf(e.w),n:e.n}))});
     accts.forEach((d,i)=>{
       const c=$('#projA'+i);if(!c)return;
       lineChart(c,idx.map(j=>{const p=sim.series[j],v=n0(p.by&&p.by[d.id]);
