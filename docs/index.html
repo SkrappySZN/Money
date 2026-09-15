@@ -2555,8 +2555,7 @@ function viewWeek(el){
     <div class="controls">
       <button class="ctl" data-go="prev" aria-label="Previous week" ${i<=0?'disabled':''}>←</button>
       <span class="jump"><select id="weekPick" aria-label="Jump to week">
-        <option selected disabled>Jump to week</option>
-        ${ks.slice().reverse().map(w=>`<option value="${w}">${weekLabel(w)}${isPlanned(w)?'  (plan)':''}</option>`).join('')}
+        ${ks.slice().reverse().map(w=>`<option value="${w}"${w===k?' selected':''}>${weekLabel(w)}${isPlanned(w)?'  (plan)':''}</option>`).join('')}
       </select><span class="caret"><svg width="9" height="9" viewBox="0 0 12 12" fill="none"
         stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
         <path d="M2.5 4.5L6 8l3.5-3.5"/></svg></span></span>
@@ -2916,8 +2915,7 @@ function viewAllocation(el){
       <button class="ctl" data-act="undo" title="Undo last change (⌘Z)">Undo</button>
       <button class="ctl" data-go="prev" aria-label="Previous week" ${i<=0?'disabled':''}>←</button>
       <span class="jump"><select id="weekPick" aria-label="Jump to week">
-        <option selected disabled>Jump to week</option>
-        ${ks.slice().reverse().map(w=>`<option value="${w}">${weekLabel(w)}${isPlanned(w)?'  (plan)':''}</option>`).join('')}
+        ${ks.slice().reverse().map(w=>`<option value="${w}"${w===k?' selected':''}>${weekLabel(w)}${isPlanned(w)?'  (plan)':''}</option>`).join('')}
       </select><span class="caret"><svg width="9" height="9" viewBox="0 0 12 12" fill="none"
         stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
         <path d="M2.5 4.5L6 8l3.5-3.5"/></svg></span></span>
