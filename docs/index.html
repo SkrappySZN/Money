@@ -3514,8 +3514,9 @@ function viewReffing(el){
   </section>
 
   <details class="ref-import">
-    <summary>Paste games in from the spreadsheet</summary>
-    <textarea id="refPaste" placeholder="Copy the rows from the sheet — date, rink, level, rate, and the payment checkbox — and paste them here. Month headings and blank rows are skipped."></textarea>
+    <summary>Paste games from the portal or the spreadsheet</summary>
+    <textarea id="refPaste" placeholder="Paste the games table from the LAHOA portal (timetoscore), or rows from the old spreadsheet — date, rink, level, rate and the payment checkbox. Headings and blank rows are skipped, and a game already here is never added twice."></textarea>
+    <div class="row">Your name on the portal <input id="refMe" class="cell" style="width:16ch;text-align:left" value="${esc((S.reffing&&S.reffing.me)||'')}" placeholder="as it appears there"> — it decides referee or linesperson.</div>
     <div class="row">Dates without a year belong to the
       <select id="refPasteSeason">${Array.from({length:6},(_,j)=>seasonOf(today)-j).map(y=>`<option value="${y}" ${y===sy?'selected':''}>${seasonLabel(y)}</option>`).join('')}</select>
       season <button class="ctl" data-act="refimport">Import</button></div>
@@ -3594,8 +3595,114 @@ function addRefGame(){
    real (back-to-back at the same level), so matches are counted rather than
    collapsed: a paste only adds the copies of a game the list does not
    already have, which makes pasting the same rows twice harmless. */
+/* ── Timetoscore assignments ──────────────────────────────────────
+   The LAHOA portal's games table, copied and pasted. Columns: Game, Date,
+   Time, Rink, League, Level, Away, Home, Type, then the officials — Referee,
+   Linesman, Linesman, Referee, Supervisor, Evaluator. A paste may keep its
+   tabs and line breaks or lose both, so rows are found by their shape rather
+   than by lines: a game number followed by a date like "Sat Sep 26" and a
+   time. The role is the column the user's name sits in; with the empty
+   columns collapsed it falls back to order (first name referee, next two
+   linesmen). LAHOA pays two-official games at the referee rate. */
+const TTS_DATE=/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2})$/;
+const TTS_TIME=/^\d{1,2}:\d{2}\s*[AP]M$/i;
+const looksLikeTimetoscore=t=>/(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2}\s*(\t|\s{2,})\s*\d{1,2}:\d{2}\s*[AP]M/i.test(t);
+/* Which rate-sheet row a portal level means. Youth levels read as an age and a
+   tier ("SCAHA 14UAA" is 14u AA); a CAHA level prefers the weekend table. */
+function refDivFor(level,league){
+  const R=refRates(),L=String(level||'').toUpperCase(),G=String(league||'').toUpperCase();
+  const find=(gid,test)=>{const gi=R.groups.findIndex(g=>g.id===gid);if(gi<0)return'';
+    const ri=R.groups[gi].rows.findIndex(test);return ri<0?'':rateKey(gi,ri)};
+  const has=(div,w)=>div.toUpperCase().includes(w);
+  if(/LAKHSHL|LA KINGS/.test(L+' '+G))return find('hs',r=>has(r.div,'LAKHSHL')&&(/JV|JR|JUNIOR/.test(L)?has(r.div,'JV'):has(r.div,'VARSITY')&&!has(r.div,'JV')));
+  if(/ADHSHL/.test(L+' '+G)){
+    if(/JV|JR|JUNIOR/.test(L))return find('hs',r=>has(r.div,'ADHSHL JV'));
+    return find('hs',r=>has(r.div,'ADHSHL VARSITY')&&(/\b[23]\b/.test(L)?has(r.div,'2 & 3'):has(r.div,'VARSITY 1')));
+  }
+  if(/USPHL/.test(L+' '+G))return find('hs',r=>has(r.div,'USPHL')&&(/NCDC/.test(L)?has(r.div,'NCDC'):has(r.div,'PREMIER')));
+  if(/\bACHA\b/.test(L+' '+G))return find('hs',r=>r.div.toUpperCase()==='ACHA');
+  const m=L.replace(/\s+/g,'').match(/(\d{1,2})U(AAA|AA|BB|A|B)?/);
+  if(!m||!/SCAHA|CAHA/.test(L+' '+G))return'';
+  const age=+m[1],tier=m[2]||'';
+  const fits=r=>{const d=r.div.toUpperCase().replace(/\(.*\)/,'');
+    const ages=[...d.matchAll(/(\d{1,2})U/g)].map(x=>+x[1]);if(!ages.includes(age))return false;
+    if(age<=8)return true;
+    const tiers=(d.trim().split(/\s+/).pop()||'').split('/');return tier&&tiers.includes(tier)};
+  if(/(^|\s)CAHA/.test(L)&&!/SCAHA/.test(L)){const k=find('caha',fits);if(k)return k}
+  return find('scaha',fits);
+}
+function parseTimetoscore(text,sy,me){
+  const tabbed=text.includes('\t');
+  const cells=(tabbed?text.replace(/\r?\n/g,'\t').split('\t'):text.split(/\s{2,}|\r?\n/)).map(x=>x.trim());
+  const starts=[];
+  for(let i=0;i+2<cells.length;i++)if(cells[i]&&TTS_DATE.test(cells[i+1])&&TTS_TIME.test(cells[i+2]))starts.push(i);
+  const MON={Jan:1,Feb:2,Mar:3,Apr:4,May:5,Jun:6,Jul:7,Aug:8,Sep:9,Oct:10,Nov:11,Dec:12};
+  const rows=starts.map((i,j)=>{
+    const c=cells.slice(i,starts[j+1]??cells.length);
+    const dm=c[1].match(TTS_DATE),mo=MON[dm[2]],yr=mo>=9?sy:sy+1;
+    const officials=c.slice(9,15);
+    const clean=n=>n.replace(/\[.*?\]/g,'').trim();
+    return{gameNo:c[0],date:iso(new Date(yr,mo-1,+dm[3])),time:c[2].toUpperCase().replace(/\s+/,' '),
+      rink:c[3]||'',league:c[4]||'',level:c[5]||'',away:c[6]||'',home:c[7]||'',type:c[8]||'',
+      officials:officials.map(clean),named:officials.map(clean).filter(Boolean)};
+  });
+  /* Who "me" is: the name given, else the only name on every game. With one
+     game pasted, or a crew that never changes, every name is on every game —
+     then nobody is guessed, and the import asks. */
+  if(!me){const count={};for(const r of rows)for(const n of new Set(r.named))count[n]=(count[n]||0)+1;
+    const all=Object.keys(count).filter(n=>count[n]===rows.length);me=all.length===1?all[0]:''}
+  const mins=t=>{const m=t.match(/(\d{1,2}):(\d{2})\s*([AP])M/i);if(!m)return 0;return(+m[1]%12+(m[3].toUpperCase()==='P'?12:0))*60+ +m[2]};
+  for(const r of rows){
+    const pos=r.officials.indexOf(me);
+    let role=null;
+    if(r.named.length===2&&r.named.includes(me))role='ref';
+    else if(tabbed&&pos>=0)role=pos===0||pos===3?'ref':pos===1||pos===2?'lines':null;
+    else{const k=r.named.indexOf(me);role=k===0||k===3?'ref':k===1||k===2?'lines':null}
+    r.role=role;r.div=refDivFor(r.level,r.league);
+  }
+  /* A single game earns the league's fee: nothing else that day at the same
+     rink within three hours of it (LAHOA: different rinks, or more than an hour
+     and a half between games). An estimate, shown for review before import. */
+  /* games already logged count as company too; one logged without a time is
+     assumed close, since a fee wrongly claimed is worse than one missed */
+  const logged=((S.reffing&&S.reffing.games)||[]).filter(g=>!rows.some(r=>r.gameNo&&r.gameNo===g.gameNo));
+  for(const r of rows){
+    const near=rows.some(o=>o!==r&&o.date===r.date&&o.rink===r.rink&&Math.abs(mins(o.time)-mins(r.time))<=180)
+      ||logged.some(g=>g.date===r.date&&g.rink===r.rink&&(!g.time||Math.abs(mins(g.time)-mins(r.time))<=180));
+    r.fee=!near&&!!refFeeFor(r.div);
+    r.rate=r.role&&r.div?refPay(r.div,r.role,r.fee):null;
+    if(r.rate==null&&r.level){const last=refRateFor(r.rink,r.level);if(last!=null)r.rate=last}
+  }
+  return{rows:rows.filter(r=>r.role),skipped:rows.filter(r=>!r.role),me};
+}
+function importTimetoscore(text,sy){
+  const R=S.reffing=S.reffing||{games:[]};
+  const typed=(($('#refMe')||{}).value||'').trim();
+  const {rows,skipped,me}=parseTimetoscore(text,sy,typed||R.me||'');
+  if(!me){toast('Type your name as it appears on the portal, then import again');$('#refMe')?.focus();return}
+  if(!rows.length){toast(skipped.length?`None of those games have ${me} on them`:'No games found in that paste');return}
+  const games=refGames(),known=new Set(games.map(g=>g.gameNo).filter(Boolean));
+  const fresh=rows.filter(r=>!known.has(r.gameNo)),dup=rows.length-fresh.length;
+  if(!fresh.length){toast(`Nothing new — ${dup} game${dup===1?' is':'s are'} already here`);return}
+  modal(`<h3>Import ${fresh.length} game${fresh.length===1?'':'s'}</h3>
+    <p>Read as <b>${esc(me)}</b>.${dup?` ${dup} already here, left out.`:''}${skipped.length?` ${skipped.length} without you on them, left out.`:''} Check the rates, then import — anything can be edited afterwards.</p>
+    <div class="cmp-wrap"><table class="ref"><thead><tr><th>Date</th><th>Level</th><th>Role</th><th class="r">Rate</th></tr></thead><tbody>
+    ${fresh.map(r=>`<tr><td>${dueLabel(r.date)} · ${esc(r.time)}</td><td>${esc(r.level)}${r.div?'':' <span class="wi-now">not on the rate sheet</span>'}</td>
+      <td>${r.role==='ref'?'Referee':'Linesperson'}</td>
+      <td class="r">${r.rate==null?'<span class="wi-now">set after</span>':money(r.rate)}${r.fee?` <span class="wi-now">incl. ${money(refFeeFor(r.div))} fee</span>`:''}</td></tr>`).join('')}
+    </tbody></table></div>`,
+    `Import ${fresh.length}`,()=>{
+      pushUndo(null);
+      R.me=me;
+      for(const r of fresh)games.push({id:nextId(games,'g'),gameNo:r.gameNo,date:r.date,time:r.time,rink:r.rink,
+        level:r.level,rate:r.rate==null?0:r2(r.rate),role:r.role,div:r.div,fee:r.fee,paid:false,paidOn:null});
+      UI.refSeason=sy;save();render();
+      toast(`${fresh.length} game${fresh.length===1?'':'s'} imported — ⌘Z to undo`);
+    });
+}
 function importRefGames(){
   const text=($('#refPaste')||{}).value||'',sy=+(($('#refPasteSeason')||{}).value||seasonOf(iso(new Date())));
+  if(looksLikeTimetoscore(text))return importTimetoscore(text,sy);
   const games=refGames(),have={},took={};
   for(const g of games){const kk=[g.date,g.rink,g.level,r2(n0(g.rate))].join('|');have[kk]=(have[kk]||0)+1}
   let added=0,skipped=0;const fresh=[];
