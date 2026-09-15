@@ -2110,7 +2110,11 @@ function stepFireWeek(st,fromWeek){
     const r=(computeWeek(fromWeek)||{byId:{}}).byId[tr.acct];
     if(r&&r.targetDone)return 0;
     if(a.target.by)return Math.max(0,Math.ceil(daysBetween(fromWeek,a.target.by)/7));
-    if(r&&r.total>0)return Math.ceil(r.targetShort/r.total);
+    /* `targetShort` is measured after this week's contribution, and week 0 of
+       a simulation is this week — so the contributions still needed fill weeks
+       1..n, and the money frees in the week after the last of them. Returning
+       n freed it a week early, while that week's deposit was still owed. */
+    if(r&&r.total>0)return Math.ceil(r.targetShort/r.total-1e-9)+1;
     return null;
   }
   return null;
@@ -2144,7 +2148,13 @@ function simulate(debts,{strategy='avalanche',budget=0,fromWeek=thisWeek(),cap=5
       /* a step already in effect when the sheet was written is already in the
          sheet's own allocation — the money it freed has been placed — so
          starting from the sheet, only steps that land later add to it */
-      if(go){firedIds.add(st.id);if(!(sheetFirst&&w===0))extra+=n0(st.weekly);fired.push({...st,week:w})}
+      /* Nor does a debt clearing. Starting from the sheet, the weekly total
+         already holds that debt's payment — its minimum, or its share of the
+         card-minimum bucket — and once the debt is gone that money simply
+         moves down the order. A step saying the same money comes free would
+         count it twice. */
+      const already=sheetFirst&&(w===0||tr.type==='payoff');
+      if(go){firedIds.add(st.id);if(!already)extra+=n0(st.weekly);fired.push({...st,week:w})}
     }
     /* `sheetFirst`: the opening week is the sheet itself, not a strategy's
        idea of it. Each debt gets exactly what the sheet sends it — a payoff
