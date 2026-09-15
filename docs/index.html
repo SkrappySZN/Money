@@ -3168,7 +3168,11 @@ function viewAttack(el){
 
 function viewPayoff(el){
   const k=currentWeek(),C=computeWeek(k),T=C.totals;
-  const debts=debtSnapshot(k);
+  /* Starts from the sheet, like Projections: the opening week is the sheet as
+     entered, card minimums come out of the card-minimum bucket, and a renewing
+     fund takes its weekly amount back while it refills. Only the weekly budget
+     is a what-if. */
+  const debts=sheetDebts(k),funds=sheetFunds(k);
   if(!debts.length){el.innerHTML=`<main class="page">
     <header class="masthead"><div><h1 class="page-title">Payoff</h1></div></header>
     <p class="lede">Nothing left to pay off.</p></main>`;return}
@@ -3176,11 +3180,24 @@ function viewPayoff(el){
   if(UI.extra==null)UI.extra=Math.max(n0(T.debtFunded),floor);
   const budget=Math.max(0,n0(UI.extra));
   const strat=UI.strategy;
-  const sim=simulate(debts,simOpts(k,budget,strat));
-  const av =simulate(debts,simOpts(k,budget,'avalanche'));
-  const sn =simulate(debts,simOpts(k,budget,'snowball'));
-  const cus=simulate(debts,simOpts(k,budget,'custom'));
-  const flat=simulate(debts,{strategy:strat,budget,fromWeek:k,steps:[]});
+  const sim=simulate(debts,sheetSimOpts(k,budget,strat,funds));
+  const av =simulate(debts,sheetSimOpts(k,budget,'avalanche',funds));
+  const sn =simulate(debts,sheetSimOpts(k,budget,'snowball',funds));
+  const cus=simulate(debts,sheetSimOpts(k,budget,'custom',funds));
+  const flat=simulate(debts,{strategy:strat,budget,fromWeek:k,steps:[],sheetFirst:true});
+  const fundOf=Object.fromEntries(funds.map(f=>[f.id,f]));
+  /* What each step really does once the sheet is the starting point. */
+  const stepSays=st=>{
+    const tr=st.trigger||{},f=fundOf[tr.acct],at=st.fired?longDate(addWeeks(k,st.fired.week)):'';
+    if(f)return{rv:money(f.weekly),rl:'to the premium',
+      meta:`renews every ${f.every} months, so its weekly goes back to refilling it`};
+    if(tr.type==='payoff')return{rv:'rolls over',rl:'',
+      meta:`its payment moves down the order when it clears${at?` · ${at}`:''} — already in the weekly total`};
+    if(tr.type==='manual')return{rv:'+'+money(n0(st.weekly)),rl:st.on?'once the sheet shows it':'per week',
+      meta:st.on?'counts through the sheet — change the amount there':'not done yet'};
+    if(st.fired&&st.fired.week===0)return{rv:'+'+money(n0(st.weekly)),rl:'already in the sheet',meta:'reached'};
+    return{rv:'+'+money(n0(st.weekly)),rl:'per week',meta:at?`lands ${at}`:'trigger not reached'};
+  };
   const maxW=Math.max(...sim.debts.map(d=>d.paidOff||(sim.weeks===Infinity?520:sim.weeks)),1);
   const steps=stepsFor(k).map(st=>({...st,fireWeek:stepFireWeek(st,k),
     fired:sim.fired.find(f=>f.id===st.id)}));
@@ -3230,9 +3247,9 @@ function viewPayoff(el){
 
   <section class="band" aria-labelledby="steps-h">
     <h2 class="sect-label" id="steps-h">Attack steps up as these land</h2>
-    <p class="lede muted">Each one permanently frees a weekly line, and the date above already
-      assumes them. The ones with a trigger fire on their own; a manual step only counts
-      once you tick it.</p>
+    <p class="lede muted">Everything starts from the ${weekLabel(k)} sheet as entered. A fund reaching its goal adds its
+      weekly amount when it lands; a debt clearing adds nothing new, because its payment is already in the total
+      and simply moves down the order; a manual step counts once the sheet reflects it.</p>
     <ul class="rank">
       ${steps.map(st=>`<li class="${st.fired?'lead':''}">
         <span class="n"><input type="checkbox" data-step="${st.id}"
@@ -3240,8 +3257,8 @@ function viewPayoff(el){
           ${st.trigger.type!=='manual'?'disabled title="Fires on its trigger"':''}
           aria-label="${esc(st.label)}"></span>
         <span><span class="nm">${esc(st.label)}</span>
-          <div class="meta">${esc(st.note||'')}${st.fired?` · lands ${longDate(addWeeks(k,st.fired.week))}`:st.trigger.type==='manual'?' · not done yet':' · trigger not reached'}</div></span>
-        <span class="rt"><div class="rv">+${money(n0(st.weekly))}</div><div class="rl">per week</div></span>
+          <div class="meta">${esc(st.note||'')} · ${stepSays(st).meta}</div></span>
+        <span class="rt"><div class="rv">${stepSays(st).rv}</div><div class="rl">${stepSays(st).rl}</div></span>
       </li>`).join('')}
     </ul>
   </section>
@@ -3289,35 +3306,50 @@ function viewPayoff(el){
    every week with no new charges. Interest is charged at each account's rate,
    attack rolls onto the next debt as one clears, and the plan's steps free
    their money as they land. Change the sheet and this changes with it. */
-function viewProjections(el){
-  const k=currentWeek(),C=computeWeek(k),T=C.totals;
-  const debts=debtSnapshot(k);
-  /* A card has no minimum on the sheet until its statement closes, so left
-     alone the simulator pays it nothing: the card-minimum bucket's money all
-     goes to whichever debt is being attacked, and every other card climbs on
-     interest — past its limit, in a chart meant to be the best case. That
-     money really does pay card minimums, so it is split across the cards
-     without one, weighted the way issuers set a minimum: a month's interest
-     plus 1% of the balance. Cards with a minimum entered are paid first. */
+/* ── Starting from the sheet ──────────────────────────────────────
+   Shared by Payoff and Projections, so the two can never tell different
+   stories about the same sheet. */
+
+/* The sheet's debts, with card minimums filled in. A card has no minimum on
+   the sheet until its statement closes, so left alone the simulator pays it
+   nothing: the card-minimum bucket's money all goes to whichever debt is being
+   attacked, and every other card climbs on interest — past its limit, in a
+   chart meant to be the best case. That money really does pay card minimums,
+   so it is split across the cards without one, weighted the way issuers set a
+   minimum: a month's interest plus 1% of the balance. Cards with a minimum
+   entered are paid first. */
+function sheetDebts(k){
+  const C=computeWeek(k),debts=debtSnapshot(k);
+  if(!C)return debts;
   const noMin=debts.filter(d=>d.kind==='card'&&d.weeklyMin<=0&&!d.grace);
   const spare=r2(n0(C.totals.debtBucket)-debts.filter(d=>d.kind==='card'&&d.weeklyMin>0).reduce((t,d)=>t+d.weeklyMin,0));
   const weight=d=>d.balance*(d.nominalApr/12+0.01),totalW=noMin.reduce((t,d)=>t+weight(d),0);
   if(spare>0&&totalW>0)for(const d of noMin)d.weeklyMin=r2(spare*weight(d)/totalW);
-  if(!debts.length){el.innerHTML=`<main class="page">
-    <header class="masthead"><div><h1 class="page-title">Projections</h1></div></header>
-    <p class="lede">Nothing left to project — every loan and card is at $0.</p></main>`;return}
-  const floor=r2(debts.reduce((t,d)=>t+d.weeklyMin,0));
-  const budget=Math.max(n0(T.debtFunded),floor);
-  /* funds whose goal is spent and saved again every term */
-  const funds=C.rows.filter(r=>!r.isRollup&&r.a.target&&r.a.target.every&&r.a.target.by&&n0(r.a.target.amount)>0&&weeklyOf(r)>0)
+  return debts;
+}
+/* Funds whose goal is spent and saved again every term. */
+function sheetFunds(k){
+  const C=computeWeek(k);if(!C)return[];
+  return C.rows.filter(r=>!r.isRollup&&r.a.target&&r.a.target.every&&r.a.target.by&&n0(r.a.target.amount)>0&&weeklyOf(r)>0)
     .map(r=>{const t=r.a.target,renew=new Set();
       const anchor=parseISO(t.by).getDate();
       for(let i=0;i<240;i++){const d0=parseISO(t.by);
         const x=monthlyOn(d0.getFullYear(),d0.getMonth()+i*t.every,anchor);
         const wk=Math.floor(daysBetween(k,x)/7);
         if(wk>=1)renew.add(wk)}
-      return{id:r.a.id,amount:n0(t.amount),weekly:weeklyOf(r),after:r.after,baseline:r.total,renew}});
-  const sim=simulate(debts,{...simOpts(k,budget,UI.strategy),sheetFirst:true,funds});
+      return{id:r.a.id,every:t.every,amount:n0(t.amount),weekly:weeklyOf(r),after:r.after,baseline:r.total,renew}});
+}
+const sheetSimOpts=(k,budget,strategy,funds)=>({...simOpts(k,budget,strategy),sheetFirst:true,funds:funds||sheetFunds(k)});
+
+function viewProjections(el){
+  const k=currentWeek(),C=computeWeek(k),T=C.totals;
+  const debts=sheetDebts(k);
+  if(!debts.length){el.innerHTML=`<main class="page">
+    <header class="masthead"><div><h1 class="page-title">Projections</h1></div></header>
+    <p class="lede">Nothing left to project — every loan and card is at $0.</p></main>`;return}
+  const floor=r2(debts.reduce((t,d)=>t+d.weeklyMin,0));
+  const budget=Math.max(n0(T.debtFunded),floor);
+  const sim=simulate(debts,sheetSimOpts(k,budget,UI.strategy));
   const never=sim.weeks===Infinity;
   const span=sim.series.length;
   const step=Math.max(1,Math.ceil(span/104));
