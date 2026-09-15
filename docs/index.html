@@ -852,6 +852,41 @@ table.cmp tr.planned td:first-child::after{content:'planned';margin-left:var(--s
   letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--attention)}
 
 
+/* ══ Reffing ════════════════════════════════════════════════════════ */
+table.ref{border-collapse:collapse;width:100%;font-size:var(--text-2)}
+table.ref th{text-align:left;color:var(--ink-muted);font-size:var(--text-1);font-weight:var(--weight-medium);
+  letter-spacing:var(--tracking-label);text-transform:uppercase;padding:var(--space-1) var(--space-1);
+  border-bottom:var(--rule-width) solid var(--rule)}
+table.ref th.r,table.ref td.r{text-align:right}
+table.ref td{padding:2px var(--space-1);border-bottom:var(--rule-width) solid var(--rule-faint);
+  font-variant-numeric:tabular-nums;vertical-align:middle}
+table.ref tr.mo td{padding-top:var(--space-3);border-bottom:var(--rule-width) solid var(--rule-strong)}
+table.ref tr.mo .mn{font-family:var(--font-display);font-size:var(--text-4);color:var(--ink)}
+table.ref tr.mo .mt{font-size:var(--text-2);color:var(--ink-secondary);text-align:right;white-space:nowrap}
+table.ref tr.mo .mt b{color:var(--ink);font-weight:var(--weight-medium)}
+table.ref tr.mo .mt .owed{color:var(--attention);font-weight:var(--weight-semibold)}
+table.ref input.rf{font:inherit;color:var(--ink);background:none;border:0;
+  border-bottom:var(--rule-width) solid transparent;padding:var(--space-half) 0;width:100%;min-width:6ch}
+table.ref input.rf:hover{border-bottom-color:var(--rule)}
+table.ref input.rf:focus{outline:none;border-bottom-color:var(--accent)}
+table.ref input.rf.money{text-align:right;width:9ch}
+table.ref input.rf[type=date]{width:128px}
+table.ref tr.is-owed input.rf.money{color:var(--attention);font-weight:var(--weight-medium)}
+table.ref td.pd{white-space:nowrap;color:var(--ink-muted)}
+table.ref td.pd .paidbox{margin-right:var(--space-half)}
+table.ref tr.is-owed td.pd{color:var(--attention)}
+table.ref button.del{background:none;border:0;color:var(--ink-muted);cursor:pointer;font:inherit;
+  min-width:var(--control-target);min-height:28px}
+table.ref button.del:hover{color:var(--negative)}
+.ref-import{margin-top:var(--space-5)}
+.ref-import summary{cursor:pointer;color:var(--ink-secondary);font-size:var(--text-2)}
+.ref-import textarea{width:100%;min-height:9rem;font:var(--text-2)/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;
+  background:var(--paper-deep);color:var(--ink);border:var(--rule-width) solid var(--rule);
+  border-radius:var(--radius);padding:var(--space-1);margin-top:var(--space-2)}
+.ref-import .row{display:flex;flex-wrap:wrap;gap:var(--space-2);align-items:center;margin-top:var(--space-1);
+  font-size:var(--text-2);color:var(--ink-secondary)}
+.ref-import select{font:inherit;background:none;border:0;border-bottom:var(--rule-width) solid var(--rule);color:var(--ink)}
+
 /* ══ Projections ════════════════════════════════════════════════════
    Small multiples: one single-series chart per account, all on the same
    span of time so where each line meets zero can be compared across them.
@@ -1461,7 +1496,7 @@ let S=null, UI={tab:'week', week:null, strategy:'avalanche', extra:null, histRan
    Both are wrapped: storage throws outright in some privacy modes, and
    a ledger that will not open is a worse failure than a forgotten tab. */
 const UI_KEY='ccb.ui', UI_LASTING=['tab','sheetMode','strategy','histRange','histMetric','dense','showOk','showArchived'];
-const UI_SESSION=['week','month','calMonth'];
+const UI_SESSION=['week','month','calMonth','refSeason'];
 let UI_LAST='';
 function saveUI(){
   const keep={};for(const k of UI_LASTING)if(UI[k]!==undefined)keep[k]=UI[k];
@@ -1520,7 +1555,7 @@ function load(){
    the cap is what keeps this honest about memory. */
 let UNDO=[],REDO=[],UNDO_KEY=null;
 const UNDO_MAX=30;
-const snapshot=()=>JSON.stringify({accounts:S.accounts,weeks:S.weeks,plan:S.plan,settings:S.settings});
+const snapshot=()=>JSON.stringify({accounts:S.accounts,weeks:S.weeks,plan:S.plan,settings:S.settings,reffing:S.reffing||null});
 function pushUndo(key){
   if(key!=null&&key===UNDO_KEY)return;
   UNDO_KEY=key;
@@ -1531,6 +1566,7 @@ function pushUndo(key){
 function applySnapshot(json){
   const x=JSON.parse(json);
   S.accounts=x.accounts;S.weeks=x.weeks;S.plan=x.plan;S.settings=x.settings;
+  if(x.reffing!==undefined)S.reffing=x.reffing||{games:[]};
   UNDO_KEY=null;save();render();
 }
 function undo(){
@@ -2366,8 +2402,9 @@ const TABS=[
   {id:'plan',    label:'Plan',       k:'7'},
   {id:'history', label:'History',    k:'8'},
   {id:'accounts',label:'Accounts',   k:'9'},
+  {id:'reffing', label:'Reffing',    k:'0'},
 ];
-const CONVERTED=new Set(['week','sheet','calendar','attack','payoff','projections']);   // grows as each view lands
+const CONVERTED=new Set(['week','sheet','calendar','attack','payoff','projections','reffing']);   // grows as each view lands
 /* Replacing #view.innerHTML removes whatever input is focused, and if the user
    has typed in it the browser fires `change` at it SYNCHRONOUSLY, mid-render.
    Any handler that re-renders then re-enters us halfway through and the outer
@@ -2391,7 +2428,7 @@ function renderInner(){
     +`<br>${pct(C.totals.usage)} utilization`;
   if(typeof paintSync==='function')paintSync();
   const v=$('#view');
-  const fn={week:viewWeek,sheet:viewAllocation,calendar:viewCalendar,attack:viewAttack,projections:viewProjections,payoff:viewPayoff,
+  const fn={week:viewWeek,sheet:viewAllocation,calendar:viewCalendar,attack:viewAttack,projections:viewProjections,reffing:viewReffing,payoff:viewPayoff,
             plan:viewPlan,history:viewHistory,accounts:viewAccounts}[UI.tab]||viewWeek;
   if(CONVERTED.has(UI.tab)){
     v.className=''; fn(v);
@@ -3363,6 +3400,133 @@ function viewPayoff(el){
    every week with no new charges. Interest is charged at each account's rate,
    attack rolls onto the next debt as one clears, and the plan's steps free
    their money as they land. Change the sheet and this changes with it. */
+/* ── Reffing ──────────────────────────────────────────────────────
+   Games refereed, what each pays, and whether the money has arrived. A season
+   runs September through August, which is how the old spreadsheet was cut. */
+const refGames=()=>((S.reffing=S.reffing||{games:[]}).games=S.reffing.games||[]);
+const seasonOf=d=>{const y=+d.slice(0,4),m=+d.slice(5,7);return m>=9?y:y-1};
+const seasonLabel=y=>`${y}–${String(y+1).slice(2)}`;
+function viewReffing(el){
+  const games=refGames();
+  const today=iso(new Date());
+  const seasons=[...new Set([seasonOf(today),...games.map(g=>seasonOf(g.date))])].sort((a,b)=>a-b);
+  const sy=UI.refSeason!=null&&seasons.includes(+UI.refSeason)?+UI.refSeason:seasonOf(today);
+  const inS=games.filter(g=>seasonOf(g.date)===sy).sort((a,b)=>a.date.localeCompare(b.date)||a.id.localeCompare(b.id));
+  const sum=l=>r2(l.reduce((t,g)=>t+n0(g.rate),0));
+  const earned=sum(inS),received=sum(inS.filter(g=>g.paid)),owed=r2(earned-received);
+  const owedElsewhere=r2(sum(games.filter(g=>!g.paid&&seasonOf(g.date)!==sy)));
+  const months=[...new Set(inS.map(g=>g.date.slice(0,7)))];
+  const i=seasons.indexOf(sy);
+  const row=g=>`<tr class="${g.paid?'':'is-owed'}">
+    <td><input class="rf" type="date" data-rf="${g.id}:date" value="${g.date}" aria-label="Date"></td>
+    <td><input class="rf" data-rf="${g.id}:rink" value="${esc(g.rink||'')}" list="refRinks" aria-label="Rink"></td>
+    <td><input class="rf" data-rf="${g.id}:level" value="${esc(g.level||'')}" list="refLevels" aria-label="Level"></td>
+    <td class="r"><input class="rf money" data-rf="${g.id}:rate" inputmode="decimal" value="${money(n0(g.rate))}" aria-label="Rate"></td>
+    <td class="pd"><label><input type="checkbox" class="paidbox" data-rf="${g.id}:paid" ${g.paid?'checked':''}>${g.paid?`paid${g.paidOn?' '+dueLabel(g.paidOn):''}`:'waiting'}</label></td>
+    <td class="r"><button class="del" data-refdel="${g.id}" title="Remove this game — ⌘Z undoes it" aria-label="Remove game">×</button></td></tr>`;
+
+  el.innerHTML=`<main class="page">
+  <header class="masthead">
+    <div><h1 class="page-title">Reffing</h1>
+      <div class="dateline">${seasonLabel(sy)} season · Sep–Aug</div></div>
+    <div class="controls">
+      <button class="ctl" data-refseason="${seasons[i-1]??''}" aria-label="Previous season" ${i<=0?'disabled':''}>←</button>
+      <button class="ctl" data-refseason="${seasons[i+1]??''}" aria-label="Next season" ${i>=seasons.length-1?'disabled':''}>→</button>
+      <button class="ctl ctl-primary" data-act="addref">+ Game</button>
+    </div>
+  </header>
+
+  <div class="strip">
+    <div class="metric"><div class="m-label">Earned</div><span class="m-value">${money(earned)}</span>
+      <div class="m-note">${inS.length} game${inS.length===1?'':'s'}</div></div>
+    <div class="metric"><div class="m-label">Received</div><span class="m-value">${money(received)}</span></div>
+    <div class="metric"><div class="m-label">Still owed</div>
+      <span class="m-value ${owed>0.005?'is-flagged':''}">${money(owed)}</span>
+      <div class="m-note">${inS.filter(g=>!g.paid).length} game${inS.filter(g=>!g.paid).length===1?'':'s'} waiting${owedElsewhere>0.005?` · ${money(owedElsewhere)} more from other seasons`:''}</div></div>
+  </div>
+
+  <section class="band tight">
+    ${inS.length?`<div class="cmp-wrap"><table class="ref">
+      <thead><tr><th>Date</th><th>Rink</th><th>Level</th><th class="r">Rate</th><th>Payment</th><th></th></tr></thead>
+      <tbody>${months.map(m=>{const g=inS.filter(x=>x.date.startsWith(m)),t=sum(g),o=r2(t-sum(g.filter(x=>x.paid)));
+        return `<tr class="mo"><td colspan="3"><span class="mn">${MONTH_NAMES[+m.slice(5,7)-1]}</span></td>
+          <td colspan="3" class="mt">Total <b>${money(t)}</b> · ${o>0.005?`<span class="owed">${money(o)} owed</span>`:'nothing owed'}</td></tr>`
+          +g.map(row).join('')}).join('')}</tbody></table></div>`
+      :`<p class="lede">No games in the ${seasonLabel(sy)} season yet. Add one with <b>+ Game</b>, or paste them in from the spreadsheet below.</p>`}
+    <datalist id="refRinks">${[...new Set(games.map(g=>g.rink).filter(Boolean))].map(x=>`<option value="${esc(x)}">`).join('')}</datalist>
+    <datalist id="refLevels">${[...new Set(games.map(g=>g.level).filter(Boolean))].map(x=>`<option value="${esc(x)}">`).join('')}</datalist>
+  </section>
+
+  <details class="ref-import">
+    <summary>Paste games in from the spreadsheet</summary>
+    <textarea id="refPaste" placeholder="Copy the rows from the sheet — date, rink, level, rate, and the payment checkbox — and paste them here. Month headings and blank rows are skipped."></textarea>
+    <div class="row">Dates without a year belong to the
+      <select id="refPasteSeason">${Array.from({length:6},(_,j)=>seasonOf(today)-j).map(y=>`<option value="${y}" ${y===sy?'selected':''}>${seasonLabel(y)}</option>`).join('')}</select>
+      season <button class="ctl" data-act="refimport">Import</button></div>
+  </details>
+</main>`;
+}
+/* the rate a level paid last time — at this rink if it has been reffed here */
+function refRateFor(rink,level){
+  const g=refGames().filter(x=>x.level===level).sort((a,b)=>b.date.localeCompare(a.date));
+  const here=g.find(x=>x.rink===rink)||g[0];
+  return here?n0(here.rate):null;
+}
+function addRefGame(){
+  const games=refGames(),last=[...games].sort((a,b)=>b.date.localeCompare(a.date))[0]||{};
+  const rinks=[...new Set(games.map(g=>g.rink).filter(Boolean))],levels=[...new Set(games.map(g=>g.level).filter(Boolean))];
+  modal(`<h3>Add a game</h3>
+    <div class="f2"><div class="fieldrow"><label for="rgD">Date</label><input type="date" id="rgD" value="${iso(new Date())}"></div>
+      <div class="fieldrow"><label for="rgR">Rate</label><input id="rgR" inputmode="decimal" placeholder="0.00"></div></div>
+    <div class="fieldrow"><label for="rgK">Rink</label><input id="rgK" list="rgKs" value="${esc(last.rink||'')}"><datalist id="rgKs">${rinks.map(x=>`<option value="${esc(x)}">`).join('')}</datalist></div>
+    <div class="fieldrow"><label for="rgL">Level</label><input id="rgL" list="rgLs"><datalist id="rgLs">${levels.map(x=>`<option value="${esc(x)}">`).join('')}</datalist></div>
+    <div class="fieldrow"><label><input type="checkbox" id="rgP" style="width:auto;margin-right:6px">Already paid</label></div>`,
+    'Add game',()=>{
+      const date=$('#rgD').value,rate=n0(String($('#rgR').value).replace(/[$,]/g,''));
+      if(!date){toast('Needs a date');return false}
+      pushUndo(null);
+      const paid=$('#rgP').checked;
+      games.push({id:nextId(games,'g'),date,rink:$('#rgK').value.trim(),level:$('#rgL').value.trim(),rate:r2(rate),paid,paidOn:paid?iso(new Date()):null});
+      UI.refSeason=seasonOf(date);save();render();toast('Game added — ⌘Z to undo');
+    });
+  /* picking a level fills in what it paid last time, unless a rate is typed */
+  const fill=()=>{const r=refRateFor($('#rgK').value.trim(),$('#rgL').value.trim());
+    if(r!=null&&!$('#rgR').value)$('#rgR').value=r.toFixed(2)};
+  setTimeout(()=>{$('#rgL')?.addEventListener('change',fill);$('#rgK')?.addEventListener('change',fill);$('#rgL')?.focus()},40);
+}
+/* Rows copied out of the spreadsheet arrive tab-separated: date, rink, level,
+   rate, and the checkbox as TRUE/FALSE. Month headings, the column headings
+   and empty template rows are skipped. Two identical games on one day are
+   real (back-to-back at the same level), so matches are counted rather than
+   collapsed: a paste only adds the copies of a game the list does not
+   already have, which makes pasting the same rows twice harmless. */
+function importRefGames(){
+  const text=($('#refPaste')||{}).value||'',sy=+(($('#refPasteSeason')||{}).value||seasonOf(iso(new Date())));
+  const games=refGames(),have={},took={};
+  for(const g of games){const kk=[g.date,g.rink,g.level,r2(n0(g.rate))].join('|');have[kk]=(have[kk]||0)+1}
+  let added=0,skipped=0;const fresh=[];
+  for(const line of text.split(/\r?\n/)){
+    const c=line.split(/\t|\s{2,}/).map(x=>x.trim());
+    const dm=(c[0]||'').match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?$/);
+    if(!dm)continue;
+    const mo=+dm[1],da=+dm[2];
+    let yr=dm[3]?+dm[3]:(mo>=9?sy:sy+1);if(yr<100)yr+=2000;
+    const rate=n0(String(c[3]||'').replace(/[$,]/g,''));
+    if(!c[1]&&!c[2]&&!rate){skipped++;continue}
+    const date=iso(new Date(yr,mo-1,da));
+    const paid=/^(true|yes|y|x|✓|✔|paid)$/i.test(c[4]||'');
+    const key=[date,c[1]||'',c[2]||'',r2(rate)].join('|');
+    took[key]=(took[key]||0)+1;
+    if(took[key]<=(have[key]||0)){skipped++;continue}
+    fresh.push({date,rink:c[1]||'',level:c[2]||'',rate:r2(rate),paid,paidOn:null});
+  }
+  if(!fresh.length){toast(skipped?'Nothing new — those games are already here':'No games found in that paste');return}
+  pushUndo(null);
+  for(const g of fresh){g.id=nextId(games,'g');games.push(g);added++}
+  UI.refSeason=sy;save();render();
+  toast(`${added} game${added===1?'':'s'} imported${skipped?`, ${skipped} skipped`:''} — ⌘Z to undo`);
+}
+
 /* ── Starting from the sheet ──────────────────────────────────────
    Shared by Payoff and Projections, so the two can never tell different
    stories about the same sheet. */
@@ -4417,6 +4581,21 @@ document.addEventListener('change',e=>{
   if(d.cal){const c=S.plan.calendar.find(x=>x.id===d.cal);if(c){c.done=t.checked;save();render()}return}
   /* A reminder's date moves when the thing it waits on moves — a charge that
      posts later, a payment pushed to the next payday. */
+  if(d.rf){
+    const[gid,field]=d.rf.split(':'),g=refGames().find(x=>x.id===gid);if(!g)return;
+    pushUndo(null);
+    if(field==='paid'){g.paid=t.checked;g.paidOn=t.checked?iso(new Date()):null}
+    else if(field==='rate')g.rate=r2(n0(String(t.value).replace(/[$,]/g,'')));
+    else if(field==='date'){if(t.value)g.date=t.value}
+    else g[field]=t.value.trim();
+    save();
+    /* `change` fires as focus is leaving, before it lands on the next field.
+       Redraw once it has landed, and put it back there — otherwise tabbing
+       from rink to level drops the caret on the floor. */
+    setTimeout(()=>{const ae=document.activeElement,key=ae&&ae.dataset?ae.dataset.rf:null;
+      render();if(key){const n=document.querySelector(`[data-rf="${CSS.escape(key)}"]`);if(n)n.focus({preventScroll:true})}},0);
+    return;
+  }
   if(d.wi){
     S.plan.whatIf=S.plan.whatIf||{};
     const car=S.plan.whatIf.carSale=S.plan.whatIf.carSale||{on:false,amount:12000,date:''};
@@ -4468,6 +4647,9 @@ document.addEventListener('click',e=>{
     render();return;
   }
   if(d.calweek){if(S.weeks[d.calweek]){UI.week=d.calweek;UI.tab='sheet';render()}return}
+  if(d.refseason!=null){if(d.refseason!==''){UI.refSeason=+d.refseason;render()}return}
+  if(d.refdel){const gs=refGames(),j=gs.findIndex(g=>g.id===d.refdel);
+    if(j>=0){pushUndo(null);gs.splice(j,1);save();render();toast('Game removed — ⌘Z to undo')}return}
   if(d.strat){UI.strategy=d.strat;render();return}
   if(d.range){UI.histRange=d.range;render();return}
   if(d.porder){
@@ -4506,6 +4688,8 @@ document.addEventListener('click',e=>{
     case'addopen':addOpenItem();break;
     case'togglearch':UI.showArchived=!UI.showArchived;render();break;
     case'addacct':addAccount();break;
+    case'addref':addRefGame();break;
+    case'refimport':importRefGames();break;
     case'export':exportBackup();break;
     case'import':$('#filepick').click();break;
     case'csv':exportCSV();break;
