@@ -869,6 +869,16 @@ table.cmp tr.planned td:first-child::after{content:'planned';margin-left:var(--s
 .proj-hd .when.never{color:var(--negative)}
 .proj-meta{font-size:var(--text-2);color:var(--ink-muted);font-variant-numeric:tabular-nums}
 .proj .chart{margin-top:var(--space-1)}
+.wi-row{display:flex;flex-wrap:wrap;align-items:baseline;gap:var(--space-1) var(--space-4);font-size:var(--text-3)}
+.wi-on{display:inline-flex;align-items:center;gap:var(--space-1);color:var(--ink);font-weight:var(--weight-medium);cursor:pointer}
+.wi-on input{accent-color:var(--accent);width:16px;height:16px;margin:0}
+.wi-f{display:inline-flex;align-items:baseline;gap:var(--space-half);color:var(--ink-secondary)}
+.wi-f .mark{color:var(--ink-secondary)}
+.wi-f input.cell{font:inherit;color:var(--ink);background:none;border:0;
+  border-bottom:var(--rule-width) solid var(--rule);padding:0 0 1px;min-width:4ch;font-variant-numeric:tabular-nums}
+.wi-f input.cell:focus{outline:none;border-bottom-color:var(--accent)}
+.wi-says{color:var(--ink-secondary);font-size:var(--text-2)}
+.wi-says b{color:var(--positive);font-weight:var(--weight-semibold)}
 
 /* ══ Calendar ═══════════════════════════════════════════════════════
    Rows are pay weeks, so the grid starts on Friday. Every row is one
@@ -2144,7 +2154,7 @@ function stepFireWeek(st,fromWeek){
   }
   return null;
 }
-function simulate(debts,{strategy='avalanche',budget=0,fromWeek=thisWeek(),cap=5200,steps=[],sheetFirst=false,funds=[]}={}){
+function simulate(debts,{strategy='avalanche',budget=0,fromWeek=thisWeek(),cap=5200,steps=[],sheetFirst=false,funds=[],lumps=[]}={}){
   const D=debts.map(d=>({...d,paidOff:null,interest:0}));
   if(!D.length)return{weeks:0,totalInterest:0,debts:D,series:[{w:0,total:0}],fired:[],endBudget:budget};
   const rank=Object.fromEntries((S.plan?.order||[]).map((id,i)=>[id,i]));
@@ -2205,9 +2215,14 @@ function simulate(debts,{strategy='avalanche',budget=0,fromWeek=thisWeek(),cap=5
     let pool;
     const delta=fundDelta(w);
     lastBudget=r2(budget+extra+delta);weekBudget.push(lastBudget);
+    /* one-time money — a sale, a refund — joins that week's pool after the
+       minimums, so it goes wherever attack goes. It is not a weekly amount and
+       stays out of `weekBudget`. */
+    const lump=lumps.reduce((t,l)=>t+(l.w===w?n0(l.amount):0),0);
     if(sheetFirst&&w===0){
       pool=budget+extra;
       for(const d of D){const p=Math.min(n0(d.current),d.balance,pool);d.balance-=p;pool-=p}
+      pool+=lump;
       for(const d of D){if(d.balance<=0.005)continue;
         const i=d.balance*d.dpr*7;d.balance+=i;d.interest+=i;totalInterest+=i}
       const live=order();
@@ -2225,7 +2240,7 @@ function simulate(debts,{strategy='avalanche',budget=0,fromWeek=thisWeek(),cap=5
       pool=0;
     }else{
       const live=order();
-      pool=Math.max(0,budget+extra+delta);
+      pool=Math.max(0,budget+extra+delta)+lump;
       /* a grace balance is cleared in full or not at all — never partially */
       for(const d of live){if(!d.grace||d.balance<=0.005)continue;
         if(pool+0.005>=d.balance){pool-=d.balance;d.balance=0}}
@@ -3387,7 +3402,17 @@ function viewProjections(el){
     <p class="lede">Nothing left to project — every loan and card is at $0.</p></main>`;return}
   const floor=r2(debts.reduce((t,d)=>t+d.weeklyMin,0));
   const budget=Math.max(n0(T.debtFunded),floor);
-  const sim=simulate(debts,sheetSimOpts(k,budget,UI.strategy));
+  /* What if the other car is sold. Kept in the plan so it syncs and survives a
+     reload; off, it changes nothing. The sale lands as one lump in the week of
+     the date given — the week after this sheet if none is — and goes to debt
+     in the chosen order. */
+  S.plan.whatIf=S.plan.whatIf||{};
+  const car=S.plan.whatIf.carSale=S.plan.whatIf.carSale||{on:false,amount:12000,date:''};
+  const carDate=car.date||addWeeks(k,1);
+  const carW=Math.max(0,Math.floor(daysBetween(k,carDate)/7));
+  const lumps=car.on&&n0(car.amount)>0?[{w:carW,amount:n0(car.amount),label:'Other car sold'}]:[];
+  const sim=simulate(debts,{...sheetSimOpts(k,budget,UI.strategy),lumps});
+  const base=lumps.length?simulate(debts,sheetSimOpts(k,budget,UI.strategy)):sim;
   const never=sim.weeks===Infinity;
   const when=w=>addWeeks(k,w);
   const accts=[...sim.debts].sort((a,b)=>(a.paidOff??1e9)-(b.paidOff??1e9));
@@ -3418,6 +3443,7 @@ function viewProjections(el){
        of the starting point, not something that happens later */
     for(const d of sim.debts)
       if(w>1&&d.paidOff===w&&n0(minOf[d.id])>0.005)here.push({what:`${d.name} paid off — its minimum joins attack`,gain:n0(minOf[d.id])});
+    for(const l of lumps)if(l.w===w)here.unshift({what:`${l.label} — ${money(l.amount)} to debt, once`,gain:l.amount,once:true});
     if(here.length)events.push({w,here,after:attackAt(w)});
   }
   events.forEach((e,i)=>e.n=String(i+1));
@@ -3446,6 +3472,20 @@ function viewProjections(el){
       <span class="m-value">${never?'—':money0(sim.totalInterest)}</span></div>
   </div>
 
+  <section class="band tight whatif" aria-labelledby="wi-h">
+    <h2 class="sect-label" id="wi-h">What if</h2>
+    <div class="wi-row">
+      <label class="wi-on"><input type="checkbox" data-wi="on" ${car.on?'checked':''}> Sell the other car</label>
+      <label class="wi-f">for <span class="mark">$</span><input class="cell inline" data-wi="amount" inputmode="decimal"
+        style="${figureWidth(n0(car.amount).toFixed(2))}" value="${n0(car.amount).toFixed(2)}" aria-label="Sale amount"></label>
+      <label class="wi-f">money in <input class="cell cell-date" type="date" data-wi="date" value="${carDate}" aria-label="Date the money arrives"></label>
+      <span class="wi-says">${lumps.length
+        ?(base.weeks===Infinity||sim.weeks===Infinity?'':`Debt free <b>${longDate(sim.debtFreeDate)}</b> instead of ${longDate(base.debtFreeDate)}`
+          +` — ${monthsLabel(weeksToMonths(base.weeks)-weeksToMonths(sim.weeks))} sooner, ${money0(base.totalInterest-sim.totalInterest)} less interest`)
+        :'Off — the projection below is without it.'}</span>
+    </div>
+  </section>
+
   <section class="band" aria-labelledby="pt-h">
     <h2 class="sect-label" id="pt-h">All loans and cards</h2>
     <p class="lede muted">The first week is this sheet exactly as entered. After that, the same total goes to
@@ -3465,7 +3505,7 @@ function viewProjections(el){
           return c.length?` pays off ${c.map(d=>esc(d.name)).join(' and ')}`:''})()}</td><td></td><td>${money(attackAt(1))}</td></tr>
         ${events.map(e=>e.here.map((x,j)=>`<tr>
           <td>${j===0?e.n:''}</td><td>${j===0?dayYear(when(e.w)):''}</td><td>${esc(x.what)}</td>
-          <td class="${x.gain<0?'ev-down':'ev-up'}">${x.gain<0?'−':'+'}${money(Math.abs(x.gain))}</td>
+          <td class="${x.gain<0?'ev-down':'ev-up'}">${x.gain<0?'−':'+'}${money(Math.abs(x.gain))}${x.once?' once':''}</td>
           <td>${j===e.here.length-1?money(e.after):''}</td></tr>`).join('')).join('')}
       </tbody>
     </table></div>
@@ -4362,6 +4402,15 @@ document.addEventListener('change',e=>{
   if(d.cal){const c=S.plan.calendar.find(x=>x.id===d.cal);if(c){c.done=t.checked;save();render()}return}
   /* A reminder's date moves when the thing it waits on moves — a charge that
      posts later, a payment pushed to the next payday. */
+  if(d.wi){
+    S.plan.whatIf=S.plan.whatIf||{};
+    const car=S.plan.whatIf.carSale=S.plan.whatIf.carSale||{on:false,amount:12000,date:''};
+    pushUndo(null);
+    if(d.wi==='on')car.on=t.checked;
+    else if(d.wi==='amount'){const v=n0(String(t.value).replace(/[$,]/g,''));if(v>=0)car.amount=r2(v)}
+    else if(d.wi==='date')car.date=t.value||'';
+    save();render();return;
+  }
   if(d.caldate){const c=S.plan.calendar.find(x=>x.id===d.caldate);
     if(c&&t.value&&t.value!==c.d){pushUndo(null);c.d=t.value;save();render();toast(`Moved to ${dueLabel(t.value)} — ⌘Z to undo`)}
     return}
