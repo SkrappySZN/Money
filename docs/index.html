@@ -1830,7 +1830,11 @@ function computeWeek(k){
 
   /* the sheet's L4: whatever of this month's card minimums isn't being paid
      straight to the card gets parked in the minimums bucket */
-  const cardRows=rows.filter(r=>r.a.kind==='card');
+  /* A card another bucket exists to pay is that bucket's business: what goes
+     to it is drawn from there, so counting it here too would take the same
+     payment off two buckets. */
+  const paidByBucket=new Set(accts.map(a=>a.autoOut).filter(Boolean));
+  const cardRows=rows.filter(r=>r.a.kind==='card'&&!paidByBucket.has(r.a.id));
   for(const r of rows){
     if(r.a.autoOther==='cardMinShortfall'){
       const paidDirect=cardRows.reduce((s,c)=>s+c.min,0);
