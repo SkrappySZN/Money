@@ -2097,10 +2097,10 @@ function runChecks(k,rows,T){
      reference, not an alarm — so this speaks only when what bills this week is
      more than the bucket holds. */
   {
-    const hits=subsInWeek(k);
+    const bucket=rows.find(r=>r.a.id==='subscriptions');
+    const hits=subsInWeek(k).filter(x=>!(bucket&&bucket.a.autoOut)||x.card===bucket.a.autoOut);
     if(hits.length){
       const due=r2(hits.reduce((t,x)=>t+x.amount,0));
-      const bucket=rows.find(r=>r.a.id==='subscriptions');
       const held=bucket?r2(bucket.balance+bucket.total):0;
       if(due>held+0.005)
         out.push({s:'warn',t:`<b>${money(due)} of subscriptions bill this week</b> and the bucket `
@@ -4379,10 +4379,14 @@ function viewSubs(el){
     ?`yearly on ${MONTH_NAMES[n0(x.month)-1]||'?'} ${n0(x.day)}`:`monthly on the ${ordinal(n0(x.day))}`;
   const bucket=()=>{const b=C&&C.rows.find(r=>r.a.id==='subscriptions');
     if(!b)return 'No bucket is funding them.';
-    const per=r2(n0(b.minAmt)*MIN_DIVISOR),gap=r2(per-perMo);
+    const card=b.a.autoOut,need=card?subsMonthly(today,card):perMo;
+    const what=card?`the ones on ${esc(cardName(card))} cost`:'they cost';
+    const per=r2(n0(b.minAmt)*MIN_DIVISOR),gap=r2(per-need);
     return `The Subscriptions bucket puts in ${money(n0(b.minAmt))}/week, ${money(per)} a month — `
-      +(Math.abs(gap)<0.005?'exactly what they cost.'
-        :gap>0?`<b>${money(gap)} more</b> than they cost.`:`<b>${money(-gap)} less</b> than they cost.`)};
+      +(Math.abs(gap)<0.005?`exactly what ${what}.`
+        :gap>0?`<b>${money(gap)} more</b> than ${what}.`:`<b>${money(-gap)} less</b> than ${what}.`)
+      +(card&&need!==perMo?` The other ${money(r2(perMo-need))} a month is paid from ${
+        [...new Set(live.filter(y=>y.x.card!==card).map(y=>esc(cardName(y.x.card))))].join(' and ')}, not this bucket.`:'')};
 
   el.innerHTML=`<main class="page">
   <header class="masthead">
@@ -4741,7 +4745,9 @@ function subNextCharge(x,from){
 const subIsLive=(x,on)=>!(x.ended&&x.ended<=on);
 /* A yearly charge counts as a twelfth of itself toward the monthly figure. */
 const subMonthlyCost=(x,on)=>subIsLive(x,on)?r2(subAmountOn(x,on)/(x.cycle==='year'?12:1)):0;
-const subsMonthly=on=>r2(((S.plan&&S.plan.subs)||[])
+/* `card` narrows it to what bills to one account — the Subscriptions bucket
+   exists to clear one card, so a charge on a debit card is not its to cover. */
+const subsMonthly=(on,card)=>r2(((S.plan&&S.plan.subs)||[]).filter(x=>!card||x.card===card)
   .reduce((t,x)=>t+subMonthlyCost(x,on||thisWeek()),0));
 
 function rollDate(d,from,anchorDay){
