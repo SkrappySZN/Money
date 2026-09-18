@@ -4445,8 +4445,12 @@ function editSub(id){
   const x=id?list.find(y=>y.id===id):null;
   if(id&&!x)return;
   const now=iso(new Date());
+  /* A charge can land on a card or come straight out of a bank account on a
+     debit card, so both are offered. */
   const cards=liveAccounts().filter(a=>a.kind==='card');
+  const banks=liveAccounts().filter(a=>a.kind==='income'||KIND_INFLOW(a.kind));
   const defCard=x?x.card:(list.find(y=>subIsLive(y,now))||{}).card||(cards[0]||{}).id;
+  const opt=a=>`<option value="${a.id}" ${a.id===defCard?'selected':''}>${esc(a.name)}</option>`;
   const yr=x&&x.cycle==='year';
   modal(`<h3>${x?'Edit subscription':'Add a subscription'}</h3>
     <div class="fieldrow"><label for="sbN">Name</label><input type="text" id="sbN" value="${esc(x?x.name:'')}" placeholder="Netflix"></div>
@@ -4455,8 +4459,9 @@ function editSub(id){
     <div class="f2"><div class="fieldrow"><label for="sbD">Day of month</label><input id="sbD" inputmode="numeric" value="${x?n0(x.day):''}" placeholder="1–31"></div>
       <div class="fieldrow" id="sbMw"><label for="sbM">Month</label><select id="sbM">${MONTH_NAMES.map((m,i)=>
         `<option value="${i+1}" ${(x&&n0(x.month)===i+1)||(!(x&&x.month)&&i===parseISO(now).getMonth())?'selected':''}>${m}</option>`).join('')}</select></div></div>
-    <div class="fieldrow"><label for="sbK">Card</label><select id="sbK">${cards.map(a=>
-      `<option value="${a.id}" ${a.id===defCard?'selected':''}>${esc(a.name)}</option>`).join('')}</select></div>
+    <div class="fieldrow"><label for="sbK">Paid from</label><select id="sbK">
+      <optgroup label="Credit cards">${cards.map(opt).join('')}</optgroup>
+      <optgroup label="Bank accounts (debit card)">${banks.map(opt).join('')}</optgroup></select></div>
     <div class="f2"><div class="fieldrow"><label for="sbTA">New price (optional)</label><input id="sbTA" inputmode="decimal" value="${x&&x.to?n0(x.to.amt).toFixed(2):''}" placeholder="—"></div>
       <div class="fieldrow"><label for="sbTF">From</label><input type="date" id="sbTF" value="${x&&x.to?x.to.from:''}"></div></div>
     ${x?`<div class="mrow" style="justify-content:flex-start">
