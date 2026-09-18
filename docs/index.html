@@ -637,6 +637,8 @@ input.cell.is-attack.is-zero{color:var(--ink-muted);font-weight:var(--weight-reg
 .rank .rv{font-size:var(--text-3);color:var(--ink)}
 .rank li.lead .rv{font-weight:var(--weight-semibold)}
 .rank .rl{font-size:var(--text-1);color:var(--ink-muted)}
+.rank.subs li{grid-template-columns:6ch 1fr auto auto}
+.rank.subs .rt .ctl{min-height:0}
 .rank .pif .n{font-size:var(--text-1);color:var(--positive);font-weight:var(--weight-medium)}
 
 /* ── Timeline bars ────────────────────────────────────────────────
@@ -2091,7 +2093,7 @@ function runChecks(k,rows,T){
       +`if it goes unpaid, and the payoff date assumes you are paying it nothing.`});
   }
   /* Subscriptions land on a card whether or not the bucket has the money for
-     them. The schedule itself lives on Plan — a recurring charge you expect is
+     them. The schedule itself lives on Subscriptions — a recurring charge you expect is
      reference, not an alarm — so this speaks only when what bills this week is
      more than the bucket holds. */
   {
@@ -2454,6 +2456,7 @@ const TABS=[
   {id:'payoff',  label:'Payoff',     hidden:true},
   {id:'projections',label:'Projections'},
   {id:'plan',    label:'Plan'},
+  {id:'subs',    label:'Subscriptions'},
   {id:'history', label:'History',    hidden:true},
   {id:'accounts',label:'Accounts'},
   {id:'reffing', label:'Reffing'},
@@ -2461,7 +2464,7 @@ const TABS=[
 /* Hidden views keep their code and still render if reached, but have no place
    in the nav and no key. Keys number whatever is left, in order. */
 TABS.filter(t=>!t.hidden).forEach((t,i)=>t.k=String((i+1)%10));
-const CONVERTED=new Set(['week','sheet','calendar','attack','payoff','projections','plan','reffing']);   // grows as each view lands
+const CONVERTED=new Set(['week','sheet','calendar','attack','payoff','projections','plan','subs','reffing']);   // grows as each view lands
 /* Replacing #view.innerHTML removes whatever input is focused, and if the user
    has typed in it the browser fires `change` at it SYNCHRONOUSLY, mid-render.
    Any handler that re-renders then re-enters us halfway through and the outer
@@ -2487,7 +2490,7 @@ function renderInner(){
   if(typeof paintSync==='function')paintSync();
   const v=$('#view');
   const fn={week:viewWeek,sheet:viewAllocation,calendar:viewCalendar,attack:viewAttack,projections:viewProjections,reffing:viewReffing,payoff:viewPayoff,
-            plan:viewPlan,history:viewHistory,accounts:viewAccounts}[UI.tab]||viewWeek;
+            plan:viewPlan,subs:viewSubs,history:viewHistory,accounts:viewAccounts}[UI.tab]||viewWeek;
   if(CONVERTED.has(UI.tab)){
     v.className=''; fn(v);
   }else{
@@ -4252,11 +4255,10 @@ function viewPlan(el){
   const done=cal.filter(c=>c.done);
   const openLeft=P.open.filter(o=>!o.done),openDone=P.open.filter(o=>o.done);
 
-  const subs=[...(P.subs||[])].sort((a,b)=>n0(a.day)-n0(b.day));
+  const liveSubs=(P.subs||[]).filter(x=>subIsLive(x,today));
   const subsNow=subsMonthly(today);
-  /* the next four pay weeks, so the clustering is visible rather than implied */
-  const subWeeks=[0,1,2,3].map(i=>{const wk=addWeeks(k,i),h=subsInWeek(wk);
-    return {wk,hits:h,total:r2(h.reduce((t,x)=>t+x.amount,0))}});
+  const nextSub=liveSubs.map(x=>({x,d:subNextCharge(x,iso(new Date()))})).filter(y=>y.d)
+    .sort((p,q)=>p.d.localeCompare(q.d))[0];
 
   const debts=debtSnapshot(k);
   const byId=Object.fromEntries(debts.map(d=>[d.id,d]));
@@ -4287,33 +4289,13 @@ function viewPlan(el){
         ?` <span class="pn-inline">${Math.abs(daysBetween(c.d,today))} days ago</span>`:''}</p></li>`).join('')}</ul>
   </section>`:''}
 
-  ${subs.length?`<section class="band${nowRows.length?'':' tight'}" aria-labelledby="subs-h">
-    <h2 class="sect-label" id="subs-h">Subscriptions<span class="count">${money(subsNow)}/month</span></h2>
-    <p class="lede muted">Every recurring charge and the day it bills.
-      They bill to ${esc((acct(subs[0].card)||{}).name||'a card')}, and the Subscriptions bucket is what clears it —
-      ${(()=>{const b=C.rows.find(r=>r.a.id==='subscriptions');
-        if(!b)return 'no bucket is funding them';
-        const per=r2(n0(b.minAmt)*MIN_DIVISOR),gap=r2(per-subsNow);
-        return `it puts in ${money(n0(b.minAmt))}/week, ${money(per)} a month, `
-          +(Math.abs(gap)<0.005?'exactly what they cost'
-            :gap>0?`<b>${money(gap)} more</b> than they cost`
-                  :`<b>${money(-gap)} less</b> than they cost`)})()}.</p>
-    <ul class="rank">
-      ${subs.map(x=>{const amtNow=subAmountOn(x,today);
-        return `<li><span class="n">${n0(x.day)}</span>
-        <span><span class="nm">${esc(x.name)}</span>
-          <div class="meta">bills on the ${ordinal(n0(x.day))}${x.to
-            ? ` · ${money(n0(x.amt))} → ${money(n0(x.to.amt))} from ${dueLabel(x.to.from)}`:''}</div></span>
-        <span class="rt"><div class="rv">${money(amtNow)}</div><div class="rl">per month</div></span></li>`}).join('')}
-    </ul>
-    <h3 class="sub-label">What lands, by pay week</h3>
-    <ul class="rank">
-      ${subWeeks.map(w=>`<li><span class="n"></span>
-        <span><span class="nm">${weekLabel(w.wk)}</span>
-          <div class="meta">${w.hits.length?w.hits.map(h=>`${esc(h.name)} ${money(h.amount)}`).join(' · '):'nothing bills'}</div></span>
-        <span class="rt"><div class="rv">${w.total?money(w.total):'—'}</div><div class="rl">${w.hits.length?`${w.hits.length} charge${w.hits.length===1?'':'s'}`:''}</div></span></li>`).join('')}
-    </ul>
-  </section>`:''}
+  <section class="band${nowRows.length?'':' tight'}" aria-labelledby="subs-h">
+    <h2 class="sect-label" id="subs-h">Subscriptions<span class="count">${money(subsNow)}/month</span>
+      <button class="ctl sect-action" data-tab="subs">Open Subscriptions</button></h2>
+    <p class="lede muted">${liveSubs.length
+      ?`${liveSubs.length} active${nextSub?` · next is ${esc(nextSub.x.name)}, ${money(subAmountOn(nextSub.x,nextSub.d))} on ${dueLabel(nextSub.d)}`:''}.`
+      :'None tracked yet.'}</p>
+  </section>
 
   <section class="band" aria-labelledby="order-h">
     <h2 class="sect-label" id="order-h">Payoff order</h2>
@@ -4374,6 +4356,137 @@ function viewPlan(el){
     ${cal.length?'':'<p class="lede muted">Nothing on the calendar.</p>'}
   </section>
 </main>`;
+}
+
+/* ── Subscriptions ────────────────────────────────────────────────
+   Every recurring charge: what it costs, the card it lands on, and the next
+   day it hits. Cancelling keeps the row, dated, so what was dropped stays
+   visible and charges before that day still show where they billed. */
+function viewSubs(el){
+  const k=currentWeek(),C=computeWeek(k);
+  const now=iso(new Date()),today=thisWeek();
+  const all=(S.plan&&S.plan.subs)||[];
+  const live=all.filter(x=>subIsLive(x,now))
+    .map(x=>({x,d:subNextCharge(x,now)})).sort((p,q)=>(p.d||'9').localeCompare(q.d||'9'));
+  const gone=all.filter(x=>!subIsLive(x,now)).sort((p,q)=>q.ended.localeCompare(p.ended));
+  const perMo=subsMonthly(today);
+  const yearly=live.filter(y=>y.x.cycle==='year');
+  const subWeeks=[0,1,2,3].map(i=>{const wk=addWeeks(today,i),h=subsInWeek(wk);
+    return {wk,hits:h,total:r2(h.reduce((t,x)=>t+x.amount,0))}});
+  const cardName=id=>(acct(id)||{}).name||'no card';
+  const when=d=>{const n=daysBetween(now,d);return n===0?'today':n===1?'tomorrow':`in ${n} days`};
+  const cadence=x=>x.cycle==='year'
+    ?`yearly on ${MONTH_NAMES[n0(x.month)-1]||'?'} ${n0(x.day)}`:`monthly on the ${ordinal(n0(x.day))}`;
+  const bucket=()=>{const b=C&&C.rows.find(r=>r.a.id==='subscriptions');
+    if(!b)return 'No bucket is funding them.';
+    const per=r2(n0(b.minAmt)*MIN_DIVISOR),gap=r2(per-perMo);
+    return `The Subscriptions bucket puts in ${money(n0(b.minAmt))}/week, ${money(per)} a month — `
+      +(Math.abs(gap)<0.005?'exactly what they cost.'
+        :gap>0?`<b>${money(gap)} more</b> than they cost.`:`<b>${money(-gap)} less</b> than they cost.`)};
+
+  el.innerHTML=`<main class="page">
+  <header class="masthead">
+    <div><h1 class="page-title">Subscriptions</h1>
+      <div class="dateline">${live.length} active${gone.length?` · ${gone.length} cancelled`:''}</div></div>
+    <div class="controls"><button class="ctl ctl-primary" data-act="addsub">+ Subscription</button></div>
+  </header>
+
+  <div class="strip">
+    <div class="metric"><div class="m-label">Per month</div><span class="m-value">${money(perMo)}</span>
+      ${yearly.length?`<div class="m-note">yearly ones spread over 12</div>`:''}</div>
+    <div class="metric"><div class="m-label">Per week</div><span class="m-value">${money(r2(perMo/MIN_DIVISOR))}</span>
+      <div class="m-note">a month split ${MIN_DIVISOR} ways, like the sheet</div></div>
+    <div class="metric"><div class="m-label">Per year</div><span class="m-value">${money(r2(perMo*12))}</span></div>
+    <div class="metric"><div class="m-label">Next charge</div>
+      <span class="m-value">${live[0]&&live[0].d?money(subAmountOn(live[0].x,live[0].d)):'—'}</span>
+      <div class="m-note">${live[0]&&live[0].d?`${esc(live[0].x.name)} · ${dueLabel(live[0].d)}, ${when(live[0].d)}`:''}</div></div>
+  </div>
+
+  <section class="band" aria-labelledby="sl-h">
+    <h2 class="sect-label" id="sl-h">Coming up</h2>
+    <p class="lede muted">${bucket()}</p>
+    ${live.length?`<ul class="rank subs">${live.map(({x,d})=>`<li>
+      <span class="n">${d?dueLabel(d):'—'}</span>
+      <span><span class="nm">${esc(x.name)}</span>
+        <div class="meta">${d?when(d):'no date'} · ${cadence(x)} · ${esc(cardName(x.card))}${x.to&&x.to.from>now
+          ?` · ${money(n0(x.amt))} → ${money(n0(x.to.amt))} from ${dueLabel(x.to.from)}`:''}</div></span>
+      <span class="rt"><div class="rv">${money(d?subAmountOn(x,d):subAmountOn(x,now))}</div>
+        <div class="rl">${x.cycle==='year'?'per year':'per month'}</div></span>
+      <span class="rt"><button class="ctl" data-subedit="${x.id}" aria-label="Edit ${esc(x.name)}">Edit</button></span>
+    </li>`).join('')}</ul>`
+      :'<p class="lede">Nothing tracked. Add one with <b>+ Subscription</b>.</p>'}
+  </section>
+
+  <section class="band" aria-labelledby="sw-h">
+    <h2 class="sect-label" id="sw-h">What lands, by pay week</h2>
+    <ul class="rank">
+      ${subWeeks.map(w=>`<li><span class="n"></span>
+        <span><span class="nm">${weekLabel(w.wk)}</span>
+          <div class="meta">${w.hits.length?w.hits.map(h=>`${esc(h.name)} ${money(h.amount)}`).join(' · '):'nothing bills'}</div></span>
+        <span class="rt"><div class="rv">${w.total?money(w.total):'—'}</div><div class="rl">${w.hits.length?`${w.hits.length} charge${w.hits.length===1?'':'s'}`:''}</div></span></li>`).join('')}
+    </ul>
+  </section>
+
+  ${gone.length?`<section class="band" aria-labelledby="sc-h">
+    <h2 class="sect-label" id="sc-h">Cancelled</h2>
+    <ul class="rank subs">${gone.map(x=>`<li class="is-clear">
+      <span class="n"></span>
+      <span><span class="nm">${esc(x.name)}</span><div class="meta">cancelled ${dueLabel(x.ended)} · was ${cadence(x)}</div></span>
+      <span class="rt"><div class="rv">${money(subAmountOn(x,x.ended))}</div><div class="rl">${x.cycle==='year'?'per year':'per month'}</div></span>
+      <span class="rt"><button class="ctl" data-subedit="${x.id}" aria-label="Edit ${esc(x.name)}">Edit</button></span>
+    </li>`).join('')}</ul>
+  </section>`:''}
+</main>`;
+}
+/* Add (no id) or edit a subscription. Cancel dates it today; Delete removes
+   it outright, for one entered by mistake. Both undo with ⌘Z. */
+function editSub(id){
+  const list=S.plan.subs=S.plan.subs||[];
+  const x=id?list.find(y=>y.id===id):null;
+  if(id&&!x)return;
+  const now=iso(new Date());
+  const cards=liveAccounts().filter(a=>a.kind==='card');
+  const defCard=x?x.card:(list.find(y=>subIsLive(y,now))||{}).card||(cards[0]||{}).id;
+  const yr=x&&x.cycle==='year';
+  modal(`<h3>${x?'Edit subscription':'Add a subscription'}</h3>
+    <div class="fieldrow"><label for="sbN">Name</label><input type="text" id="sbN" value="${esc(x?x.name:'')}" placeholder="Netflix"></div>
+    <div class="f2"><div class="fieldrow"><label for="sbA">Amount</label><input id="sbA" inputmode="decimal" value="${x?n0(x.amt).toFixed(2):''}" placeholder="0.00"></div>
+      <div class="fieldrow"><label for="sbC">Billed</label><select id="sbC"><option value="month">Monthly</option><option value="year" ${yr?'selected':''}>Yearly</option></select></div></div>
+    <div class="f2"><div class="fieldrow"><label for="sbD">Day of month</label><input id="sbD" inputmode="numeric" value="${x?n0(x.day):''}" placeholder="1–31"></div>
+      <div class="fieldrow" id="sbMw"><label for="sbM">Month</label><select id="sbM">${MONTH_NAMES.map((m,i)=>
+        `<option value="${i+1}" ${(x&&n0(x.month)===i+1)||(!(x&&x.month)&&i===parseISO(now).getMonth())?'selected':''}>${m}</option>`).join('')}</select></div></div>
+    <div class="fieldrow"><label for="sbK">Card</label><select id="sbK">${cards.map(a=>
+      `<option value="${a.id}" ${a.id===defCard?'selected':''}>${esc(a.name)}</option>`).join('')}</select></div>
+    <div class="f2"><div class="fieldrow"><label for="sbTA">New price (optional)</label><input id="sbTA" inputmode="decimal" value="${x&&x.to?n0(x.to.amt).toFixed(2):''}" placeholder="—"></div>
+      <div class="fieldrow"><label for="sbTF">From</label><input type="date" id="sbTF" value="${x&&x.to?x.to.from:''}"></div></div>
+    ${x?`<div class="mrow" style="justify-content:flex-start">
+      ${x.ended?`<button class="btn" id="sbRestore">Restore</button>`:`<button class="btn" id="sbEnd">Cancel subscription</button>`}
+      <button class="btn danger" id="sbDel">Delete</button></div>`:''}`,
+    x?'Save':'Add',()=>{
+      const name=$('#sbN').value.trim(),amt=r2(n0(String($('#sbA').value).replace(/[$,]/g,'')));
+      const day=Math.round(n0($('#sbD').value));
+      if(!name){toast('Give it a name');return false}
+      if(!(day>=1&&day<=31)){toast('Day of month is 1 to 31');return false}
+      const ta=String($('#sbTA').value).trim(),tf=$('#sbTF').value;
+      if(ta&&!tf){toast('Give the new price a start date');return false}
+      pushUndo(null);
+      const y=x||{id:nextId(list,'sub')};
+      Object.assign(y,{name,amt,day,card:$('#sbK').value,cycle:$('#sbC').value});
+      if(y.cycle==='year')y.month=+$('#sbM').value;else delete y.month;
+      if(ta)y.to={from:tf,amt:r2(n0(ta.replace(/[$,]/g,'')))};else delete y.to;
+      if(!x)list.push(y);
+      save();render();toast(`${name} ${x?'saved':'added'} — ⌘Z to undo`);
+    });
+  const sync=()=>{$('#sbMw').style.visibility=$('#sbC').value==='year'?'visible':'hidden'};
+  $('#sbC').onchange=sync;sync();
+  const close=()=>$('#modalRoot').innerHTML='';
+  if(x){
+    const end=$('#sbEnd'),back=$('#sbRestore');
+    if(end)end.onclick=()=>{pushUndo(null);x.ended=now;close();save();render();toast(`${x.name} cancelled — ⌘Z to undo`)};
+    if(back)back.onclick=()=>{pushUndo(null);delete x.ended;close();save();render();toast(`${x.name} restored`)};
+    $('#sbDel').onclick=()=>{pushUndo(null);list.splice(list.indexOf(x),1);close();save();render();toast(`${x.name} deleted — ⌘Z to undo`)};
+  }
+  setTimeout(()=>$('#sbN')?.focus(),40);
 }
 
 /* ── History ──────────────────────────────────────────────────────── */
@@ -4591,23 +4704,40 @@ function rerenderKeepFocus(){
    the new figure. */
 const ordinal=n=>n+(n%100>=11&&n%100<=13?'th':['th','st','nd','rd'][n%10]||'th');
 const subAmountOn=(x,date)=>x.to&&date>=x.to.from?n0(x.to.amt):n0(x.amt);
+/* Whether a subscription bills on a date. `cycle:'year'` bills once, in
+   `month`; everything else is monthly. A charge dated past the end of a short
+   month bills on its last day. `ended` is the day it was cancelled: nothing
+   bills from then on, and charges before it stay where they were. */
+function subBillsOn(x,date){
+  if(x.ended&&date>=x.ended)return false;
+  const d=parseISO(date);
+  if(x.cycle==='year'&&n0(x.month)!==d.getMonth()+1)return false;
+  const last=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();
+  return Math.min(n0(x.day),last)===d.getDate();
+}
 /* Which subscriptions bill inside a pay week. Walks the seven days rather than
    reasoning about months, so a week crossing a month boundary is not a special
-   case; a charge dated past the end of a short month bills on its last day. */
+   case. */
 function subsInWeek(k){
   const list=(S.plan&&S.plan.subs)||[];
   const out=[];
   for(let i=0;i<7;i++){
-    const date=addDays(k,i),d=parseISO(date);
-    const last=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();
+    const date=addDays(k,i);
     for(const x of list)
-      if(Math.min(n0(x.day),last)===d.getDate())
-        out.push({...x,date,amount:subAmountOn(x,date)});
+      if(subBillsOn(x,date))out.push({...x,date,amount:subAmountOn(x,date)});
   }
   return out;
 }
+/* The next day on or after `from` a subscription bills, or null once cancelled. */
+function subNextCharge(x,from){
+  for(let i=0;i<=366;i++){const d=addDays(from,i);if(subBillsOn(x,d))return d}
+  return null;
+}
+const subIsLive=(x,on)=>!(x.ended&&x.ended<=on);
+/* A yearly charge counts as a twelfth of itself toward the monthly figure. */
+const subMonthlyCost=(x,on)=>subIsLive(x,on)?r2(subAmountOn(x,on)/(x.cycle==='year'?12:1)):0;
 const subsMonthly=on=>r2(((S.plan&&S.plan.subs)||[])
-  .reduce((t,x)=>t+subAmountOn(x,on||thisWeek()),0));
+  .reduce((t,x)=>t+subMonthlyCost(x,on||thisWeek()),0));
 
 function rollDate(d,from,anchorDay){
   if(!d)return'';
@@ -4966,6 +5096,7 @@ document.addEventListener('click',e=>{
     if(i<0||j<0||j>=o.length)return;
     [o[i],o[j]]=[o[j],o[i]];save();render();return;
   }
+  if(d.subedit){editSub(d.subedit);return}
   if(d.porderadd){S.plan.order.push(d.porderadd);save();render();return}
   if(d.move){
     const[id,dir]=d.move.split(':');
@@ -4994,6 +5125,7 @@ document.addEventListener('click',e=>{
     case'hideref':S.plan.ref.show=false;save();render();toast('Hidden — it lives in your backup');break;
     case'addcal':addCalItem();break;
     case'addopen':addOpenItem();break;
+    case'addsub':editSub();break;
     case'togglearch':UI.showArchived=!UI.showArchived;render();break;
     case'addacct':addAccount();break;
     case'addref':addRefGame();break;
