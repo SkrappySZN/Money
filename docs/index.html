@@ -3030,8 +3030,11 @@ const SHEET_COLS=[
      ?`<td class="num"><input class="cell is-registry${r.a.apr?'':' is-zero'}"`
        +` data-a="${r.a.id}:aprPct" value="${r.a.apr?r2(r.a.apr*100):''}" placeholder="—"></td>`
      :dimCell('—')},
+  /* The income row's balance is the paycheck, so it edits the same figure as
+     the hero field — setWeekField routes it there. It keeps its own data-k so
+     rerenderKeepFocus refocuses this cell, not the hero, while typing. */
   {k:'balance',grp:true,label:'Balance',
-   cell:r=>r.isRollup||r.a.kind==='income'
+   cell:r=>r.isRollup
      ?`<td class="num dim">${money(r.balance)}</td>`
      :`<td class="num"><input class="cell" data-fmt="money" data-k="${r.a.id}:balance"`
        +`${isLocked(currentWeek())?' readonly':''} value="${moneyInput(r.balance)}"></td>`},
@@ -4926,9 +4929,11 @@ const isLocked=k=>!!(S.weeks[k]&&S.weeks[k].locked);
 function setWeekField(key,val){
   const k=currentWeek(),w=S.weeks[k];
   if(isLocked(k))return;
+  const inc=liveAccounts().find(a=>a.kind==='income');
+  /* the sheet's income-row balance is the paycheck under another name */
+  if(inc&&key===inc.id+':balance')key='income';
   if(key==='income'){
     w.income=n0(val);
-    const inc=liveAccounts().find(a=>a.kind==='income');
     if(inc)entryOf(k,inc.id).balance=w.income;
     return;
   }
