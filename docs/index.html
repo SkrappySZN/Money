@@ -4447,6 +4447,29 @@ function viewSubs(el){
 }
 /* Add (no id) or edit a subscription. Cancel dates it today; Delete removes
    it outright, for one entered by mistake. Both undo with ⌘Z. */
+/* The Subscriptions bucket's weekly target follows the subscriptions it pays
+   for: a quarter of what bills each month to the card it clears, rounded up.
+   Only the target moves — what is actually put in (Other) is left for you to
+   change, so the sheet's balance never shifts behind your back. Finalized
+   weeks keep the figure they were closed with, and so do weeks before the
+   sheet being worked on (the one just ended, since a sheet is done the
+   Friday after its week). Returns the new weekly figure, or null. */
+function resizeSubsBucket(){
+  const a=acct('subscriptions');
+  if(!a||!statedWeekly(a))return null;
+  const from=addWeeks(thisWeek(),-1),now=iso(new Date());
+  let shown=null;
+  for(const k of weekKeys()){
+    if(k<from||isLocked(k)||!S.weeks[k].entries[a.id])continue;
+    /* priced as of today for a week already under way, so a cancellation
+       made today counts on the sheet being worked on now */
+    const wk=Math.ceil(subsMonthly(k<now?now:k,a.autoOut)/MIN_DIVISOR*100-1e-6)/100;
+    S.weeks[k].entries[a.id].minAmt=wk;
+    if(k===currentWeek()||shown==null)shown=wk;
+  }
+  return shown;
+}
+const subsResized=w=>w==null?'':` · bucket now ${money(w)}/wk`;
 function editSub(id){
   const list=S.plan.subs=S.plan.subs||[];
   const x=id?list.find(y=>y.id===id):null;
@@ -4487,16 +4510,17 @@ function editSub(id){
       if(y.cycle==='year')y.month=+$('#sbM').value;else delete y.month;
       if(ta)y.to={from:tf,amt:r2(n0(ta.replace(/[$,]/g,'')))};else delete y.to;
       if(!x)list.push(y);
-      save();render();toast(`${name} ${x?'saved':'added'} — ⌘Z to undo`);
+      const w=resizeSubsBucket();
+      save();render();toast(`${name} ${x?'saved':'added'}${subsResized(w)} — ⌘Z to undo`);
     });
   const sync=()=>{$('#sbMw').style.visibility=$('#sbC').value==='year'?'visible':'hidden'};
   $('#sbC').onchange=sync;sync();
   const close=()=>$('#modalRoot').innerHTML='';
   if(x){
     const end=$('#sbEnd'),back=$('#sbRestore');
-    if(end)end.onclick=()=>{pushUndo(null);x.ended=now;close();save();render();toast(`${x.name} cancelled — ⌘Z to undo`)};
-    if(back)back.onclick=()=>{pushUndo(null);delete x.ended;close();save();render();toast(`${x.name} restored`)};
-    $('#sbDel').onclick=()=>{pushUndo(null);list.splice(list.indexOf(x),1);close();save();render();toast(`${x.name} deleted — ⌘Z to undo`)};
+    if(end)end.onclick=()=>{pushUndo(null);x.ended=now;const w=resizeSubsBucket();close();save();render();toast(`${x.name} cancelled${subsResized(w)} — ⌘Z to undo`)};
+    if(back)back.onclick=()=>{pushUndo(null);delete x.ended;const w=resizeSubsBucket();close();save();render();toast(`${x.name} restored${subsResized(w)}`)};
+    $('#sbDel').onclick=()=>{pushUndo(null);list.splice(list.indexOf(x),1);const w=resizeSubsBucket();close();save();render();toast(`${x.name} deleted${subsResized(w)} — ⌘Z to undo`)};
   }
   setTimeout(()=>$('#sbN')?.focus(),40);
 }
