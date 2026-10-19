@@ -2131,7 +2131,7 @@ function runChecks(k,rows,T){
   for(const r of rows.filter(x=>x.a.target&&!x.isRollup)){
     const t=r.a.target;
     if(r.targetDone){
-      const fr=weeklyOf(r)||n0(t.frees);
+      const fr=freesOf(r);
       out.push({s:'ok',t:`${esc(r.a.name)} is funded at ${money(r.after)} of ${money(t.amount)}${fr?` — <b>${money(fr)}/week frees up</b>`:''}.`});
       continue;
     }
@@ -2627,7 +2627,7 @@ function viewWeek(el){
         <div class="fnum">${money0(r.after)} / ${money0(t.amount)}</div></div>`}).join('')}
     <div class="legend">${tg.map(r=>{const t=r.a.target;
       return `<span class="k">${esc(r.a.name)}: ${r.targetDone
-        ?`<b>funded</b>${(weeklyOf(r)||n0(t.frees))?` — ${money(weeklyOf(r)||n0(t.frees))}/wk frees up`:''}`
+        ?`<b>funded</b>${freesOf(r)?` — ${money(freesOf(r))}/wk frees up`:''}`
         :`${money(r.targetShort)} to go${t.by?` by ${dueLabel(t.by)}`:''}`}</span>`}).join('')}
     </div></section>`})()}
 
@@ -2984,6 +2984,13 @@ const statedWeekly=a=>a.minPeriod==='week';
 /* A row's weekly obligation, whichever period it is stated in — rounded up,
    since a quarter of a monthly figure can land on a half-cent. */
 const weeklyOf=r=>!r?0:statedWeekly(r.a)?r2(n0(r.minAmt)):Math.ceil(n0(r.minAmt)/MIN_DIVISOR*100-1e-6)/100;
+/* What a funded sinking fund frees each week. One that renews every term
+   costs its goal spread over that term — real weeks, not the sheet's
+   four-a-month, since it is a fixed sum by a fixed date — whatever the
+   weekly happens to be set to. Anything else frees what it takes. */
+const freesOf=r=>{const t=r.a.target||{};
+  if(t.every&&n0(t.amount)>0)return Math.ceil(n0(t.amount)/(t.every*52/12)*100-1e-6)/100;
+  return weeklyOf(r)||n0(t.frees)};
 /* A sinking fund's step frees whatever the fund actually takes each week.
    The step carries its own figure from when the plan was written; once the
    weekly amount is changed on the sheet, that is the number that comes free. */
