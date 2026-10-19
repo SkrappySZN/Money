@@ -2157,12 +2157,27 @@ function runChecks(k,rows,T){
   else if(T.debtBalance>0&&T.debtPaid>0)
     out.push({s:'ok',t:`Debt drops ${money(r2(T.debtBalance-debtWithInterest))} — ${money(T.debtPaid)} paid clears the ${money(T.weekInterest)} of interest and ${money(r2(T.debtPaid-T.weekInterest))} of principal.`});
 
-  /* a maxed card creeping toward its limit on interest alone */
-  for(const r of rows.filter(x=>x.a.kind==='card'&&x.a.limit>0&&x.balance>0&&x.weekInterest>x.total+0.005)){
-    let b=r2(r.balance+r.weekInterest-r.total),w=1;
-    while(b<=r.a.limit&&w<520){b=b*(1+r.dpr*7)-r.total;w++}
+  /* a maxed card creeping toward its limit on interest alone.
+     Projected at the pace it is actually paid, not this week's figure: a week
+     that puts $0 in because the cycle's minimum is already covered is not a
+     card that will never be paid again. The minimum is monthly, so its true
+     weekly rate is ×12/52 — the quarter-split would overstate it. A minimum
+     is often typed only in the week its statement lands, so an off week
+     falls back to the latest one on record. */
+  const lastMin=r=>{
+    if(n0(r.minAmt))return n0(r.minAmt);
+    for(const w of weekKeys().filter(w=>w<=k).reverse()){
+      const m=n0(S.weeks[w]?.entries?.[r.a.id]?.minAmt);if(m)return m;
+    }
+    return 0;
+  };
+  const pace=r=>Math.max(r.total,statedWeekly(r.a)?lastMin(r):r2(lastMin(r)*12/52));
+  for(const r of rows.filter(x=>x.a.kind==='card'&&x.a.limit>0&&x.balance>0&&x.weekInterest>pace(x)+0.005)){
+    const p=pace(r);
+    let b=r2(r.balance+r.weekInterest-p),w=1;
+    while(b<=r.a.limit&&w<520){b=b*(1+r.dpr*7)-p;w++}
     if(w<520&&w<=26)
-      out.push({s:w<=8?'bad':'warn',t:`<b>${esc(r.a.name)} breaches its limit in about ${w} week${w===1?'':'s'}</b> — ${money(b)} against ${money0(r.a.limit)}, growing ${money(r.weekInterest)}/week with ${money(r.total)} going in. Nothing new should go on this card.`});
+      out.push({s:w<=8?'bad':'warn',t:`<b>${esc(r.a.name)} breaches its limit in about ${w} week${w===1?'':'s'}</b> — ${money(b)} against ${money0(r.a.limit)}, growing ${money(r.weekInterest)}/week with ${money(p)}/week going in at the minimum. Nothing new should go on this card.`});
   }
 
   if(T.attack<=0&&T.debtBalance>0)
@@ -2696,7 +2711,7 @@ function checksHTML(checks){
   if(attn.length)h+=`<h2 class="sect-label" id="attn-h">Needs attention
     <span class="count">${attn.length}</span></h2>
     <ul class="attn-list">${attn.map(c=>`<li class="attn-row"><p>${markCheck(c.t,c.s)}</p></li>`).join('')}</ul>`;
-  if(fine.length)h+=`<button class="ok-head" aria-expanded="${open}" aria-controls="ok-list">
+  if(fine.length)h+=`<button class="ok-head" data-act="toggleok" aria-expanded="${open}" aria-controls="ok-list">
       <span class="caret"><svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor"
         stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 2.5L8 6l-3.5 3.5"/></svg></span>
       Going well <span class="count">${fine.length}</span></button>
@@ -5159,7 +5174,7 @@ document.addEventListener('click',e=>{
     case'newweek':newWeek();break;
     case'startfresh':startFresh();break;
     case'theme':toggleTheme();break;
-    case'toggleok':UI.showOk=!(UI.showOk!=null?UI.showOk:false);render();break;
+    case'toggleok':UI.showOk=b.getAttribute('aria-expanded')!=='true';render();break;
     case'signin':signInModal();break;
     case'signout':signOut();break;
     case'hideref':S.plan.ref.show=false;save();render();toast('Hidden — it lives in your backup');break;
