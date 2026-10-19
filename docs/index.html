@@ -1634,6 +1634,7 @@ function migrate(){
   migrateV11();
   migrateV12();
   migrateV13();
+  migrateV14();
 }
 /* v2 — grouping corrections, Sept 10 2026. Runs against the ledger already
    in the browser, not just the seed: editing SEED alone would have changed
@@ -1689,6 +1690,29 @@ function migrate(){
    before, or Unplanned keeps showing the estimate on rows already corrected.
    computeWeek writes derived fields back into entries, so the ledger is
    snapshotted and restored around it: `projected` is the only thing changed. */
+/* v14 — Affirm autopays from the checking account, so its money waits there
+   the way the card minimums and subscriptions do: a bucket inside that
+   account's rollup, linked to the loan so the payment draws it down. The loan was
+   typed in by hand, so it is found by name. Nothing goes in until the lease
+   frees its weekly on 11/13 — before then the bucket asks for nothing, or
+   the sheet would read over-allocated — and the first payment is moved over
+   from Car Lease Savings. */
+function migrateV14(){
+  if(S.v>=14)return;
+  const loan=S.accounts.find(a=>a.kind==='loan'&&/affirm/i.test(a.name));
+  const logix=acct('logix-checking-balance');
+  if(loan&&logix&&!acct('affirm-payments')&&!S.accounts.some(a=>a.autoOut===loan.id)){
+    const kids=(logix.rollup||[]).map(acct).filter(Boolean);
+    const at=Math.max(logix.order,...kids.map(a=>a.order))+1;
+    for(const a of S.accounts)if(a.order>=at)a.order++;
+    S.accounts.push({id:'affirm-payments',name:'Affirm Payments',kind:'cash',group:'buckets',
+      order:at,archived:false,limit:0,apr:0,minAmt:0,minPeriod:'week',autoOut:loan.id});
+    logix.rollup=[...(logix.rollup||[]),'affirm-payments'];
+    for(const k of weekKeys())
+      if(k>='2026-11-13'&&!isLocked(k))S.weeks[k].entries['affirm-payments']={...blankEntry(),minAmt:91.51};
+  }
+  S.v=14;
+}
 /* v13 — the motorcycle premium renews every six months. `every` on a target
    marks a goal that is spent and has to be saved again each term, with `by`
    as the next renewal. */
