@@ -2081,7 +2081,21 @@ function computeWeek(k){
      to it is drawn from there, so counting it here too would take the same
      payment off two buckets. */
   const paidByBucket=new Set(accts.map(a=>a.autoOut).filter(Boolean));
-  const cardRows=rows.filter(r=>r.a.kind==='card'&&!paidByBucket.has(r.a.id));
+  /* ...but only its Other column. A card's bucket covers what is typed in
+     Other; Min is a minimum like any card's and comes from the minimums
+     bucket, and Attack is paycheck money. Neil asked for this 2026-10-20: a
+     $174.18 non-subscription charge attacked on Apple drained Subscriptions,
+     which exists for the subs alone. Weeks finalized before then keep the
+     old whole-payment draw; the entry is marked the first time, as the
+     minimums bucket does with drawsForCards. */
+  const bucketFor={};
+  for(const r of rows){
+    if(!r.a.autoOut||(byId[r.a.autoOut]||{a:{}}).a.kind!=='card')continue;
+    bucketFor[r.a.autoOut]=r;
+    if(!isLocked(k)||r.e.drawsOtherOnly){r.e.drawsOtherOnly=true;r.otherOnly=true}
+  }
+  const cardRows=rows.filter(r=>r.a.kind==='card'
+    &&(!paidByBucket.has(r.a.id)||(bucketFor[r.a.id]||{}).otherOnly));
   for(const r of rows){
     if(r.a.autoOther==='cardMinShortfall'){
       const paidDirect=cardRows.reduce((s,c)=>s+c.min,0);
@@ -2116,7 +2130,7 @@ function computeWeek(k){
        itself. */
     if(r.a.autoOut){
       const t=byId[r.a.autoOut];
-      const paid=t?r2(t.min+t.attack+t.other):0;
+      const paid=!t?0:r.otherOnly?r2(t.other):r2(t.min+t.attack+t.other);
       /* Other works as it does on every other bucket: what you type is what
          goes in, 0 included. It is kept in `otherSet`, apart from `other`,
          because `other` is rewritten here on every compute. The payment this
@@ -3409,7 +3423,7 @@ const SHEET_COLS=[
    cell:r=>!KIND_INFLOW(r.a.kind)?dimCell('—')
      :r.isRollup?`<td class="num dim">${fig(n0(r.out))}</td>`
      :r.a.autoOut
-       ?`<td class="num dim" title="Auto: drawn down by whatever was paid to ${esc((acct(r.a.autoOut)||{}).name||r.a.autoOut)} this week">${fig(n0(r.out))}</td>`
+       ?`<td class="num dim" title="Auto: drawn down by ${r.otherOnly?'the Other paid':'whatever was paid'} to ${esc((acct(r.a.autoOut)||{}).name||r.a.autoOut)} this week">${fig(n0(r.out))}</td>`
      :r.drawsForCards
        ?`<td class="num dim" title="Auto: card minimums paid beyond this week's contribution">${fig(n0(r.out))}</td>`
        :cellNum(r,'out')},
