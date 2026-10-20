@@ -4101,7 +4101,7 @@ function typicalWeek(k){
   /* a bucket linked to what it pays, or topping up card minimums, has its
      sheet total moved around by whatever was paid direct that week — its
      weekly target is the usual figure */
-  const usual=r=>r.a.autoOut?r2(Math.max(weeklyOf(r),n0(r.e.otherSet))):r.a.autoOther?weeklyOf(r):r2(r.total);
+  const usual=r=>r.a.autoOut?(r.e.otherSet!=null?r2(n0(r.e.otherSet)):weeklyOf(r)):r.a.autoOther?weeklyOf(r):r2(r.total);
   const weekly={};for(const r of rows)weekly[r.a.id]=usual(r);
   /* what a bucket staging a loan takes each week is that loan's payment */
   const staged={};for(const r of C.rows)if(!r.isRollup&&stagesLoan(r)){const v=usual(r);if(v>0.005)staged[r.a.autoOut]=r2((staged[r.a.autoOut]||0)+v)}
