@@ -5339,9 +5339,48 @@ function newWeek(){
     e.due=rollDate(r.due,nk,a.dueDay);
     entries[a.id]=e;
   }
+  const applied=applyPlanToNewWeek(last,nk,C,entries);
   S.weeks[nk]={income:C.totals.income,entries};
   UI.week=nk;UI.tab='sheet';save();render();
-  toast('Balances projected forward and last week\u2019s allocation carried — correct anything the bank disagrees with');
+  toast('Balances projected forward and last week\u2019s allocation carried'
+    +(applied.length?` · from the plan: ${applied.join(', ')}`:'')+' — correct anything the bank disagrees with');
+}
+/* A new sheet starts from the plan, not from last week's exceptions. Every
+   loan goes back to its weekly payment — a week skipped is not carried into
+   the next — at whatever the Plan's upcoming changes say it is by now, and a
+   loan paid through a bucket has that amount put in the bucket's Other
+   instead. Any other row with a change starting on this sheet gets the new
+   weekly, in the column its money sat in last week. Returns what it set. */
+function applyPlanToNewWeek(prev,nk,C,entries){
+  const ch=((S.plan&&S.plan.changes)||[]).filter(c=>c.type!=='move').sort((a,b)=>a.from.localeCompare(b.from));
+  const said=[];
+  const latest=id=>{let v=null;for(const c of ch)if(c.acct===id&&c.from<=nk)v=n0(c.weekly);return v};
+  const stager=id=>C.rows.find(r=>!r.isRollup&&r.a.autoOut===id);
+  for(const r of C.rows){
+    const a=r.a,e=entries[a.id];if(!e||r.isRollup||a.kind==='income')continue;
+    if(a.kind==='loan'){
+      const sched=latest(a.id),m=n0(e.minAmt);
+      const weekly=n0(e.balance)<=0.005?0:sched!=null?sched:m?(statedWeekly(a)?r2(m):r2(m/MIN_DIVISOR)):null;
+      if(weekly==null)continue;
+      const b=stager(a.id),be=b&&entries[b.a.id];
+      if(be){
+        if(be.otherSet==null||Math.abs(n0(be.otherSet)-weekly)>0.005){be.otherSet=weekly;said.push(`${b.a.name} ${money(weekly)}`)}
+        e.min=0;
+      }else if(Math.abs(n0(e.min)-weekly)>0.005){e.min=weekly;said.push(`${a.name} ${money(weekly)}`)}
+      continue;
+    }
+    if(KIND_DEBT(a.kind)||(a.autoOut&&(acct(a.autoOut)||{}).kind==='loan'))continue;
+    let c=null;for(const x of ch)if(x.acct===a.id&&x.from>prev&&x.from<=nk)c=x;
+    if(!c)continue;
+    const w=r2(n0(c.weekly));
+    if(a.autoOut)e.otherSet=w;
+    else{
+      const col=['min','attack','other'].reduce((m,f)=>n0(e[f])>n0(e[m])?f:m,'other');
+      e.min=0;e.attack=0;e.other=0;e[col]=w;
+    }
+    said.push(`${a.name} ${money(w)}`);
+  }
+  return said;
 }
 
 /* ── input ────────────────────────────────────────────────────────── */
