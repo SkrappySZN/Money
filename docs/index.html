@@ -3338,27 +3338,10 @@ const SHEET_COLS=[
      :`<td class="num"><input class="cell" data-fmt="fig" data-k="${r.a.id}:balance"`
        +`${isLocked(currentWeek())?' readonly':''} value="${figInput(r.balance)}"></td>`},
 
-  /* What the balance did that the projection did not see. `+ Next week` carries
-     each row forward at its projected close; the gap to what you actually type
-     is new spending on a debt, or money that left a bucket without being
-     recorded. It lived as a rounded tag clipped to the balance cell, where
-     $11.99 read as "+12" and there was nowhere to say what it meant.
-
-     Direction cannot be read from the sign alone: a debt above its projection
-     is bad news and a bucket above its projection is good, so the colour keys
-     off kind.
-
-     Not shown for Loans: a loan takes no new spending, and its balance moves
-     by the servicer's own accounting, so the gap there says nothing useful. */
-  {k:'drift',label:'Unplanned',
-   cell:r=>{
-     if((r.a.group||'buckets')==='loans')return dimCell('—');
-     if(r.drift==null||Math.abs(r.drift)<0.005)return dimCell('—');
-     const up=r.drift>0;
-     const cls=KIND_DEBT(r.a.kind)?(up?'is-bad':'is-good'):(up?'is-good':'is-plain');
-     return `<td class="num chg ${cls}" title="Projected ${fig(n0(r.e.projected))}">`
-       +`${up?'+':'−'}${fig(Math.abs(r.drift))}</td>`;
-   }},
+  /* Unplanned — the gap between a balance and what + Next week projected —
+     was a column here. Neil found it noise rather than signal and asked for
+     it gone (2026-10-19); the drift itself is still computed and still feeds
+     History's "Unplanned drift" tile. */
   {k:'usage',label:'Usage',
    cell:r=>dimCell(r.a.kind==='card'&&r.a.limit?usageBar(n0(r.usage))+pct(n0(r.usage)):'—')},
 
