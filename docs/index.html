@@ -617,7 +617,7 @@ td.dcell.is-empty input:disabled{color:transparent;-webkit-text-fill-color:trans
    have hidden the reason. */
 .shell .page.sheet-page{padding:var(--space-3) var(--space-4) 0;
   height:calc(100vh - var(--cover-bar-h) - var(--space-2));display:flex;flex-direction:column;max-width:none}
-.sheet-masthead{margin-bottom:var(--space-3);flex:0 0 auto;align-items:center}
+.sheet-masthead{margin-bottom:var(--space-2);flex:0 0 auto;align-items:center}
 .sheet-masthead .page-title{font-size:var(--text-5);line-height:var(--leading-5)}
 .sheet-tally{margin-left:var(--space-5);display:flex;flex-direction:column;gap:2px}
 .sheet-tally .t-label{font-size:var(--text-1);line-height:var(--leading-1);
@@ -627,13 +627,16 @@ td.dcell.is-empty input:disabled{color:transparent;-webkit-text-fill-color:trans
   font-variant-numeric:tabular-nums}
 .sheet-grid{flex:1 1 auto;min-height:0;max-height:none;
   border-top:var(--rule-width) solid var(--rule)}
-/* 19 columns of typewriter figures. 14px is the size; fitSheet() steps it
+/* 19 columns of typewriter figures. fitSheet() starts at 17px and steps
    down until the table fits its frame — whatever the data, window or zoom —
-   and stops at 11px, below which the sheet scrolls sideways instead. A vw
+   and stops at 11px, below which the sheet scrolls sideways instead. The cap
+   was 14px until the sheet moved to a 27" monitor: height, not width, is what
+   binds there, so rows run 2px of padding at 1.2 leading and the room they
+   give back goes into the figures. A vw
    formula was tried first: it was calibrated on one set of rows and missed
    on another, so the fit is measured, not predicted. */
-.sheet-page table.grid{--table-row-step:4px;min-width:0;font-size:14px}
-.sheet-page table.grid th,.sheet-page table.grid td{line-height:1.35;
+.sheet-page table.grid{--table-row-step:2px;min-width:0;font-size:17px}
+.sheet-page table.grid th,.sheet-page table.grid td{line-height:1.2;
   padding-left:4px;padding-right:4px}
 .sheet-page table.grid tbody th{max-width:none}
 .sheet-page tr.sect th{padding-top:var(--space-1)}
@@ -2805,7 +2808,7 @@ function fitSheet(){
   const t=document.querySelector('.sheet-grid > table');
   if(!t)return;
   const w=t.parentElement;
-  let fs=14;
+  let fs=17;
   t.style.fontSize=fs+'px';
   /* both ways: every column across, and the Total row above the fold */
   const over=()=>w.scrollWidth>w.clientWidth||w.scrollHeight>w.clientHeight;
