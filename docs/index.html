@@ -582,13 +582,23 @@ td.dcell.is-empty input:disabled{color:transparent;-webkit-text-fill-color:trans
   font-variant-numeric:tabular-nums}
 .sheet-grid{flex:1 1 auto;min-height:0;max-height:none;
   border-top:var(--rule-width) solid var(--rule)}
-.sheet-page table.grid{--table-row-step:4px;min-width:0;font-size:12.5px}
+/* 19 columns of typewriter figures. Measured: the table is ~418px that does
+   not scale (account names, padding, labels) plus ~94px per px of type, and
+   it gets 100vw - 284px beside the rail. So the type takes whatever fits —
+   14px from a ~2040px window, 13.6 at 2000 — and stops at 12px, below which
+   the sheet scrolls sideways rather than going unreadable. */
+.sheet-page table.grid{--table-row-step:4px;min-width:0;
+  font-size:clamp(12px, calc((100vw - 724px) / 94), 14px)}
 .sheet-page table.grid th,.sheet-page table.grid td{line-height:1.35;
-  padding-left:5px;padding-right:5px}
+  padding-left:4px;padding-right:4px}
 .sheet-page table.grid tbody th{max-width:none}
 .sheet-page tr.sect th{padding-top:var(--space-1)}
 .sheet-page input.cell{width:10ch}
-.sheet-page input.cell-date{width:96px}
+.sheet-page input.cell-date{width:calc(10ch + 20px)}
+/* Typewriter figures run wide (0.6em a glyph), so the headers give the room
+   back: two-word labels stack instead of setting the column's width. */
+.sheet-page table.grid thead th{white-space:normal;vertical-align:bottom;line-height:1.25;
+  letter-spacing:0.04em}
 .sheet-page input.cell-date::-webkit-calendar-picker-indicator{opacity:0;transition:opacity var(--duration-1) ease}
 .sheet-page tr:hover input.cell-date::-webkit-calendar-picker-indicator{opacity:.45}
 .sheet-page input.cell-date:focus::-webkit-calendar-picker-indicator{opacity:.7}
