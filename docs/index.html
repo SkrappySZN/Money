@@ -1769,6 +1769,7 @@ function migrate(){
   migrateV14();
   migrateV15();
   migrateV16();
+  migrateV17();
 }
 /* v2 — grouping corrections, Sept 10 2026. Runs against the ledger already
    in the browser, not just the seed: editing SEED alone would have changed
@@ -1824,6 +1825,25 @@ function migrate(){
    before, or Unplanned keeps showing the estimate on rows already corrected.
    computeWeek writes derived fields back into entries, so the ledger is
    snapshotted and restored around it: `projected` is the only thing changed. */
+/* v17 — once Affirm and the turn-in fees are both saved for, the 1/8
+   paycheck being the last Affirm deposit, the lease money comes back from
+   the 1.08 sheet: Affirm stops being saved for (its balance only reads $0
+   once the 1/15 payment is entered, too late to stop + Next week filling
+   the bucket), and the spending account goes to $200 a week for day-to-day
+   spending that would otherwise land on a card. */
+function migrateV17(){
+  if(S.v>=17)return;
+  const ch=S.plan&&S.plan.changes,loan=S.accounts.find(a=>a.kind==='loan'&&/affirm/i.test(a.name));
+  if(ch){
+    if(loan&&!ch.some(c=>c.id==='affirm-done'))
+      ch.push({id:'affirm-done',from:'2027-01-08',acct:loan.id,weekly:0,label:'Affirm fully saved for — last payment 1/15'});
+    const spend=acct('capital-one-checking');
+    if(spend&&!ch.some(c=>c.id==='cap1-raise'))
+      ch.push({id:'cap1-raise',from:'2027-01-08',acct:spend.id,weekly:200,
+        label:`${spend.name} up to $200 once Affirm and the fees are done`});
+  }
+  S.v=17;
+}
 /* v16 — the lease's freed weekly, from the 10/30 paycheck on: Affirm gets
    just what each payment needs ($122.01 to the 11/15 one, then $91.51), and
    what is left fills a Turn-in Fees bucket ($395 disposition + ~$200 tint)
