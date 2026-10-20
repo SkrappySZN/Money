@@ -1472,6 +1472,10 @@ const addWeeks=(s,n)=>addDays(s,n*7);
 function weekStartOf(d){const x=new Date(d.getFullYear(),d.getMonth(),d.getDate());
   x.setDate(x.getDate()-((x.getDay()-WEEK_START+7)%7));return iso(x)}
 const thisWeek=()=>weekStartOf(new Date());
+/* A sheet is worked and paid on the Friday after the week it is named for,
+   so the money in sheet k lands on k+7 and has to cover what falls due
+   before the next paycheck, k+14. */
+const paydayOf=k=>addWeeks(k,1);
 const md=s=>{const d=parseISO(s);return`${d.getMonth()+1}.${String(d.getDate()).padStart(2,'0')}`};
 function weekLabel(k){return `${md(k)}–${md(addDays(k,6))}`}
 function weekLong(k){const a=parseISO(k),b=parseISO(addDays(k,6));
@@ -2088,17 +2092,22 @@ function runChecks(k,rows,T){
   else if(T.unallocated>0)out.push({s:'warn',t:`<b>${money(T.unallocated)} unallocated.</b> The sheet only balanced when this hit zero — give it somewhere to go.`});
   else out.push({s:'bad',t:`<b>Over-allocated by ${money(off)}.</b> You're spending more than the ${money(T.income)} that came in.`});
 
-  /* minimums: has enough gone toward this card since its last statement closed? */
-  const today=thisWeek();
+  /* minimums: has enough gone toward this card since its last statement closed?
+     Judged against when this sheet's money actually lands: a due date before
+     payday is out of its reach, and one before the paycheck after makes this
+     the last chance. */
+  const today=iso(new Date()),pay=paydayOf(k),nextPay=addWeeks(pay,1);
   for(const r of rows){
     if(!KIND_DEBT(r.a.kind)||!r.minAmt)continue;
     const cyclePaid=paidSinceClose(k,r);
     if(cyclePaid+0.005>=r.minAmt)continue;
     const short=r2(r.minAmt-cyclePaid);
-    if(r.due&&r.due<addDays(k,7)&&r.due>=k)
-      out.push({s:'bad',t:`<b>${esc(r.a.name)} is ${money(short)} short</b> of its ${money(r.minAmt)} minimum and due ${dueLabel(r.due)} — inside this week.`});
-    else if(r.due&&r.due<today)
+    if(r.due&&r.due<today)
       out.push({s:'bad',t:`<b>${esc(r.a.name)} minimum was due ${dueLabel(r.due)}</b> and is still ${money(short)} short.`});
+    else if(r.due&&r.due<pay)
+      out.push({s:'bad',t:`<b>${esc(r.a.name)} is ${money(short)} short</b> of its ${money(r.minAmt)} minimum and due ${dueLabel(r.due)} — before this paycheck lands ${dueLabel(pay)}, so it has to come from money already in the bank.`});
+    else if(r.due&&r.due<nextPay)
+      out.push({s:'bad',t:`<b>${esc(r.a.name)} is ${money(short)} short</b> of its ${money(r.minAmt)} minimum and due ${dueLabel(r.due)} — this is the last paycheck before it.`});
     else
       out.push({s:'warn',t:`${esc(r.a.name)} needs ${money(short)} more before ${r.due?dueLabel(r.due):'its due date'} to clear the ${money(r.minAmt)} minimum.`});
   }
@@ -2110,8 +2119,8 @@ function runChecks(k,rows,T){
      prompt at the right moment rather than a standing complaint. */
   for(const r of rows){
     if(!KIND_DEBT(r.a.kind)||r.balance<=0.005||n0(r.minAmt)||!r.close)continue;
-    if(r.close<addDays(k,-7)||r.close>=addDays(k,7))continue;
-    const already=r.close<k;
+    if(r.close<k||r.close>=addWeeks(pay,1))continue;
+    const already=r.close<today;
     out.push({s:'warn',t:`<b>${esc(r.a.name)} ${already?`closed ${dueLabel(r.close)}`:`closes ${dueLabel(r.close)}`} `
       +`and has no minimum recorded.</b> Put it in Min due /mo — until it is there nothing can tell you `
       +`if it goes unpaid, and the payoff date assumes you are paying it nothing.`});
@@ -2122,12 +2131,12 @@ function runChecks(k,rows,T){
      more than the bucket holds. */
   {
     const bucket=rows.find(r=>r.a.id==='subscriptions');
-    const hits=subsInWeek(k).filter(x=>!(bucket&&bucket.a.autoOut)||x.card===bucket.a.autoOut);
+    const hits=subsInWeek(pay).filter(x=>!(bucket&&bucket.a.autoOut)||x.card===bucket.a.autoOut);
     if(hits.length){
       const due=r2(hits.reduce((t,x)=>t+x.amount,0));
       const held=bucket?r2(bucket.balance+bucket.total):0;
       if(due>held+0.005)
-        out.push({s:'warn',t:`<b>${money(due)} of subscriptions bill this week</b> and the bucket `
+        out.push({s:'warn',t:`<b>${money(due)} of subscriptions bill before the next paycheck</b> and the bucket `
           +`holds ${money(held)} — ${money(r2(due-held))} short. `
           +hits.map(x=>`${esc(x.name)} ${money(x.amount)} on ${dueLabel(x.date)}`).join(', ')+`.`});
     }
@@ -2135,7 +2144,7 @@ function runChecks(k,rows,T){
   /* over limit, and utilization that'll get reported */
   for(const r of rows.filter(x=>x.a.kind==='card'&&x.a.limit>0)){
     if(r.after>r.a.limit)out.push({s:'bad',t:`<b>${esc(r.a.name)} is over its limit</b> — ${money(r.after)} against ${money0(r.a.limit)} after this week's payment.`});
-    else if(r.close&&r.close>=k&&r.close<addDays(k,7)&&r.usageAfter>0.3)
+    else if(r.close&&r.close>=pay&&r.close<nextPay&&r.usageAfter>0.3)
       out.push({s:'warn',t:`${esc(r.a.name)} closes ${dueLabel(r.close)} at <b>${pct(r.usageAfter)}</b> utilization — that's the number that gets reported.`});
   }
   /* cash that goes negative */
@@ -2160,15 +2169,22 @@ function runChecks(k,rows,T){
       continue;
     }
     if(!t.by)continue;
-    const wksLeft=Math.max(0,Math.ceil(daysBetween(k,t.by)/7));
-    const need=wksLeft?r2(r.targetShort/wksLeft):r.targetShort;
+    /* Paychecks that land in time, this one included — counted by payday,
+       so a goal due the Monday after it gets one paycheck, not two. */
+    const left=t.by<pay?0:Math.floor(daysBetween(pay,t.by)/7)+1;
+    const before=r2(Math.max(0,t.amount-r.balance));
+    if(!left){
+      out.push({s:'bad',t:`<b>${esc(r.a.name)} is ${money(r.targetShort)} short</b> of ${money(t.amount)} by ${dueLabel(t.by)} — before this paycheck lands ${dueLabel(pay)}.`});
+      continue;
+    }
+    const need=r2(before/left);
     if(r.total+0.005>=need)
       out.push({s:'ok',t:`${esc(r.a.name)} on track — ${money(r.targetShort)} to go by ${dueLabel(t.by)}, ${money(need)}/week needed and ${money(r.total)} going in.`});
     else
-      out.push({s:'warn',t:`<b>${esc(r.a.name)} is behind</b> — ${money(r.targetShort)} short with ${wksLeft} week${wksLeft===1?'':'s'} to ${dueLabel(t.by)}. Needs ${money(need)}/week, getting ${money(r.total)}.`});
+      out.push({s:'warn',t:`<b>${esc(r.a.name)} is behind</b> — ${money(r.targetShort)} short with ${left} paycheck${left===1?'':'s'} to ${dueLabel(t.by)}, this one included. Needs ${money(need)}/week, getting ${money(r.total)}.`});
   }
-  /* anything on the calendar that lands inside this pay week */
-  const end=addDays(k,7);
+  /* anything on the calendar before the paycheck after this one */
+  const end=nextPay;
   for(const c of (S.plan?.calendar||[]).filter(c=>!c.done&&c.d>=k&&c.d<end))
     out.push({s:'warn',t:`<b>${dueLabel(c.d)} — ${esc(c.t)}</b>${c.n?` · ${esc(c.n)}`:''}`});
 
@@ -4296,7 +4312,7 @@ function viewCalendar(el){
 function viewPlan(el){
   const k=currentWeek(),C=computeWeek(k);
   const P=S.plan;
-  const today=thisWeek(),weekEnd=addDays(k,7);
+  const today=thisWeek(),weekEnd=addWeeks(paydayOf(k),1);
   const cal=[...P.calendar].sort((a,b)=>a.d.localeCompare(b.d));
   const overdue=cal.filter(c=>!c.done&&c.d<today);
   const soon=cal.filter(c=>!c.done&&c.d>=today&&c.d<addDays(today,28));
