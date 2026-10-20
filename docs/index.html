@@ -90,7 +90,12 @@
   --cover-ink-muted:#D2B993;
   --cover-gilt:#C9A86A;
   --cover-rule:rgba(201,168,106,0.35);
-  --cover-bar-h:48px;   /* the strip across the top of the cover     */
+  --cover-bar-h:48px;
+  /* The allocation sheet's reading aids: every other row a shade deeper so
+     the eye can follow one account across 19 columns, and the columns you
+     fill in each week laid over with a wash so they read as one block. */
+  --paper-stripe:#EBE2CD;
+  --band:rgba(122,98,60,0.09);   /* the strip across the top of the cover     */
   --radius-tab:4px;     /* book tabs: rounded where they leave the page */
 
   /* ── Accent ────────────────────────────────────────────────────
@@ -547,9 +552,22 @@ td.dcell.is-empty input:disabled{color:transparent;-webkit-text-fill-color:trans
    column that does not apply to the row, a zero for one you have not used.
    At full strength they compete with the figures that actually carry the
    week. Dropped a rung below muted so the eye lands on what moved. */
-.sheet-page td.is-absent,.sheet-page td.chg.is-flat{color:var(--ink-absent)}
-.sheet-page input.cell.is-zero{color:var(--ink-absent)}
-.sheet-page td.dcell.is-empty::after{color:var(--ink-absent)}
+/* Calmer: they are left blank. A zero you can type into shows faintly on
+   the row under the pointer, and fully once it has focus. */
+.sheet-page td.is-absent,.sheet-page td.chg.is-flat{color:transparent}
+.sheet-page input.cell.is-zero,.sheet-page input.cell.is-attack.is-zero{color:transparent}
+.sheet-page tr:hover input.cell.is-zero,.sheet-page tr:hover input.cell.is-attack.is-zero{color:var(--ink-absent)}
+.sheet-page input.cell.is-zero:focus{color:var(--ink)}
+.sheet-page td.dcell.is-empty::after{content:none}
+
+/* Stripes, the this-week band, and the subject row over the headers. The
+   band is an image layer so it lies over a stripe instead of replacing it. */
+.sheet-page table.grid tbody tr:nth-child(even):not(.sect):not(.tot):not(.is-paid) > *{background-color:var(--paper-stripe)}
+.sheet-page table.grid .band{background-image:linear-gradient(var(--band),var(--band))}
+.sheet-page table.grid thead tr.sets th{position:static;background-color:var(--paper);
+  border-bottom:0;text-align:center;padding-top:0;padding-bottom:2px;color:var(--ink-secondary)}
+.sheet-page table.grid thead tr.sets th.band{border-radius:var(--radius-tab) var(--radius-tab) 0 0}
+.sheet-page .paidoff{font-family:var(--font-sans);font-style:italic;color:var(--positive)}
 
 /* Nineteen columns in one undifferentiated run gives the eye nothing to hold.
    A hairline at each change of subject — what it is, where it stands, what it
@@ -1498,6 +1516,11 @@ const money0=n=>money(n,0);
 const chSpan=v=>[...String(v)].reduce((w,c)=>w+(c==='.'||c===','?0.42:1),0);
 const figureWidth=v=>`width:${(chSpan(v)+0.25).toFixed(2)}ch;field-sizing:content`;
 const moneyInput=n=>(n<0?'-':'')+'$'+Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+/* The allocation sheet's figures go bare: every column there is dollars, and
+   400 dollar signs were most of what made it hard to read. Parsing is the
+   same — n0() strips anything that is not a digit. */
+const fig=(n,dp=2)=>money(n,dp).replace('$','');
+const figInput=n=>moneyInput(n).replace('$','');
 const pct=(n,dp=1)=>(n*100).toFixed(dp)+'%';
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const slug=s=>String(s).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
@@ -3095,10 +3118,10 @@ function stepsFor(k){
 
 function cellNum(r,f,cls=''){
   const a=r.a,id=a.id;
-  if(r.isRollup||a.kind==='income')return `<td class="num dim">${money(n0(r[f]))}</td>`;
+  if(r.isRollup||a.kind==='income')return `<td class="num dim">${fig(n0(r[f]))}</td>`;
   const ro=(a.autoOther==='cardMinShortfall'&&f==='other')||isLocked(currentWeek());
-  return `<td class="num"><input class="cell ${cls}${n0(r[f])===0?' is-zero':''}" data-fmt="money"`
-    +` data-k="${id}:${f}" value="${moneyInput(n0(r[f]))}"`
+  return `<td class="num"><input class="cell ${cls}${n0(r[f])===0?' is-zero':''}" data-fmt="fig"`
+    +` data-k="${id}:${f}" value="${figInput(n0(r[f]))}"`
     +`${ro?' readonly title="Auto: card minimums not paid directly"':''}></td>`;
 }
 function cellDate(r,f){
@@ -3132,10 +3155,10 @@ const SHEET_COLS=[
   /* Limit and APR live on the account, not the week, so these write through
      `data-a` and change every week at once. Only debts carry them — the
      Accounts view gates the same two fields on KIND_DEBT. */
-  {k:'limit',label:'Limit',
+  {k:'limit',grp:true,set:'Terms',label:'Limit',
    cell:r=>KIND_DEBT(r.a.kind)
-     ?`<td class="num"><input class="cell is-registry${n0(r.a.limit)===0?' is-zero':''}" data-fmt="money"`
-       +` data-a="${r.a.id}:limit" value="${r.a.limit?moneyInput(n0(r.a.limit)):''}" placeholder="—"></td>`
+     ?`<td class="num"><input class="cell is-registry${n0(r.a.limit)===0?' is-zero':''}" data-fmt="fig"`
+       +` data-a="${r.a.id}:limit" value="${r.a.limit?figInput(n0(r.a.limit)):''}" placeholder="—"></td>`
      :dimCell('—')},
   {k:'apr',label:'APR %',
    cell:r=>KIND_DEBT(r.a.kind)||(r.a.kind==='savings'&&!r.isRollup)
@@ -3145,11 +3168,11 @@ const SHEET_COLS=[
   /* The income row's balance is the paycheck, so it edits the same figure as
      the hero field — setWeekField routes it there. It keeps its own data-k so
      rerenderKeepFocus refocuses this cell, not the hero, while typing. */
-  {k:'balance',grp:true,label:'Balance',
+  {k:'balance',grp:true,set:'Now',label:'Balance',
    cell:r=>r.isRollup
-     ?`<td class="num dim">${money(r.balance)}</td>`
-     :`<td class="num"><input class="cell" data-fmt="money" data-k="${r.a.id}:balance"`
-       +`${isLocked(currentWeek())?' readonly':''} value="${moneyInput(r.balance)}"></td>`},
+     ?`<td class="num dim">${fig(r.balance)}</td>`
+     :`<td class="num"><input class="cell" data-fmt="fig" data-k="${r.a.id}:balance"`
+       +`${isLocked(currentWeek())?' readonly':''} value="${figInput(r.balance)}"></td>`},
 
   /* What the balance did that the projection did not see. `+ Next week` carries
      each row forward at its projected close; the gap to what you actually type
@@ -3169,8 +3192,8 @@ const SHEET_COLS=[
      if(r.drift==null||Math.abs(r.drift)<0.005)return dimCell('—');
      const up=r.drift>0;
      const cls=KIND_DEBT(r.a.kind)?(up?'is-bad':'is-good'):(up?'is-good':'is-plain');
-     return `<td class="num chg ${cls}" title="Projected ${money(n0(r.e.projected))}">`
-       +`${up?'+':'−'}${money(Math.abs(r.drift))}</td>`;
+     return `<td class="num chg ${cls}" title="Projected ${fig(n0(r.e.projected))}">`
+       +`${up?'+':'−'}${fig(Math.abs(r.drift))}</td>`;
    }},
   {k:'usage',label:'Usage',
    cell:r=>dimCell(r.a.kind==='card'&&r.a.limit?usageBar(n0(r.usage))+pct(n0(r.usage)):'—')},
@@ -3183,43 +3206,43 @@ const SHEET_COLS=[
      derived from it. The editable cell is always the one the figure is
      actually stated in; deriving in the direction you do not type avoids a
      rounding drift back and forth through MIN_DIVISOR. */
-  {k:'minAmt',grp:true,label:'Min due /mo',
+  {k:'minAmt',grp:true,set:'Owed',label:'Min /mo',
    cell:r=>r.isRollup||r.a.kind==='income'?'<td></td>'
      :statedWeekly(r.a)
-       ?dimCell(n0(r.minAmt)?money(r2(n0(r.minAmt)*MIN_DIVISOR)):'—')
-       :`<td class="num"><input class="cell${n0(r.minAmt)===0?' is-zero':''}" data-fmt="money"`
+       ?dimCell(n0(r.minAmt)?fig(r2(n0(r.minAmt)*MIN_DIVISOR)):'—')
+       :`<td class="num"><input class="cell${n0(r.minAmt)===0?' is-zero':''}" data-fmt="fig"`
          +`${isLocked(currentWeek())?' readonly':''}`
-         +` data-k="${r.a.id}:minAmt" value="${moneyInput(n0(r.minAmt))}"></td>`},
+         +` data-k="${r.a.id}:minAmt" value="${figInput(n0(r.minAmt))}"></td>`},
 
-  {k:'minWk',label:'Min due /wk',
+  {k:'minWk',label:'Min /wk',
    cell:r=>r.isRollup||r.a.kind==='income'?'<td></td>'
      :statedWeekly(r.a)
-       ?`<td class="num"><input class="cell${n0(r.minAmt)===0?' is-zero':''}" data-fmt="money"`
+       ?`<td class="num"><input class="cell${n0(r.minAmt)===0?' is-zero':''}" data-fmt="fig"`
          +`${isLocked(currentWeek())?' readonly':''}`
-         +` data-k="${r.a.id}:minAmt" value="${moneyInput(n0(r.minAmt))}"></td>`
-       :dimCell(n0(r.minAmt)?money(r2(n0(r.minAmt)/MIN_DIVISOR)):'—')},
-  {k:'close',label:'Stmt close',cell:r=>cellDate(r,'close')},
+         +` data-k="${r.a.id}:minAmt" value="${figInput(n0(r.minAmt))}"></td>`
+       :dimCell(n0(r.minAmt)?fig(r2(n0(r.minAmt)/MIN_DIVISOR)):'—')},
+  {k:'close',label:'Closes',cell:r=>cellDate(r,'close')},
   {k:'due',   label:'Due',  cell:r=>cellDate(r,'due')},
 
-  {k:'min',   grp:true,label:'Min',cell:r=>cellNum(r,'min')},
-  {k:'attack',label:'Attack',cell:r=>cellNum(r,'attack','is-attack')},
-  {k:'other', label:'Other', cell:r=>cellNum(r,'other')},
-  {k:'total',label:'Total',
-   cell:r=>`<td class="num">${money(r.total)}</td>`},
+  {k:'min',   grp:true,set:'This week',band:true,label:'Min',cell:r=>cellNum(r,'min')},
+  {k:'attack',band:true,label:'Attack',cell:r=>cellNum(r,'attack','is-attack')},
+  {k:'other', band:true,label:'Other', cell:r=>cellNum(r,'other')},
+  {k:'total',band:true,label:'Total',
+   cell:r=>`<td class="num">${fig(r.total)}</td>`},
 
   /* Money leaving a bucket. Only buckets and savings have one — nothing
      "leaves" a card except a payment, which is already the Total column. */
-  {k:'out',label:'Out',
+  {k:'out',band:true,label:'Out',
    cell:r=>!KIND_INFLOW(r.a.kind)?dimCell('—')
-     :r.isRollup?`<td class="num dim">${money(n0(r.out))}</td>`
+     :r.isRollup?`<td class="num dim">${fig(n0(r.out))}</td>`
      :r.a.autoOut
-       ?`<td class="num dim" title="Auto: drawn down by whatever was paid to ${esc((acct(r.a.autoOut)||{}).name||r.a.autoOut)} this week">${money(n0(r.out))}</td>`
+       ?`<td class="num dim" title="Auto: drawn down by whatever was paid to ${esc((acct(r.a.autoOut)||{}).name||r.a.autoOut)} this week">${fig(n0(r.out))}</td>`
      :r.drawsForCards
-       ?`<td class="num dim" title="Auto: card minimums paid beyond this week's contribution">${money(n0(r.out))}</td>`
+       ?`<td class="num dim" title="Auto: card minimums paid beyond this week's contribution">${fig(n0(r.out))}</td>`
        :cellNum(r,'out')},
   /* A debt is charged interest and savings earn it. Both land here, marked
      apart by sign and colour so a gain cannot be read as a cost. */
-  {k:'interest',grp:true,label:'Interest',
+  {k:'interest',grp:true,set:'After',label:'Interest',
    cell:r=>{
      if(KIND_INFLOW(r.a.kind)&&r.a.apr&&!r.isRollup){
        /* A rate on a near-empty account earns nothing this week. Saying
@@ -3227,27 +3250,33 @@ const SHEET_COLS=[
        if(n0(r.weekInterest)<0.005)
          return `<td class="num dim is-absent" title="Earns ${pct(r.a.apr,2)} APY — too small to show this week">—</td>`;
        return `<td class="num pos" title="Earned at ${pct(r.a.apr,2)} APY">`
-         +`+${money(n0(r.weekInterest))}</td>`;
+         +`+${fig(n0(r.weekInterest))}</td>`;
      }
      return `<td class="num ${r.inGrace?'pos':'dim'}${KIND_DEBT(r.a.kind)?'':' is-absent'}"`
        +`${r.inGrace?' title="In grace — no interest while the statement balance is paid in full"':''}>`
-       +`${KIND_DEBT(r.a.kind)?(r.inGrace?'grace':money(r.weekInterest)):'—'}</td>`;
+       +`${KIND_DEBT(r.a.kind)?(r.inGrace?'grace':fig(r.weekInterest)):'—'}</td>`;
    }},
-  {k:'after',label:'After',
+  {k:'after',label:'Balance',
    cell:r=>`<td class="num ${r.a.kind==='card'&&r.after>n0(r.a.limit)?'neg':r.after<0?'neg':''}"`
      +`${r.a.passthrough?' title="Passes straight through — funded and sent onward the same week, so nothing accumulates"':''}>`
-     +`${money(r.after)}</td>`},
-  {k:'usageAfter',label:'Usage aft',
+     +`${KIND_DEBT(r.a.kind)&&n0(r.balance)>0.005&&Math.abs(r.after)<0.005
+        ?'<span class="paidoff">paid off</span>':fig(r.after)}</td>`},
+  {k:'usageAfter',label:'Usage',
    cell:r=>dimCell(r.a.kind==='card'&&r.a.limit?pct(n0(r.usageAfter)):'—')},
-  {k:'availAfter',label:'Avail aft',
-   cell:r=>dimCell(r.a.kind==='card'&&r.a.limit?money(n0(r.availAfter)):'—')},
+  {k:'availAfter',label:'Avail',
+   cell:r=>dimCell(r.a.kind==='card'&&r.a.limit?fig(n0(r.availAfter)):'—')},
 
 ];
 const sheetCols=()=>SHEET_COLS;
 
 function gridHead(cols){
-  return `<tr>${cols.map((c,i)=>
-    `<th scope="col" class="${i?'num':''}${c.grp?' grp':''}">${c.label}</th>`).join('')}</tr>`;
+  /* Subjects over columns: each `set` opens a span that runs to the next. */
+  const sets=[];
+  cols.forEach((c,i)=>{if(i===0||c.set)sets.push({label:c.set||'',n:1,band:!!c.band,grp:!!c.grp&&i>0});else sets[sets.length-1].n++});
+  return `<tr class="sets">${sets.map(x=>
+    `<th scope="colgroup" colspan="${x.n}" class="${x.grp?'grp':''}${x.band?' band':''}">${x.label}</th>`).join('')}</tr>`
+    +`<tr>${cols.map((c,i)=>
+    `<th scope="col" class="${i?'num':''}${c.grp?' grp':''}${c.band?' band':''}">${c.label}</th>`).join('')}</tr>`;
 }
 function gridBody(C){
   const cols=sheetCols(),out=[],byId=C.byId,rendered=new Set();
@@ -3273,29 +3302,33 @@ function rowHTML(r,cols,child){
 }
 /* The column spec says where a subject starts; the cell renderers do not need
    to know about it, so the class is added to whatever they returned. */
-const markGroup=(html,c)=>c.grp?html.replace(/^<t([dh])( class="([^"]*)")?/,
-  (m,tag,_a,cls)=>`<t${tag} class="${cls||''} grp"`):html;
+/* A cell holding nothing — an em-dash, a computed zero — is marked
+   is-absent so the sheet can leave it blank and let the figures stand. */
+const markGroup=(html,c)=>{
+  const add=(c.grp?' grp':'')+(c.band?' band':'')+(/>(−?0\.00|0\.0%|—)<\/td>$/.test(html)?' is-absent':'');
+  return add?html.replace(/^<t([dh])( class="([^"]*)")?/,(m,tag,_a,cls)=>`<t${tag} class="${cls||''}${add}"`):html;
+};
 /* The cards subtotal, keyed by column so it cannot fall out of step with
    the header the way a hand-counted run of <td>s does. */
 function totalRow(C,cols){
   const T=C.totals;
   const cell={
     name:'<th scope="row">Total</th>',
-    limit:`<td class="num">${money0(T.limit)}</td>`,
-    balance:`<td class="num">${money(T.cardBalance)}</td>`,
+    limit:`<td class="num">${fig(T.limit,0)}</td>`,
+    balance:`<td class="num">${fig(T.cardBalance)}</td>`,
     drift:'<td></td>',
     usage:`<td class="num">${pct(T.usage)}</td>`,
-    minAmt:`<td class="num">${money(sum(C,'minAmt','card'))}</td>`,
-    minWk:`<td class="num">${money(r2(sum(C,'minAmt','card')/MIN_DIVISOR))}</td>`,   /* cards are all monthly */
-    min:`<td class="num">${money(sum(C,'min','card'))}</td>`,
-    attack:`<td class="num">${money(sum(C,'attack','card'))}</td>`,
-    other:`<td class="num">${money(sum(C,'other','card'))}</td>`,
-    total:`<td class="num">${money(sum(C,'total','card'))}</td>`,
+    minAmt:`<td class="num">${fig(sum(C,'minAmt','card'))}</td>`,
+    minWk:`<td class="num">${fig(r2(sum(C,'minAmt','card')/MIN_DIVISOR))}</td>`,   /* cards are all monthly */
+    min:`<td class="num">${fig(sum(C,'min','card'))}</td>`,
+    attack:`<td class="num">${fig(sum(C,'attack','card'))}</td>`,
+    other:`<td class="num">${fig(sum(C,'other','card'))}</td>`,
+    total:`<td class="num">${fig(sum(C,'total','card'))}</td>`,
     out:'<td></td>',
-    interest:`<td class="num">${money(sum(C,'weekInterest','card'))}</td>`,
-    after:`<td class="num">${money(T.cardAfter)}</td>`,
+    interest:`<td class="num">${fig(sum(C,'weekInterest','card'))}</td>`,
+    after:`<td class="num">${fig(T.cardAfter)}</td>`,
     usageAfter:`<td class="num">${pct(T.usageAfter)}</td>`,
-    availAfter:`<td class="num">${money(T.availAfter)}</td>`,
+    availAfter:`<td class="num">${fig(T.availAfter)}</td>`,
   };
   return `<tr class="tot">${cols.map(c=>markGroup(cell[c.k]||'<td></td>',c)).join('')}</tr>`;
 }
@@ -5099,7 +5132,7 @@ function setAcctField(key,val){
    Stripping on the way in matters as much: typing at the end of a formatted
    string appends to it, and n0() would read "$12,500.005" as twelve and a
    half thousand and change. */
-const isMoneyCell=t=>t&&t.dataset&&t.dataset.fmt==='money';
+const isMoneyCell=t=>t&&t.dataset&&(t.dataset.fmt==='money'||t.dataset.fmt==='fig');
 /* A number field takes the whole figure on the way in, so typing replaces it.
    With the caret left wherever the click landed, typing 300 into "0|.00" came
    out as 3000.00. Selecting in focusin is not enough on its own: the mouseup
@@ -5122,7 +5155,7 @@ document.addEventListener('focusin',e=>{
   if(isNumField(e.target))e.target.select();
 });
 document.addEventListener('focusout',e=>{
-  if(isMoneyCell(e.target))e.target.value=moneyInput(n0(e.target.value));
+  if(isMoneyCell(e.target))e.target.value=(e.target.dataset.fmt==='fig'?figInput:moneyInput)(n0(e.target.value));
 });
 document.addEventListener('input',e=>{
   const t=e.target;
