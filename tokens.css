@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════
-   BROADSHEET — design tokens
+   PASSBOOK — design tokens
    Every component reads from here. No literal colour, size or radius
    should appear anywhere else in the app.
 
@@ -8,34 +8,31 @@
    ═══════════════════════════════════════════════════════════════════ */
 
 /* ── Faces ─────────────────────────────────────────────────────────
-   Self-hosted, subset to the glyphs this app actually renders.
-   Both are variable: weight is an axis, not a separate file.
-   Source Serif also carries an optical-size axis, so the hero figure
-   is cut differently from a 19px subhead rather than just scaled.
+   PASSBOOK. Self-hosted, Latin subset. A book face for everything
+   read, a typewriter for every figure entered in the ledger — the
+   way a teller posted a passbook. Static cuts: 400, 400 italic, 700.
    ─────────────────────────────────────────────────────────────── */
-@font-face{
-  font-family:"Source Serif 4";
-  src:url("fonts/source-serif-4.woff2") format("woff2-variations");
-  font-weight:200 900;
-  font-stretch:normal;
-  font-display:swap;
-}
-@font-face{
-  font-family:"Inter Tight";
-  src:url("fonts/inter-tight.woff2") format("woff2-variations");
-  font-weight:100 900;
-  font-stretch:normal;
-  font-display:swap;
-}
+@font-face{font-family:"Libre Caslon Text";font-style:normal;font-weight:400;font-display:swap;
+  src:url("fonts/libre-caslon-400.woff2") format("woff2")}
+@font-face{font-family:"Libre Caslon Text";font-style:italic;font-weight:400;font-display:swap;
+  src:url("fonts/libre-caslon-italic.woff2") format("woff2")}
+@font-face{font-family:"Libre Caslon Text";font-style:normal;font-weight:700;font-display:swap;
+  src:url("fonts/libre-caslon-700.woff2") format("woff2")}
+@font-face{font-family:"Courier Prime";font-style:normal;font-weight:400;font-display:swap;
+  src:url("fonts/courier-prime-400.woff2") format("woff2")}
+@font-face{font-family:"Courier Prime";font-style:normal;font-weight:700;font-display:swap;
+  src:url("fonts/courier-prime-700.woff2") format("woff2")}
 
 :root{
   color-scheme:light;
 
   /* ── Type families ─────────────────────────────────────────────
-     Display carries page titles and every large dollar figure.
-     Sans carries labels, body, tables — everything else.          */
-  --font-display:"Source Serif 4", ui-serif, Georgia, "Times New Roman", serif;
-  --font-sans:"Inter Tight", system-ui, -apple-system, "Segoe UI", sans-serif;
+     Display carries page titles and the hero figure. "Sans" is the
+     body face by role — in Passbook it is the same book serif.
+     Figures carries ledger cells and metric values.                */
+  --font-display:"Libre Caslon Text", Georgia, "Times New Roman", serif;
+  --font-sans:"Libre Caslon Text", Georgia, "Times New Roman", serif;
+  --font-figures:"Courier Prime", ui-monospace, "Courier New", monospace;
 
   /* ── Type scale ────────────────────────────────────────────────
      Seven steps. Tight increments at the bottom where table rows
@@ -51,7 +48,7 @@
   --text-7:4rem;       --leading-7:1.00;   /* 64px — the hero figure (display)      */
 
   /* ── Weights ───────────────────────────────────────────────────
-     Both faces are variable, so these are axis positions.         */
+     Static cuts: 500 resolves to the 400 face, 600 to the 700.    */
   --weight-regular:400;
   --weight-medium:500;    /* section labels sit here, not at bold  */
   --weight-semibold:600;  /* alert card names, totals row          */
@@ -62,24 +59,34 @@
   --tracking-tight:-0.02em;  /* display sizes only                  */
 
   /* ── Paper & ink ───────────────────────────────────────────────
-     Three paper tones: the sheet, a deeper stock for sticky table
-     headers and recessed strips, and a third for hover. Ink is a
-     warm near-black, never pure.                                   */
-  --paper:#F6F2EA;
-  --paper-deep:#EFEAE0;
-  --paper-deeper:#E7E1D5;
+     Passbook stock: cream page, a deeper stock for sticky headers
+     and recessed strips, a third for hover. Ink is a brown-black.  */
+  --paper:#F1E9D6;
+  --paper-deep:#E9DFC8;
+  --paper-deeper:#E0D4BA;
 
-  --ink:#1B1815;        /* headings, figures, primary prose         */
-  --ink-secondary:#4A443C;
-  --ink-muted:#857C6F;  /* labels, axis text, disabled              */
+  --ink:#2A2118;        /* headings, figures, primary prose         */
+  --ink-secondary:#54473A;
+  --ink-muted:#716148;  /* labels, axis text, disabled              */
+  --ink-absent:#B3A68C; /* a cell holding nothing: an em-dash, a zero */
+
+  /* ── Cover ─────────────────────────────────────────────────────
+     The rail is the passbook's cloth cover: maroon, cream type, a
+     gilt rule. It is a surface, never a signal — negative stays a
+     brighter brick so a breach can't be mistaken for the binding. */
+  --cover:#5A1F24;
+  --cover-ink:#F3E4C4;
+  --cover-ink-muted:#D2B993;
+  --cover-gilt:#C9A86A;
+  --cover-rule:rgba(201,168,106,0.35);
 
   /* ── Accent ────────────────────────────────────────────────────
      Exactly one. Primary action and active nav state only. It is
      also the single data-ink for line charts — a broadsheet prints
      charts in the same ink it prints buttons.                      */
-  --accent:#20456B;
-  --accent-pressed:#163350;
-  --accent-on:#F6F2EA;   /* text on an accent fill                  */
+  --accent:#2E5E8C;      /* teller's stamp-pad blue                 */
+  --accent-pressed:#234A70;
+  --accent-on:#F6EFE0;   /* text on an accent fill                  */
 
   /* ── Semantic inks ─────────────────────────────────────────────
      Press marks, not browser errors. Desaturated to sit in the
@@ -89,23 +96,25 @@
      breaches, overdrafts, negative balances, past-due. It is never
      a category colour. Anything merely worth noticing takes
      attention (sienna) instead.                                    */
-  --negative:#8C3A2E;                          /* oxblood            */
-  --negative-wash:rgba(140,58,46,0.07);
-  --positive:#3E6B4F;                          /* dull forest        */
-  --positive-wash:rgba(62,107,79,0.07);
-  --positive-tint:#DADDD2;       /* positive at 15% on paper, opaque */
-  --positive-tint-deep:#CED4C8;  /* 22% — the same, under hover      */
-  --attention:#8A6516;                         /* raw sienna         */
-  --attention-wash:rgba(138,101,22,0.08);
+  --negative:#9A3324;                          /* brick              */
+  --negative-wash:rgba(154,51,36,0.08);
+  --positive:#3D6B45;                          /* ledger green       */
+  --positive-wash:rgba(61,107,69,0.08);
+  --positive-tint:#D6D6C0;       /* positive at 15% on paper, opaque */
+  --positive-tint-deep:#C9CDB6;  /* 22% — the same, under hover      */
+  --attention:#8A5A12;                         /* raw sienna         */
+  --attention-wash:rgba(138,90,18,0.09);
 
   /* ── Rules ─────────────────────────────────────────────────────
      Hairlines replace every card border and every drop shadow.     */
   --rule-width:1px;
   --rule-opacity:0.12;
   --rule-opacity-strong:0.22;
-  --rule:rgba(27,24,21,0.12);          /* default hairline           */
-  --rule-strong:rgba(27,24,21,0.22);   /* under section labels, totals */
-  --rule-faint:rgba(27,24,21,0.07);    /* between table rows         */
+  --rule:rgba(42,33,24,0.14);          /* default hairline           */
+  --rule-strong:rgba(42,33,24,0.30);   /* under section labels, totals */
+  --rule-faint:rgba(42,33,24,0.09);    /* between table rows         */
+  --rule-double:3px double var(--ink); /* ledger close: masthead, totals */
+  --veil:rgba(42,33,24,0.32);          /* behind a modal             */
 
   /* ── Controls ──────────────────────────────────────────────────
      Minimum hit target, reached with padding rather than by enlarging
@@ -159,21 +168,21 @@
      strength and the rest step down from it. Darkness reads as how
      hard that money is working.
      Named by weight, not by slot, so no component encodes meaning.  */
-  --data-ink:#20456B;
-  --fill-emphasis:#20456B;   /* Attack — extra principal            */
-  --fill-strong:#4A6E96;     /* Minimums                            */
-  --fill-mid:#8AA3BD;        /* Buckets & savings                   */
-  --fill-faint:#C3CEDA;      /* Unassigned — money doing nothing    */
+  --data-ink:#2E5E8C;
+  --fill-emphasis:#2E5E8C;   /* Attack — extra principal            */
+  --fill-strong:#5B7FA3;     /* Minimums                            */
+  --fill-mid:#97ABBF;        /* Buckets & savings                   */
+  --fill-faint:#CBD1CF;      /* Unassigned — money doing nothing    */
 
   /* A rising card balance is worth noticing but is not a breach, so
      it takes attention, not oxblood. See the reservation above.     */
-  --spark-better:#3E6B4F;
-  --spark-worse:#8A6516;
-  --axis:rgba(27,24,21,0.10);
-  --gridline:rgba(27,24,21,0.07);
+  --spark-better:#3D6B45;
+  --spark-worse:#8A5A12;
+  --axis:rgba(42,33,24,0.14);
+  --gridline:rgba(42,33,24,0.08);
 
   /* ── Progress bars ─────────────────────────────────────────────  */
-  --bar-track:rgba(27,24,21,0.09);
+  --bar-track:rgba(42,33,24,0.10);
   --bar-height:4px;
   --bar-radius:0;          /* squared ends, per spec                */
 
