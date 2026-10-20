@@ -2371,7 +2371,12 @@ function stepFireWeek(st,fromWeek){
   if(tr.type==='target'){
     const a=acct(tr.acct); if(!a||!a.target)return null;
     const r=(computeWeek(fromWeek)||{byId:{}}).byId[tr.acct];
-    if(r&&r.targetDone)return 0;
+    /* Funded is not the same as freed. A goal this week's own deposit
+       finishes still has that deposit on the sheet, so the money comes free
+       next week; only a fund the sheet has stopped paying is free already.
+       Calling it week 0 counted it as placed on the sheet and dropped it
+       from the projection for good. */
+    if(r&&r.targetDone)return r.total>0.005?1:0;
     if(a.target.by)return Math.max(0,Math.ceil(daysBetween(fromWeek,a.target.by)/7));
     /* `targetShort` is measured after this week's contribution, and week 0 of
        a simulation is this week — so the contributions still needed fill weeks
