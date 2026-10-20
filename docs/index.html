@@ -577,6 +577,12 @@ td.dcell.is-empty input:disabled{color:transparent;-webkit-text-fill-color:trans
    each subject (Terms, Now, Owed, This week, After) begins. Lines go on the
    left of each cell only, so neighbours never draw two. */
 .sheet-page table.grid tbody tr > *{border-bottom:var(--rule-width) solid var(--cell-rule)}
+/* Every figure sits in the middle of its cell. Typed cells are fixed-width
+   fields and computed ones are bare text, so right-aligning the two left
+   them a field's slack apart; centring both lines them up on the column. */
+.sheet-page table.grid td,
+.sheet-page table.grid thead tr:last-child th:not(:first-child){text-align:center}
+.sheet-page table.grid input.cell{text-align:center}
 .sheet-page table.grid tbody td,
 .sheet-page table.grid thead tr:last-child th:not(:first-child){border-left:var(--rule-width) solid var(--cell-rule)}
 .sheet-page table.grid tbody th + td,.sheet-page table.grid tbody th + td.grp{border-left:0}
@@ -640,7 +646,7 @@ td.dcell.is-empty input:disabled{color:transparent;-webkit-text-fill-color:trans
 .sheet-page input.cell-date::-webkit-calendar-picker-indicator{width:12px;height:12px;
   margin:0 0 0 2px;padding:0}
 .sheet-page td.dcell[data-show]::after{content:attr(data-show);position:absolute;
-  right:calc(var(--space-half) + 14px);top:50%;transform:translateY(-50%);pointer-events:none;
+  left:0;right:0;text-align:center;top:50%;transform:translateY(-50%);pointer-events:none;
   font-family:var(--font-figures);color:var(--ink)}
 .sheet-page td.dcell.is-thisweek[data-show]::after{color:var(--attention);font-weight:var(--weight-semibold)}
 .sheet-page td.dcell[data-show] input:not(:focus){color:transparent;-webkit-text-fill-color:transparent}
@@ -1095,24 +1101,24 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;
   padding:0 var(--space-4) 0 var(--space-2);color:var(--cover-ink-muted);flex:0 0 auto}
 .cover-end{margin-left:auto;display:flex;align-items:center;gap:var(--space-4)}
 .cover-end #syncbox{display:flex;align-items:center;gap:var(--space-3)}
-.book{flex:1 1 auto;display:flex;align-items:flex-start;padding:0 var(--space-1) var(--space-2) var(--space-2)}
+.book{flex:1 1 auto;display:flex;align-items:flex-start;padding:0 var(--space-2) var(--space-2) var(--space-1)}
 .shell #view{flex:1;min-width:0;align-self:stretch;background:var(--paper);
   border-radius:var(--radius);min-height:calc(100vh - var(--cover-bar-h) - var(--space-2))}
 .shell .page{max-width:none;padding:var(--space-5) var(--space-6) var(--space-7)}
 .shell #view.legacy{padding:0;overflow:hidden}
 
-/* Tabs: vertical labels, the open one the page's own stock and pulled onto
-   the seam so the sheet and its tab are one piece. Sticky, so the index
-   stays in reach down a long page. */
-.tabs{flex:0 0 auto;position:sticky;top:var(--space-2);display:flex;flex-direction:column;
-  gap:3px;padding-top:var(--space-4)}
+/* Tabs: cut into the page's left edge, vertical labels, the open one the
+   page's own stock and pulled onto the seam so the sheet and its tab are one
+   piece. Sticky, so the index stays in reach down a long page. */
+.tabs{order:-1;flex:0 0 auto;position:sticky;top:var(--space-2);display:flex;flex-direction:column;
+  align-items:flex-end;gap:3px;padding-top:var(--space-4)}
 .tabs button{writing-mode:vertical-rl;padding:var(--space-2) 7px var(--space-2) 6px;
   background:var(--paper-deeper);color:var(--ink-muted);font-size:var(--text-2);
-  letter-spacing:0.02em;border-radius:0 var(--radius-tab) var(--radius-tab) 0;
+  letter-spacing:0.02em;border-radius:var(--radius-tab) 0 0 var(--radius-tab);
   transition:background var(--duration-1) var(--ease-standard),color var(--duration-1) var(--ease-standard),
     padding var(--duration-1) var(--ease-standard)}
-.tabs button:hover{background:var(--paper-deep);color:var(--ink-secondary);padding-right:9px}
-.tabs button[aria-current="page"]{background:var(--paper);color:var(--ink);margin-left:-3px;
+.tabs button:hover{background:var(--paper-deep);color:var(--ink-secondary);padding-left:9px}
+.tabs button[aria-current="page"]{background:var(--paper);color:var(--ink);margin-right:-3px;
   padding-left:9px;padding-right:9px}
 .tabs button:focus-visible{outline:var(--focus-ring-width) solid var(--focus-ink);outline-offset:-3px}
 .tabs .key{display:none}
@@ -1122,11 +1128,11 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;
   .cover-bar .railstat{display:none}
   .cover-end{gap:var(--space-3);flex-wrap:wrap}
   .book{flex-direction:column-reverse;align-items:stretch;padding:0 var(--space-1) var(--space-1)}
-  .tabs{position:static;flex-direction:row;padding:0 0 0 var(--space-1);overflow-x:auto;gap:3px;
+  .tabs{order:0;position:static;flex-direction:row;align-items:flex-end;padding:0 0 0 var(--space-1);overflow-x:auto;gap:3px;
     scrollbar-width:none}
   .tabs button{writing-mode:horizontal-tb;white-space:nowrap;padding:var(--space-1) var(--space-2);
     border-radius:var(--radius-tab) var(--radius-tab) 0 0}
-  .tabs button:hover{padding-right:var(--space-2)}
+  .tabs button:hover{padding:var(--space-1) var(--space-2)}
   .tabs button[aria-current="page"]{margin:0 0 -3px;padding:var(--space-1) var(--space-2) calc(var(--space-1) + 3px)}
   .shell #view{min-height:0}
   .shell .page{padding:var(--space-4) var(--space-3) var(--space-7)}
