@@ -572,6 +572,8 @@ td.dcell.is-empty input:disabled{color:transparent;-webkit-text-fill-color:trans
   border-bottom:0;text-align:center;padding-top:0;padding-bottom:2px;color:var(--ink-secondary)}
 .sheet-page table.grid thead tr.sets th.band{border-radius:var(--radius-tab) var(--radius-tab) 0 0}
 .sheet-page .paidoff{font-family:var(--font-sans);font-style:italic;color:var(--positive)}
+.sheet-page input.cell::placeholder{color:var(--ink-absent);-webkit-text-fill-color:var(--ink-absent);opacity:1}
+.sheet-page td.nil{color:var(--ink-absent)}
 
 /* Spreadsheet gridlines: a hairline round every cell, and a darker one where
    each subject (Terms, Now, Owed, This week, After) begins. Lines go on the
@@ -3155,8 +3157,10 @@ function cellNum(r,f,cls=''){
   const a=r.a,id=a.id;
   if(r.isRollup||a.kind==='income')return `<td class="num dim">${fig(n0(r[f]))}</td>`;
   const ro=(a.autoOther==='cardMinShortfall'&&f==='other')||isLocked(currentWeek());
+  /* An empty this-week cell holds nothing and shows a faint $0.00 as its
+     placeholder, so the band reads as blanks waiting to be filled. */
   return `<td class="num"><input class="cell ${cls}${n0(r[f])===0?' is-zero':''}" data-fmt="fig"`
-    +` data-k="${id}:${f}" value="${figInput(n0(r[f]))}"`
+    +` data-k="${id}:${f}" value="${n0(r[f])===0?'':figInput(n0(r[f]))}" placeholder="$0.00"`
     +`${ro?' readonly title="Auto: card minimums not paid directly"':''}></td>`;
 }
 function cellDate(r,f){
@@ -3264,7 +3268,8 @@ const SHEET_COLS=[
   {k:'attack',band:true,label:'Attack',cell:r=>cellNum(r,'attack','is-attack')},
   {k:'other', band:true,label:'Other', cell:r=>cellNum(r,'other')},
   {k:'total',band:true,label:'Total',
-   cell:r=>`<td class="num">${fig(r.total)}</td>`},
+   cell:r=>Math.abs(n0(r.total))<0.005&&!r.isRollup&&r.a.kind!=='income'
+     ?'<td class="num nil">$0.00</td>':`<td class="num">${fig(r.total)}</td>`},
 
   /* Money leaving a bucket. Only buckets and savings have one — nothing
      "leaves" a card except a payment, which is already the Total column. */
@@ -5191,7 +5196,8 @@ document.addEventListener('focusin',e=>{
   if(isNumField(e.target))e.target.select();
 });
 document.addEventListener('focusout',e=>{
-  if(isMoneyCell(e.target))e.target.value=(e.target.dataset.fmt==='fig'?figInput:moneyInput)(n0(e.target.value));
+  if(isMoneyCell(e.target))e.target.value=e.target.placeholder&&n0(e.target.value)===0?''
+    :(e.target.dataset.fmt==='fig'?figInput:moneyInput)(n0(e.target.value));
 });
 document.addEventListener('input',e=>{
   const t=e.target;
