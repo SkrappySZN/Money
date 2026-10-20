@@ -596,7 +596,13 @@ td.dcell.is-empty input:disabled{color:transparent;-webkit-text-fill-color:trans
 .sheet-page table.grid tbody th{max-width:none}
 .sheet-page tr.sect th{padding-top:var(--space-1)}
 .sheet-page input.cell{width:10ch}
-.sheet-page input.cell-date{width:calc(10ch + 20px)}
+/* Dates are set in the book face, not the typewriter. Chrome sizes each
+   part of a date field itself, and with Courier Prime it cut the year's last
+   digit at any field width — measured, the box was never the problem. */
+.sheet-page input.cell-date{width:calc(11ch + 22px);font-family:var(--font-sans);
+  font-variant-numeric:tabular-nums lining-nums}
+.sheet-page input.cell-date::-webkit-calendar-picker-indicator{width:12px;height:12px;
+  margin:0 0 0 2px;padding:0}
 /* Typewriter figures run wide (0.6em a glyph), so the headers give the room
    back: two-word labels stack instead of setting the column's width. */
 .sheet-page table.grid thead th{white-space:normal;vertical-align:bottom;line-height:1.25;
@@ -2595,7 +2601,9 @@ function fitSheet(){
   const w=t.parentElement;
   let fs=14;
   t.style.fontSize=fs+'px';
-  while(w.scrollWidth>w.clientWidth&&fs>11){fs-=0.25;t.style.fontSize=fs+'px'}
+  /* both ways: every column across, and the Total row above the fold */
+  const over=()=>w.scrollWidth>w.clientWidth||w.scrollHeight>w.clientHeight;
+  while(over()&&fs>11){fs-=0.25;t.style.fontSize=fs+'px'}
 }
 
 /* The empty state. It threw for months: it set `#statusdot`, and the brand
