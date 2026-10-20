@@ -1070,6 +1070,31 @@ table.ev-table td:nth-child(3),table.ev-table th:nth-child(3){text-align:left}
 table.ev-table td:nth-child(2),table.ev-table th:nth-child(2){text-align:left;white-space:nowrap}
 table.ev-table td.ev-up{color:var(--positive)}
 table.ev-table td:last-child{font-weight:var(--weight-medium);color:var(--ink)}
+/* Coming up: the next few numbered events from the table below, lifted to
+   the top of Projections so what happens next reads before the chart. */
+.next-up{display:grid;grid-template-columns:repeat(4,1fr);list-style:none;margin:0;padding:0}
+.next-up>li{padding:0 var(--space-3);min-width:0}
+.next-up>li+li{border-left:var(--rule-width) solid var(--rule)}
+.next-up>li:first-child{padding-left:0}
+.nu-when{display:flex;align-items:baseline;gap:var(--space-1);color:var(--ink);font-family:var(--font-figures)}
+.nu-n{display:inline-grid;place-items:center;min-width:1.5em;height:1.5em;border:var(--rule-width) solid var(--ink);
+  border-radius:50%;font-size:var(--text-1)}
+.nu-in{color:var(--ink-muted);font-size:var(--text-2);font-family:inherit}
+.nu-what{list-style:none;margin:var(--space-1) 0 0;padding:0;color:var(--ink-secondary)}
+.nu-what li+li{margin-top:var(--space-half)}
+.nu-what .up{color:var(--positive);font-variant-numeric:tabular-nums;white-space:nowrap}
+.nu-what .down{color:var(--negative);font-variant-numeric:tabular-nums;white-space:nowrap}
+.nu-after{margin-top:var(--space-1);font-size:var(--text-2);color:var(--ink-muted);font-variant-numeric:tabular-nums}
+.nu-after b{color:var(--ink);font-weight:var(--weight-medium)}
+@media(max-width:880px){
+  .next-up{grid-template-columns:1fr 1fr;gap:var(--space-3) 0}
+  .next-up>li:nth-child(odd){padding-left:0;border-left:0}
+}
+@media(max-width:520px){
+  .next-up{grid-template-columns:1fr}
+  .next-up>li{padding:0;border-left:0}
+  .next-up>li+li{border-left:0;border-top:var(--rule-width) solid var(--rule);padding-top:var(--space-2)}
+}
 table.cmp td.sk-short{color:var(--attention);font-weight:var(--weight-medium)}
 table.cmp td.sk-late{color:var(--negative);font-weight:var(--weight-medium)}
 .cmp-wrap{overflow-x:auto}
@@ -4096,6 +4121,7 @@ function viewProjections(el){
   }
   events.forEach((e,i)=>e.n=String(i+1));
   const dayYear=d=>`${dueLabel(d)}, ${d.slice(0,4)}`;
+  const NEXT_UP=4;
 
   const span=sim.series.length;
   const step=Math.max(1,Math.ceil(span/104));
@@ -4119,6 +4145,15 @@ function viewProjections(el){
     <div class="metric"><div class="m-label">Interest along the way</div>
       <span class="m-value">${never?'—':money0(sim.totalInterest)}</span></div>
   </div>
+
+  ${events.length?`<section class="band" aria-labelledby="nu-h">
+    <h2 class="sect-label" id="nu-h">Coming up${events.length>NEXT_UP?`<span class="count">next ${NEXT_UP} of ${events.length} · all of them under the chart</span>`:''}</h2>
+    <ol class="next-up">${events.slice(0,NEXT_UP).map(e=>{const d=when(e.w),n=Math.max(0,Math.round(daysBetween(iso(new Date()),d)/7));
+      return `<li><div class="nu-when"><span class="nu-n">${e.n}</span>${dayYear(d)}
+          <span class="nu-in">${n===0?'this week':n===1?'in 1 week':`in ${n} weeks`}</span></div>
+        <ul class="nu-what">${e.here.map(x=>`<li>${esc(x.what)} <span class="${x.gain<0?'down':'up'}">${x.gain<0?'−':'+'}${money(Math.abs(x.gain))}${x.once?' once':'/wk'}</span></li>`).join('')}</ul>
+        <div class="nu-after">Attack then <b>${money(e.after)}</b>/wk</div></li>`}).join('')}</ol>
+  </section>`:''}
 
   <section class="band tight whatif" aria-labelledby="wi-h">
     <h2 class="sect-label" id="wi-h">What if</h2>
