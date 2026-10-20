@@ -1,4 +1,4 @@
-# Money
+# Payday
 
 A weekly zero-based allocation ledger, in one HTML file. No build step, no server,
 no account — everything lives in your own browser's local storage and nothing is
