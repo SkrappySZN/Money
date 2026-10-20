@@ -820,6 +820,15 @@ h2.sect-label .sect-action{margin-left:auto;min-height:0;text-transform:none;let
   font-variant-numeric:tabular-nums;padding-top:1px}
 .plan-list .pd.is-overdue{color:var(--negative);font-weight:var(--weight-medium)}
 .plan-list li.done{opacity:.45}
+/* Upcoming changes: every part of a change is edited where it is read */
+.chg-list input.chg-in{font:inherit;color:inherit;background:none;border:0;padding:0;
+  border-bottom:var(--rule-width) dotted var(--rule-strong);font-variant-numeric:tabular-nums}
+.chg-list input.chg-in:focus{outline:none;border-bottom:var(--rule-width) solid var(--accent);color:var(--ink)}
+.chg-list .pt input.chg-in{width:100%;font-weight:var(--weight-medium);color:var(--ink)}
+.chg-list .pn input.chg-in{width:6.5em;text-align:right}
+.chg-list .chg-del{background:none;border:0;padding:0;color:var(--ink-muted);cursor:pointer;font:inherit;line-height:1.4}
+.chg-list .chg-del:hover{color:var(--negative)}
+.chg-list li.is-past{opacity:.55}
 .plan-list li.done .pt{text-decoration:line-through}
 /* C2: no chips. A state is tracked uppercase text, not a filled shape. */
 .state{font-size:var(--text-1);font-weight:var(--weight-medium);
@@ -874,6 +883,7 @@ select.field{appearance:none;-webkit-appearance:none;cursor:pointer;color:var(--
   .acct-row{grid-template-columns:1fr 96px 88px;gap:var(--space-1)}
   .acct-row .hideS{display:none}
   .plan-list.dated li{grid-template-columns:20px 1fr}
+  .plan-list.dated li>:nth-child(3){grid-column:2}
 }
 .sub-label{font-size:var(--text-1);font-weight:var(--weight-medium);
   letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted);
@@ -1757,6 +1767,7 @@ function migrate(){
   migrateV12();
   migrateV13();
   migrateV14();
+  migrateV15();
 }
 /* v2 — grouping corrections, Sept 10 2026. Runs against the ledger already
    in the browser, not just the seed: editing SEED alone would have changed
@@ -1812,6 +1823,31 @@ function migrate(){
    before, or Unplanned keeps showing the estimate on rows already corrected.
    computeWeek writes derived fields back into entries, so the ledger is
    snapshotted and restored around it: `projected` is the only thing changed. */
+/* v15 — Projections run on a typical week, and the changes already known
+   are entered as dated changes on the plan: the lease bucket stops after the
+   11/13 paycheck, that paycheck's savings make the first Affirm payment and
+   Affirm's weekly starts on the same sheet, and car insurance drops after
+   turn-in (an estimate until the real figure is known). The loan was typed
+   in by hand, so it is found by name. */
+function migrateV15(){
+  if(S.v>=15)return;
+  S.plan=S.plan||{};
+  if(!S.plan.changes){
+    const ch=[],loan=S.accounts.find(a=>a.kind==='loan'&&/affirm/i.test(a.name));
+    if(acct('car-lease-savings'))ch.push({id:'lease-end',from:'2026-11-13',acct:'car-lease-savings',weekly:0,
+      label:'Lease savings stops after the 11/13 paycheck'});
+    if(loan){
+      ch.push({id:'affirm-hold',from:'2026-10-16',acct:loan.id,weekly:0,label:'Affirm paid from lease savings until 11/13'});
+      ch.push({id:'affirm-first',type:'move',from:'2026-11-13',acct:loan.id,amount:366.01,
+        label:'First Affirm payment from Car Lease Savings'});
+      ch.push({id:'affirm-start',from:'2026-11-13',acct:loan.id,weekly:91.51,label:'Affirm weekly starts'});
+    }
+    if(acct('car-insurance'))ch.push({id:'ins-drop',from:'2026-11-27',acct:'car-insurance',weekly:45,
+      label:'Car insurance drops after turn-in (estimate)'});
+    S.plan.changes=ch;
+  }
+  S.v=15;
+}
 /* v14 — Affirm autopays from the checking account, so its money waits there
    the way the card minimums and subscriptions do: a bucket inside that
    account's rollup, linked to the loan so the payment draws it down. The loan was
@@ -2016,23 +2052,30 @@ function computeWeek(k){
     if(r.a.autoOut){
       const t=byId[r.a.autoOut];
       const paid=t?r2(t.min+t.attack+t.other):0;
-      /* The weekly amount is the floor. Anything typed into Other above it is
-         this week's contribution instead — money moved in early, say. It is
-         kept in `otherSet`, apart from `other`, because `other` is rewritten
-         below on every compute: typed there, it was silently replaced by the
-         weekly amount and never counted. */
-      const put=Math.max(n0(r.minAmt),n0(r.e.otherSet));
-      /* This week's contribution pays first and the accumulated balance only
-         covers what is left over — the same order the minimums bucket uses,
-         and the order the spreadsheet used. It matters for what you read off
-         the row: `Other` becomes what is ACTUALLY going in this week, rather
-         than the full contribution with a separate withdrawal beside it
-         cancelling part of it out. */
+      /* Other works as it does on every other bucket: what you type is what
+         goes in, 0 included. It is kept in `otherSet`, apart from `other`,
+         because `other` is rewritten here on every compute. The payment this
+         bucket exists for is then drawn from the bucket — this week's
+         contribution and what it already held — up to what it has. */
+      if(r.e.otherSet!=null){
+        r.other=r2(n0(r.e.otherSet));
+        r.e.other=r.other;
+        r.out=r2(Math.min(paid,Math.max(0,r.balance+r.other)));
+        r.e.out=r.out;
+      }else{
+      /* Nothing typed: the weekly amount goes in. This week's contribution
+         pays first and the accumulated balance only covers what is left over
+         — the same order the minimums bucket uses, and the order the
+         spreadsheet used — so `Other` reads as what is ACTUALLY going in this
+         week, rather than the full contribution with a separate withdrawal
+         beside it cancelling part of it out. */
+      const put=n0(r.minAmt);
       r.other=r2(Math.max(0,put-paid));
       r.e.other=r.other;
       const fromPile=r2(Math.max(0,paid-put));
       r.out=r2(Math.min(fromPile,Math.max(0,r.balance)));
       r.e.out=r.out;
+      }
     }
   }
 
@@ -2419,8 +2462,11 @@ function stepFireWeek(st,fromWeek){
   }
   return null;
 }
-function simulate(debts,{strategy='avalanche',budget=0,fromWeek=thisWeek(),cap=5200,steps=[],sheetFirst=false,funds=[],lumps=[],raises=[]}={}){
+function simulate(debts,{strategy='avalanche',budget=0,firstBudget=null,fromWeek=thisWeek(),cap=5200,steps=[],sheetFirst=false,funds=[],lumps=[],raises=[]}={}){
   const D=debts.map(d=>({...d,paidOff:null,interest:0}));
+  /* A debt's weekly payment can be scheduled to change — held at $0 while
+     something else covers it, then started. `sched` is [{w,weekly}] by week. */
+  const minAt=(d,w)=>{let m=d.weeklyMin;for(const x of d.sched||[])if(w>=x.w)m=x.weekly;return m};
   if(!D.length)return{weeks:0,totalInterest:0,debts:D,series:[{w:0,total:0}],fired:[],endBudget:budget};
   const rank=Object.fromEntries((S.plan?.order||[]).map((id,i)=>[id,i]));
   const order=()=>{
@@ -2486,17 +2532,19 @@ function simulate(debts,{strategy='avalanche',budget=0,fromWeek=thisWeek(),cap=5
     /* one-time money — a sale, a refund — joins that week's pool after the
        minimums, so it goes wherever attack goes. It is not a weekly amount and
        stays out of `weekBudget`. */
-    const lump=lumps.reduce((t,l)=>t+(l.w===w&&!l.cards?n0(l.amount):0),0);
+    const lump=lumps.reduce((t,l)=>t+(l.w===w&&!l.cards&&!l.to?n0(l.amount):0),0);
     const cardLump=lumps.reduce((t,l)=>t+(l.w===w&&l.cards?n0(l.amount):0),0);
     if(sheetFirst&&w===0){
-      pool=budget+extra;
+      /* the sheet's own week runs on what the sheet actually sent to debt —
+         a payment it skipped stays skipped */
+      pool=(firstBudget!=null?firstBudget:budget)+extra;
       for(const d of D){const p=Math.min(n0(d.current),d.balance,pool);d.balance-=p;pool-=p}
       pool+=lump;
       for(const d of D){if(d.balance<=0.005)continue;
         const i=d.balance*d.dpr*7;d.balance+=i;d.interest+=i;totalInterest+=i}
       const live=order();
       for(const d of live){if(d.kind!=='card'||d.grace)continue;
-        const p=Math.min(d.weeklyMin,d.balance,pool);d.balance-=p;pool-=p}
+        const p=Math.min(minAt(d,0),d.balance,pool);d.balance-=p;pool-=p}
       for(const d of live){if(pool<=0.005)break;if(d.grace)continue;
         const p=Math.min(pool,d.balance);d.balance-=p;pool-=p}
     }else{
@@ -2514,7 +2562,7 @@ function simulate(debts,{strategy='avalanche',budget=0,fromWeek=thisWeek(),cap=5
       for(const d of live){if(!d.grace||d.balance<=0.005)continue;
         if(pool+0.005>=d.balance){pool-=d.balance;d.balance=0}}
       for(const d of live){if(d.grace)continue;
-        const p=Math.min(d.weeklyMin,d.balance,pool);d.balance-=p;pool-=p}
+        const p=Math.min(minAt(d,w),d.balance,pool);d.balance-=p;pool-=p}
       for(const d of live){if(pool<=0.005)break;if(d.grace)continue;
         const p=Math.min(pool,d.balance);d.balance-=p;pool-=p}
     }
@@ -2529,6 +2577,10 @@ function simulate(debts,{strategy='avalanche',budget=0,fromWeek=thisWeek(),cap=5
       for(const d of live){if(lp<=0.005)break;if(d.grace)continue;
         const p=Math.min(lp,d.balance);d.balance-=p;lp-=p}
     }
+    /* money moved from savings straight onto one debt — it is not this
+       week's pay, so it goes there and nowhere else */
+    for(const l of lumps)if(l.w===w&&l.to){const d=D.find(x=>x.id===l.to);
+      if(d&&d.balance>0.005)d.balance-=Math.min(n0(l.amount),d.balance)}
     w++;
     for(const d of D)if(d.balance<=0.005&&d.paidOff==null){d.balance=0;d.paidOff=w}
     series.push({w,total:r2(D.reduce((s,d)=>s+d.balance,0)),by:byDebt()});
@@ -2537,7 +2589,7 @@ function simulate(debts,{strategy='avalanche',budget=0,fromWeek=thisWeek(),cap=5
        &&ST.every(st=>firedIds.has(st.id)||st.fireWeek==null))break;
   }
   const done=D.every(d=>d.balance<=0.005);
-  return{weeks:done?w:Infinity,totalInterest:r2(totalInterest),debts:D,series,fromWeek,fired,weekBudget,
+  return{weeks:done?w:Infinity,totalInterest:r2(totalInterest),debts:D,series,fromWeek,fired,weekBudget,minAt,
     endBudget:FU.length?lastBudget:r2(budget+extra),
     debtFreeDate:done?dateAfterWeeks(fromWeek,w):null};
 }
@@ -4033,6 +4085,44 @@ function sheetDebts(k){
   if(spare>0&&totalW>0)for(const d of noMin)d.weeklyMin=r2(spare*weight(d)/totalW);
   return debts;
 }
+/* A typical week, for projecting past this one. Everything that is not a
+   debt payment — buckets, spending, savings, the 401k — gets what the newest
+   sheet gives it; every debt gets its weekly payment; what is left of the
+   paycheck goes to debt. A bucket that only stages a loan payment counts as
+   that payment, not as spending. Changes on the Plan tab then move those
+   amounts from their date: a row's weekly, a debt's weekly, or money moved
+   from savings onto one debt. A change dated on or before this sheet is
+   already in it, except for a debt, whose weekly is not read off the sheet. */
+function typicalWeek(k){
+  const C=computeWeek(k);if(!C)return null;
+  const changes=(S.plan&&S.plan.changes)||[];
+  const stagesLoan=r=>!!(r.a.autoOut&&(acct(r.a.autoOut)||{}).kind==='loan');
+  const rows=C.rows.filter(r=>!r.isRollup&&r.a.kind!=='income'&&!KIND_DEBT(r.a.kind)&&!r.a.fundsDebt&&!stagesLoan(r));
+  /* a bucket linked to what it pays, or topping up card minimums, has its
+     sheet total moved around by whatever was paid direct that week — its
+     weekly target is the usual figure */
+  const usual=r=>r.a.autoOut?r2(Math.max(weeklyOf(r),n0(r.e.otherSet))):r.a.autoOther?weeklyOf(r):r2(r.total);
+  const weekly={};for(const r of rows)weekly[r.a.id]=usual(r);
+  /* what a bucket staging a loan takes each week is that loan's payment */
+  const staged={};for(const r of C.rows)if(!r.isRollup&&stagesLoan(r)){const v=usual(r);if(v>0.005)staged[r.a.autoOut]=r2((staged[r.a.autoOut]||0)+v)}
+  const wOf=d=>Math.max(0,Math.round(daysBetween(k,d)/7));
+  const raises=[],debtSched={},moves=[],cur={...weekly},tl={};
+  for(const c of [...changes].sort((a,b)=>a.from.localeCompare(b.from))){
+    const a=acct(c.acct);if(!a||a.archived)continue;
+    if(c.type==='move'){if(c.from>k)moves.push({w:wOf(c.from),amount:n0(c.amount),to:c.acct,label:c.label});continue}
+    if(KIND_DEBT(a.kind)){(debtSched[a.id]=debtSched[a.id]||[]).push({w:c.from<=k?0:wOf(c.from),weekly:n0(c.weekly),label:c.label});continue}
+    if(!(a.id in cur)||c.from<=k)continue;
+    const d=r2(cur[a.id]-n0(c.weekly));cur[a.id]=n0(c.weekly);
+    (tl[a.id]=tl[a.id]||[]).push({w:wOf(c.from),weekly:n0(c.weekly)});
+    if(Math.abs(d)>0.005)raises.push({from:wOf(c.from),weekly:d,label:c.label,acct:a.id});
+  }
+  /* money already being set aside for a loan replaces any hold on it; its
+     dated changes still apply from their dates */
+  for(const[id,v]of Object.entries(staged))debtSched[id]=[{w:0,weekly:v,label:'Set aside each week'},...(debtSched[id]||[]).filter(x=>x.w>0)];
+  const budget=r2(n0(C.totals.income)-Object.values(weekly).reduce((t,v)=>t+v,0));
+  const at=(id,w)=>{let v=n0(weekly[id]);for(const x of tl[id]||[])if(w>=x.w)v=x.weekly;return v};
+  return{weekly,budget,raises,debtSched,moves,at,changed:new Set(changes.map(c=>c.acct))};
+}
 /* Funds whose goal is spent and saved again every term. */
 function sheetFunds(k){
   const C=computeWeek(k);if(!C)return[];
@@ -4063,12 +4153,18 @@ const sheetSimOpts=(k,budget,strategy,funds)=>({...simOpts(k,budget,strategy),sh
 
 function viewProjections(el){
   const k=currentWeek(),C=computeWeek(k),T=C.totals;
-  const debts=sheetDebts(k);
+  const TW=typicalWeek(k);
+  const debts=sheetDebts(k).map(d=>({...d,sched:TW.debtSched[d.id]||[]}));
   if(!debts.length){el.innerHTML=`<main class="page">
     <header class="masthead"><div><h1 class="page-title">Projections</h1></div></header>
     <p class="lede">Nothing left to project — every loan and card is at $0.</p></main>`;return}
-  const floor=r2(debts.reduce((t,d)=>t+d.weeklyMin,0));
-  const budget=Math.max(n0(T.debtFunded),floor);
+  /* this sheet runs as entered; every week after it is a typical one */
+  const budget=TW.budget,firstBudget=n0(T.debtFunded);
+  /* A goal reached frees what the fund usually gets, not the figure the step
+     was written with. A fund with its own dated changes is run by those. */
+  const projSteps=stepsFor(k).filter(st=>{const tr=st.trigger||{};return tr.type!=='target'||!TW.changed.has(tr.acct)})
+    .map(st=>{const tr=st.trigger||{};return tr.type==='target'&&tr.acct in TW.weekly?{...st,weekly:TW.weekly[tr.acct]}:st})
+    .filter(st=>(st.trigger||{}).type!=='target'||n0(st.weekly)>0.005);
   /* What if the other car is sold. Kept in the plan so it syncs and survives a
      reload; off, it changes nothing. The sale lands as one lump in the week of
      the date given — the week after this sheet if none is — and goes to debt
@@ -4080,16 +4176,22 @@ function viewProjections(el){
   const carW=Math.max(0,Math.floor(daysBetween(k,carDate)/7));
   const carLumps=car.on&&n0(car.amount)>0?[{w:carW,amount:n0(car.amount),label:'Other car sold'}]:[];
   const refLumps=sheetLumps(k),refOwed=r2(refLumps.reduce((t,l)=>t+l.amount,0)),refN=refLumps.reduce((t,l)=>t+l.n,0);
-  const lumps=[...refLumps,...carLumps];
+  const planLumps=[...refLumps,...TW.moves],lumps=[...planLumps,...carLumps];
   /* With the car gone, its insurance drops to what is typed here, from the
      week after the sale. What it costs now is read off the sheet, so the
      saving follows whatever the sheet sends it. */
-  const insRow=C.byId['car-insurance'],insNow=insRow?r2(n0(insRow.total)):0;
-  const insSave=r2(Math.max(0,insNow-n0(car.insurance)));
-  const raises=car.on&&insSave>0?[{from:carW+1,weekly:insSave,label:`Car insurance drops to ${money(n0(car.insurance))}/wk`}]:[];
-  const sim=simulate(debts,{...sheetSimOpts(k,budget,UI.strategy),lumps,raises});
-  const isWhatIf=carLumps.length>0||raises.length>0;
-  const base=isWhatIf?simulate(debts,sheetSimOpts(k,budget,UI.strategy)):sim;
+  /* Measured against what insurance would be by then, so a drop already
+     planned for turn-in is not counted twice, and it replaces any planned
+     change to insurance after the sale. */
+  const insRow=C.byId['car-insurance'],insNow=insRow?TW.at('car-insurance',0):0;
+  const insSave=r2(Math.max(0,TW.at('car-insurance',carW)-n0(car.insurance)));
+  const saleRaises=car.on&&insSave>0?[{from:carW+1,weekly:insSave,sale:true,label:`Car insurance drops to ${money(n0(car.insurance))}/wk`}]:[];
+  const planRaises=TW.raises.filter(r=>!(saleRaises.length&&r.acct==='car-insurance'&&r.from>carW));
+  const raises=[...planRaises,...saleRaises];
+  const baseOpts={...sheetSimOpts(k,budget,UI.strategy),firstBudget,steps:projSteps};
+  const sim=simulate(debts,{...baseOpts,lumps,raises});
+  const isWhatIf=carLumps.length>0||saleRaises.length>0;
+  const base=isWhatIf?simulate(debts,{...baseOpts,lumps:planLumps,raises:TW.raises}):sim;
   const never=sim.weeks===Infinity;
   const when=w=>addWeeks(k,w);
   const accts=[...sim.debts].sort((a,b)=>(a.paidOff??1e9)-(b.paidOff??1e9));
@@ -4100,17 +4202,21 @@ function viewProjections(el){
      renewing fund refilled — and shrinks when a renewal takes its weekly back.
      The first two are read straight off the simulation; a change in the
      week's total that no step explains belongs to a renewing fund. */
-  const WB=sim.weekBudget,minOf=Object.fromEntries(debts.map(d=>[d.id,d.weeklyMin]));
+  const WB=sim.weekBudget,minAt=sim.minAt;
   const attackAt=w=>r2(Math.max(0,n0(WB[w])-sim.debts
-    .filter(d=>!d.grace&&(d.paidOff==null||d.paidOff>w)).reduce((t,d)=>t+n0(minOf[d.id]),0)));
+    .filter(d=>!d.grace&&(d.paidOff==null||d.paidOff>w)).reduce((t,d)=>t+n0(minAt(d,w)),0)));
   const funds=sheetFunds(k),acctName=id=>(acct(id)||{}).name||id;
   const events=[];
   for(let w=1;w<WB.length;w++){
     const here=[];
     for(const f of sim.fired)
       if(f.week===w&&(f.trigger||{}).type!=='payoff')here.push({what:f.label,gain:n0(f.weekly)});
-    for(const r of raises)if(r.from===w)here.push({what:`${r.label} — the rest joins attack`,gain:r.weekly});
-    const stepGain=here.reduce((t,e)=>t+e.gain,0);
+    for(const r of raises)if(r.from===w)here.push({what:r.sale?`${r.label} — the rest joins attack`:r.label,gain:r.weekly});
+    /* a debt's weekly starting or changing on its date moves attack the other way */
+    for(const d of sim.debts)for(const x of d.sched||[])
+      if(x.w===w&&w>=1&&(d.paidOff==null||d.paidOff>w)){const ch=r2(x.weekly-minAt(d,w-1));
+        if(Math.abs(ch)>0.005)here.push({what:x.label,gain:-ch,debt:true})}
+    const stepGain=here.filter(e=>!e.debt).reduce((t,e)=>t+e.gain,0);
     const diff=r2(n0(WB[w])-n0(WB[w-1])-stepGain);
     if(Math.abs(diff)>0.005){
       const f=funds.find(x=>x.renew.has(w))||(funds.length===1?funds[0]:null);
@@ -4120,8 +4226,8 @@ function viewProjections(el){
     /* a debt clearing in week 1 was paid off by the sheet itself — it is part
        of the starting point, not something that happens later */
     for(const d of sim.debts)
-      if(w>1&&d.paidOff===w&&n0(minOf[d.id])>0.005)here.push({what:`${d.name} paid off — its minimum joins attack`,gain:n0(minOf[d.id])});
-    for(const l of lumps)if(l.w===w)here.unshift({what:`${l.label} — ${money(l.amount)} to ${l.cards?'cards':'debt'}, once`,gain:l.amount,once:true});
+      if(w>1&&d.paidOff===w&&n0(minAt(d,w-1))>0.005)here.push({what:`${d.name} paid off — its minimum joins attack`,gain:n0(minAt(d,w-1))});
+    for(const l of lumps)if(l.w===w)here.unshift({what:l.to?l.label:`${l.label} — ${money(l.amount)} to ${l.cards?'cards':'debt'}, once`,gain:l.amount,once:true});
     if(here.length)events.push({w,here,after:attackAt(w)});
   }
   events.forEach((e,i)=>e.n=String(i+1));
@@ -4146,7 +4252,7 @@ function viewProjections(el){
       <div class="m-note">${never?`${money(budget)}/wk can't outrun the interest`:monthsLabel(weeksToMonths(sim.weeks))+' from this sheet'}</div></div>
     <div class="metric"><div class="m-label">To debt each week</div>
       <span class="m-value">${money(budget)}</span>
-      <div class="m-note">${T.debtBucket?`${money(T.debtBucket)} of it through the card-minimum bucket`:'as this sheet has it'}${sim.endBudget>budget+0.005?` · ${money(sim.endBudget)} once the steps land`:''}</div></div>
+      <div class="m-note">in a typical week${Math.abs(firstBudget-budget)>0.005?` · this sheet sends ${money(firstBudget)}`:''}${sim.endBudget>budget+0.005?` · ${money(sim.endBudget)} once the changes land`:''}</div></div>
     <div class="metric"><div class="m-label">Interest along the way</div>
       <span class="m-value">${never?'—':money0(sim.totalInterest)}</span></div>
   </div>
@@ -4179,10 +4285,12 @@ function viewProjections(el){
 
   <section class="band" aria-labelledby="pt-h">
     <h2 class="sect-label" id="pt-h">All loans and cards</h2>
-    <p class="lede muted">The first week is this sheet exactly as entered. After that, the same total goes to
-      debt every week with nothing new charged, interest at each account's rate, card minimums paid from the
-      card-minimum bucket, and attack moving down the order as each debt clears. A fund that renews takes its weekly
-      amount back while it refills. It updates whenever the sheet does.${refN?` Includes <b>${money(refOwed)}</b> of reffing
+    <p class="lede muted">The first week is this sheet exactly as entered — a payment it skips stays skipped.
+      After that every week is a typical one: each bucket, savings row and the 401k gets what this sheet gives it,
+      every loan gets its weekly payment, card minimums come from the card-minimum bucket, and the rest of the
+      paycheck is attack, moving down the order as each debt clears. Nothing new is charged. The changes listed on
+      Plan move those amounts from their dates, and a fund that renews takes its weekly back while it refills.
+      It updates whenever the sheet does.${refN?` Includes <b>${money(refOwed)}</b> of reffing
       pay still owed for ${refN} game${refN===1?'':'s'}, going to the cards two weeks after each game.`:''}</p>
     <div class="chart" id="projTotal"></div>
   </section>
@@ -4493,6 +4601,7 @@ function viewPlan(el){
   const byId=Object.fromEntries(debts.map(d=>[d.id,d]));
   const ordered=(P.order||[]).filter(id=>acct(id));
   const missing=debts.filter(d=>!ordered.includes(d.id)&&!d.grace);
+  const chg=[...(P.changes||[])].sort((a,b)=>a.from.localeCompare(b.from));
   const nowRows=[...overdue.map(c=>({c,late:true})),...soon.filter(c=>c.d<weekEnd).map(c=>({c,late:false}))];
 
   const calRow=c=>`<li class="${c.done?'done':''}">
@@ -4518,7 +4627,23 @@ function viewPlan(el){
         ?` <span class="pn-inline">${Math.abs(daysBetween(c.d,today))} days ago</span>`:''}</p></li>`).join('')}</ul>
   </section>`:''}
 
-  <section class="band${nowRows.length?'':' tight'}" aria-labelledby="subs-h">
+  <section class="band${nowRows.length?'':' tight'}" aria-labelledby="chg-h">
+    <h2 class="sect-label" id="chg-h">Upcoming changes<span class="count">what Projections plans around</span>
+      <button class="ctl sect-action" data-act="addchg">+ Change</button></h2>
+    <p class="lede muted">Projections runs every week after this sheet as a typical one. These move it on their date.
+      A change already reached is on the sheet itself, so it only matters for a debt, whose weekly is not read off the sheet.</p>
+    ${chg.length?`<ul class="plan-list dated chg-list">${chg.map(c=>{const a=acct(c.acct),past=c.from<=k;
+      return `<li class="${past?'is-past':''}">
+      <span><button class="chg-del" data-chgdel="${c.id}" aria-label="Remove ${esc(c.label)}" title="Remove">×</button></span>
+      <span class="pd"><input type="date" data-chg="${c.id}:from" value="${c.from}" aria-label="Sheet it starts on"></span>
+      <span><div class="pt"><input class="chg-in" data-chg="${c.id}:label" value="${esc(c.label)}" aria-label="What changes"></div>
+        <div class="pn">${a?esc(a.name):'missing account'} — ${c.type==='move'
+          ?`$<input class="chg-in" inputmode="decimal" data-chg="${c.id}:amount" value="${n0(c.amount).toFixed(2)}" aria-label="Amount"> moved onto it from savings, once`
+          :`$<input class="chg-in" inputmode="decimal" data-chg="${c.id}:weekly" value="${n0(c.weekly).toFixed(2)}" aria-label="Weekly amount">/wk from the ${weekLabel(c.from)} sheet`}${past?' · reached':''}</div></span></li>`}).join('')}</ul>`
+      :'<p class="lede muted">None — every week after this one looks like this sheet.</p>'}
+  </section>
+
+  <section class="band" aria-labelledby="subs-h">
     <h2 class="sect-label" id="subs-h">Subscriptions<span class="count">${money(subsNow)}/month</span>
       <button class="ctl sect-action" data-tab="subs">Open Subscriptions</button></h2>
     <p class="lede muted">${liveSubs.length
@@ -5149,7 +5274,7 @@ function newWeek(){
          decision. In practice a week's allocation is mostly the same week to
          week, and retyping it is how a number goes in wrong. */
       e.min=r.min; e.attack=r.attack; e.other=r.other;
-      if(r.e.otherSet)e.otherSet=r.e.otherSet;   /* a linked bucket's typed contribution carries too */
+      if(r.e.otherSet!=null)e.otherSet=r.e.otherSet;   /* a linked bucket's typed Other carries too, 0 included */
       /* Nothing carries onto a debt that is now clear: there is nothing left
          to pay, and the money should be re-aimed rather than sent anyway.
          A bucket at zero still has a job, so this is debts only. */
@@ -5190,9 +5315,13 @@ function setWeekField(key,val){
   }
   const[id,field]=key.split(':'),e=entryOf(k,id);
   /* A linked bucket's Other is derived each compute; what is typed there is
-     the contribution asked for, held on its own so the compute can read it. */
+     held on its own so the compute can read it. Emptying the cell hands it
+     back to the weekly amount. */
   const a=acct(id);
-  if(field==='other'&&a&&a.autoOut){e.otherSet=n0(val);return}
+  if(field==='other'&&a&&a.autoOut){
+    if(String(val).trim()==='')delete e.otherSet;else e.otherSet=n0(val);
+    return;
+  }
   e[field]=(field==='close'||field==='due')?val:n0(val);
 }
 function setAcctField(key,val){
@@ -5311,6 +5440,13 @@ document.addEventListener('change',e=>{
     if(c&&t.value&&t.value!==c.d){pushUndo(null);c.d=t.value;save();render();toast(`Moved to ${dueLabel(t.value)} — ⌘Z to undo`)}
     return}
   if(d.open){const o=S.plan.open.find(x=>x.id===d.open);if(o){o.done=t.checked;save();render()}return}
+  if(d.chg){
+    const[id,f]=d.chg.split(':'),c=(S.plan.changes||[]).find(x=>x.id===id);if(!c)return;
+    const v=String(t.value).replace(/[$,]/g,'').trim();
+    if(f==='from'){if(!t.value)return;pushUndo(null);c.from=weekStartOf(parseISO(t.value))}
+    else if(f==='label'){if(!v)return;pushUndo(null);c.label=t.value.trim()}
+    else{if(v===''||isNaN(+v)||+v<0)return;pushUndo(null);c[f]=r2(+v)}
+    save();render();return}
   if(d.k!=null&&d.k!==''||d.a){
     /* The `input` handler above has already committed this field and re-rendered.
        That re-render blurs the live element, which makes Chrome fire a late
@@ -5370,6 +5506,8 @@ document.addEventListener('click',e=>{
   }
   if(d.subedit){editSub(d.subedit);return}
   if(d.porderadd){S.plan.order.push(d.porderadd);save();render();return}
+  if(d.chgdel){const list=S.plan.changes||[],i=list.findIndex(x=>x.id===d.chgdel);
+    if(i>=0){pushUndo(null);const [c]=list.splice(i,1);save();render();toast(`${c.label} removed — ⌘Z to undo`)}return}
   if(d.move){
     const[id,dir]=d.move.split(':');
     const list=S.accounts.slice().sort((x,y)=>x.order-y.order);
@@ -5396,6 +5534,7 @@ document.addEventListener('click',e=>{
     case'signout':signOut();break;
     case'hideref':S.plan.ref.show=false;save();render();toast('Hidden — it lives in your backup');break;
     case'addcal':addCalItem();break;
+    case'addchg':addChange();break;
     case'addopen':addOpenItem();break;
     case'addsub':editSub();break;
     case'togglearch':UI.showArchived=!UI.showArchived;render();break;
@@ -5461,6 +5600,25 @@ function addAccount(){
 }
 
 function nextId(list,p){let n=1;while(list.some(x=>x.id===p+n))n++;return p+n}
+/* A dated change to what a row usually gets — a cost that drops, a payment
+   that starts. Dated by sheet, since that is the week the money moves. */
+function addChange(){
+  const opts=liveAccounts().filter(a=>a.kind!=='income'&&!a.rollup)
+    .map(a=>`<option value="${a.id}">${esc(a.name)}</option>`).join('');
+  modal(`<h3>Upcoming change</h3><p>From the sheet you pick, this row usually gets the new weekly amount. Projections plans around it.</p>
+    <div class="fieldrow"><label>Starting with the sheet of</label><input type="date" id="ncgD" value="${addWeeks(currentWeek(),1)}"></div>
+    <div class="fieldrow"><label>Row</label><select id="ncgA">${opts}</select></div>
+    <div class="fieldrow"><label>New weekly amount</label><input type="number" step="0.01" min="0" id="ncgW" placeholder="0"></div>
+    <div class="fieldrow"><label>What it is</label><input type="text" id="ncgL" placeholder="Car insurance drops"></div>`,
+    'Add',()=>{
+      const d=$('#ncgD').value,id=$('#ncgA').value,w=$('#ncgW').value;
+      if(!d||!id||w===''||+w<0){toast('Needs a date, a row and an amount');return false}
+      S.plan.changes=S.plan.changes||[];pushUndo(null);
+      S.plan.changes.push({id:nextId(S.plan.changes,'chg'),from:weekStartOf(parseISO(d)),acct:id,weekly:r2(+w),
+        label:$('#ncgL').value.trim()||`${(acct(id)||{}).name} to ${money(r2(+w))}/wk`});
+      save();render();toast('Added — Projections now plans around it');
+    });
+}
 function addCalItem(){
   modal(`<h3>Add a date</h3><p>It surfaces in the week it lands in.</p>
     <div class="fieldrow"><label>Date</label><input type="date" id="ncD" value="${thisWeek()}"></div>
