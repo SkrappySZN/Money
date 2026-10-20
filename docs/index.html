@@ -95,7 +95,9 @@
      the eye can follow one account across 19 columns, and the columns you
      fill in each week laid over with a wash so they read as one block. */
   --paper-stripe:#EBE2CD;
-  --band:rgba(122,98,60,0.09);   /* the strip across the top of the cover     */
+  --band:rgba(122,98,60,0.09);
+  --cell-rule:rgba(42,33,24,0.20);
+  --attention-tint:#E9D9B5;   /* attention on paper, opaque, so a stripe can't show through */  /* the sheet's gridlines, a step above --rule */   /* the strip across the top of the cover     */
   --radius-tab:4px;     /* book tabs: rounded where they leave the page */
 
   /* ── Accent ────────────────────────────────────────────────────
@@ -556,6 +558,7 @@ td.dcell.is-empty input:disabled{color:transparent;-webkit-text-fill-color:trans
    the row under the pointer, and fully once it has focus. */
 .sheet-page td.is-absent,.sheet-page td.chg.is-flat{color:transparent}
 .sheet-page input.cell.is-zero,.sheet-page input.cell.is-attack.is-zero{color:transparent}
+.sheet-page input.cell.is-zero[readonly],.sheet-page input.cell.is-zero:disabled{-webkit-text-fill-color:transparent}
 .sheet-page tr:hover input.cell.is-zero,.sheet-page tr:hover input.cell.is-attack.is-zero{color:var(--ink-absent)}
 .sheet-page input.cell.is-zero:focus{color:var(--ink)}
 .sheet-page td.dcell.is-empty::after{content:none}
@@ -564,10 +567,23 @@ td.dcell.is-empty input:disabled{color:transparent;-webkit-text-fill-color:trans
    band is an image layer so it lies over a stripe instead of replacing it. */
 .sheet-page table.grid tbody tr:nth-child(even):not(.sect):not(.tot):not(.is-paid) > *{background-color:var(--paper-stripe)}
 .sheet-page table.grid .band{background-image:linear-gradient(var(--band),var(--band))}
+.sheet-page table.grid tbody td.dcell.is-thisweek{background-color:var(--attention-tint)}
 .sheet-page table.grid thead tr.sets th{position:static;background-color:var(--paper);
   border-bottom:0;text-align:center;padding-top:0;padding-bottom:2px;color:var(--ink-secondary)}
 .sheet-page table.grid thead tr.sets th.band{border-radius:var(--radius-tab) var(--radius-tab) 0 0}
 .sheet-page .paidoff{font-family:var(--font-sans);font-style:italic;color:var(--positive)}
+
+/* Spreadsheet gridlines: a hairline round every cell, and a darker one where
+   each subject (Terms, Now, Owed, This week, After) begins. Lines go on the
+   left of each cell only, so neighbours never draw two. */
+.sheet-page table.grid tbody tr > *{border-bottom:var(--rule-width) solid var(--cell-rule)}
+.sheet-page table.grid tbody td,
+.sheet-page table.grid thead tr:last-child th:not(:first-child){border-left:var(--rule-width) solid var(--cell-rule)}
+.sheet-page table.grid tbody th + td,.sheet-page table.grid tbody th + td.grp{border-left:0}
+.sheet-page table.grid .grp,
+.sheet-page table.grid tbody th.grp,
+.sheet-page table.grid thead th.grp{border-left:var(--rule-width) solid var(--rule-strong)}
+.sheet-page table.grid tbody th{border-right:var(--rule-width) solid var(--rule-strong)}
 
 /* Nineteen columns in one undifferentiated run gives the eye nothing to hold.
    A hairline at each change of subject — what it is, where it stands, what it
@@ -614,13 +630,21 @@ td.dcell.is-empty input:disabled{color:transparent;-webkit-text-fill-color:trans
 .sheet-page table.grid tbody th{max-width:none}
 .sheet-page tr.sect th{padding-top:var(--space-1)}
 .sheet-page input.cell{width:10ch}
-/* Dates are set in the book face, not the typewriter. Chrome sizes each
-   part of a date field itself, and with Courier Prime it cut the year's last
-   digit at any field width — measured, the box was never the problem. */
+/* Dates read like every other figure: "Oct 23" in the typewriter face,
+   drawn by the cell over a date field whose own text is hidden. Chrome sizes
+   the parts of a date field itself and, in Courier Prime, cut the year's last
+   digit at any width, so the field's text shows only while it is being
+   edited — in the book face, where it fits. The full date is the cell's title. */
 .sheet-page input.cell-date{width:calc(11ch + 22px);font-family:var(--font-sans);
   font-variant-numeric:tabular-nums lining-nums}
 .sheet-page input.cell-date::-webkit-calendar-picker-indicator{width:12px;height:12px;
   margin:0 0 0 2px;padding:0}
+.sheet-page td.dcell[data-show]::after{content:attr(data-show);position:absolute;
+  right:calc(var(--space-half) + 14px);top:50%;transform:translateY(-50%);pointer-events:none;
+  font-family:var(--font-figures);color:var(--ink)}
+.sheet-page td.dcell.is-thisweek[data-show]::after{color:var(--attention);font-weight:var(--weight-semibold)}
+.sheet-page td.dcell[data-show] input:not(:focus){color:transparent;-webkit-text-fill-color:transparent}
+.sheet-page td.dcell[data-show]:focus-within::after{opacity:0}
 /* Typewriter figures run wide (0.6em a glyph), so the headers give the room
    back: two-word labels stack instead of setting the column's width. */
 .sheet-page table.grid thead th{white-space:normal;vertical-align:bottom;line-height:1.25;
@@ -3134,7 +3158,8 @@ function cellDate(r,f){
      payment to make. Worth noticing, not wrong, so it takes attention. */
   const now=v&&v>=k&&v<=addDays(k,6);
   return `<td class="num dcell${v?'':' is-empty'}${now?' is-thisweek':''}"`
-    +`${now?` title="${f==='close'?'Statement closes':'Due'} ${dueLabel(v)} — this week"`:''}>`
+    +`${v?` data-show="${dueLabel(v)}"`:''}`
+    +` title="${v?`${f==='close'?'Statement closes':'Due'} ${dueLabel(v)}, ${v.slice(0,4)}${now?' — this week':''}`:''}">`
     +`<input class="cell cell-date" type="date"`
     +`${isLocked(k)?' disabled':''}`
     +` data-k="${id}:${f}" value="${v}"></td>`;
