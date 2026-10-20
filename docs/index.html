@@ -2513,7 +2513,7 @@ function debtSnapshot(k){
     apr:r.inGrace?0:n0(r.a.apr), nominalApr:n0(r.a.apr), dpr:r.inGrace?0:r.dpr,
     grace:r.inGrace, graceDue:r.a.graceDue||'',
     balance:r.balance,limit:n0(r.a.limit),
-    weeklyMin:r2(n0(r.minAmt)?(statedWeekly(r.a)?n0(r.minAmt):n0(r.minAmt)/MIN_DIVISOR):0),
+    weeklyMin:n0(r.minAmt)?weeklyOf(r):0,
     current:r.total, weekInterest:r.weekInterest,
   }));
 }
@@ -3406,7 +3406,7 @@ const SHEET_COLS=[
        ?`<td class="num"><input class="cell${n0(r.minAmt)===0?' is-zero':''}" data-fmt="fig"`
          +`${isLocked(currentWeek())?' readonly':''}`
          +` data-k="${r.a.id}:minAmt" value="${figInput(n0(r.minAmt))}"></td>`
-       :dimCell(n0(r.minAmt)?fig(r2(n0(r.minAmt)/MIN_DIVISOR)):'—')},
+       :dimCell(n0(r.minAmt)?fig(weeklyOf(r)):'—')},
   {k:'close',label:'Closes',cell:r=>cellDate(r,'close')},
   {k:'due',   label:'Due',  cell:r=>cellDate(r,'due')},
 
@@ -3512,7 +3512,7 @@ function totalRow(C,cols){
     drift:'<td></td>',
     usage:`<td class="num">${pct(T.usage)}</td>`,
     minAmt:`<td class="num">${fig(sum(C,'minAmt','card'))}</td>`,
-    minWk:`<td class="num">${fig(r2(sum(C,'minAmt','card')/MIN_DIVISOR))}</td>`,   /* cards are all monthly */
+    minWk:`<td class="num">${fig(centsUp(sum(C,'minAmt','card')/MIN_DIVISOR))}</td>`,   /* cards are all monthly */
     min:`<td class="num">${fig(sum(C,'min','card'))}</td>`,
     attack:`<td class="num">${fig(sum(C,'attack','card'))}</td>`,
     other:`<td class="num">${fig(sum(C,'other','card'))}</td>`,
@@ -4845,7 +4845,7 @@ function viewSubs(el){
   <div class="strip">
     <div class="metric"><div class="m-label">Per month</div><span class="m-value">${money(perMo)}</span>
       ${yearly.length?`<div class="m-note">yearly ones spread over 12</div>`:''}</div>
-    <div class="metric"><div class="m-label">Per week</div><span class="m-value">${money(r2(perMo/MIN_DIVISOR))}</span>
+    <div class="metric"><div class="m-label">Per week</div><span class="m-value">${money(centsUp(perMo/MIN_DIVISOR))}</span>
       <div class="m-note">a month split ${MIN_DIVISOR} ways, like the sheet</div></div>
     <div class="metric"><div class="m-label">Per year</div><span class="m-value">${money(r2(perMo*12))}</span></div>
     <div class="metric"><div class="m-label">Next charge</div>
@@ -5405,7 +5405,7 @@ function applyPlanToNewWeek(prev,nk,C,entries){
     const a=r.a,e=entries[a.id];if(!e||r.isRollup||a.kind==='income')continue;
     if(a.kind==='loan'){
       const sched=latest(a.id),m=n0(e.minAmt);
-      const weekly=n0(e.balance)<=0.005?0:sched!=null?sched:m?(statedWeekly(a)?r2(m):r2(m/MIN_DIVISOR)):null;
+      const weekly=n0(e.balance)<=0.005?0:sched!=null?sched:m?(statedWeekly(a)?r2(m):centsUp(m/MIN_DIVISOR)):null;
       if(weekly==null)continue;
       const b=stager(a.id),be=b&&entries[b.a.id];
       if(be){
