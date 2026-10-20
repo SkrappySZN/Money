@@ -1768,6 +1768,7 @@ function migrate(){
   migrateV13();
   migrateV14();
   migrateV15();
+  migrateV16();
 }
 /* v2 — grouping corrections, Sept 10 2026. Runs against the ledger already
    in the browser, not just the seed: editing SEED alone would have changed
@@ -1823,6 +1824,45 @@ function migrate(){
    before, or Unplanned keeps showing the estimate on rows already corrected.
    computeWeek writes derived fields back into entries, so the ledger is
    snapshotted and restored around it: `projected` is the only thing changed. */
+/* v16 — the lease's freed weekly, from the 10/30 paycheck on: Affirm gets
+   just what each payment needs ($122.01 to the 11/15 one, then $91.51), and
+   what is left fills a Turn-in Fees bucket ($395 disposition + ~$200 tint)
+   before any of it goes to attack. The car insurance drop joins the fees
+   while they fill. Turn-in Fees takes over from Car Lease Savings once the
+   last lease payment is made, so it sits beside it. The Plan entries from
+   v15 are adjusted rather than replaced: the lease stops a sheet after this
+   one, and the first Affirm payment is saved for, not moved from lease
+   savings. */
+function migrateV16(){
+  if(S.v>=16)return;
+  const lease=acct('car-lease-savings'),loan=S.accounts.find(a=>a.kind==='loan'&&/affirm/i.test(a.name));
+  if(lease&&!acct('turn-in-fees')){
+    const at=lease.order+1;
+    for(const a of S.accounts)if(a.order>=at)a.order++;
+    S.accounts.push({id:'turn-in-fees',name:'Turn-in Fees',kind:'cash',group:lease.group||'buckets',
+      order:at,archived:false,limit:0,apr:0,minAmt:0,
+      target:{amount:595,note:'Lease disposition fee $395 + tint removal ~$200'}});
+  }
+  const ch=S.plan&&S.plan.changes;
+  if(ch){
+    const end=ch.find(c=>c.id==='lease-end');
+    if(end){end.from='2026-10-23';end.weekly=0;end.label='Lease savings stops — the 10/23 paycheck was the last'}
+    const i=ch.findIndex(c=>c.id==='affirm-first');if(i>=0)ch.splice(i,1);
+    const hold=ch.find(c=>c.id==='affirm-hold');if(hold)hold.label='Affirm not yet being saved for';
+    const start=ch.find(c=>c.id==='affirm-start');if(start)start.label='Affirm drops to $91.51/wk after the first payment';
+    if(loan&&!ch.some(c=>c.id==='affirm-save'))
+      ch.push({id:'affirm-save',from:'2026-10-23',acct:loan.id,weekly:122.01,label:'Saving for the first Affirm payment'});
+    if(acct('turn-in-fees')&&!ch.some(c=>c.acct==='turn-in-fees'))
+      for(const[from,weekly,label]of[
+        ['2026-10-23',56.57,'Turn-in fees start filling'],
+        ['2026-11-13',87.07,'Turn-in fees get what Affirm no longer needs'],
+        ['2026-11-27',117.07,'Turn-in fees take the car insurance drop'],
+        ['2026-12-11',17.01,'Last deposit to turn-in fees'],
+        ['2026-12-18',0,'Turn-in fees funded — the rest joins attack']])
+        ch.push({id:nextId(ch,'fees'),from,acct:'turn-in-fees',weekly,label});
+  }
+  S.v=16;
+}
 /* v15 — Projections run on a typical week, and the changes already known
    are entered as dated changes on the plan: the lease bucket stops after the
    11/13 paycheck, that paycheck's savings make the first Affirm payment and
@@ -5333,7 +5373,10 @@ function setAcctField(key,val){
      payment renegotiated. Only the amount: its date and what reaching it frees
      are left as they are. This writes on every keystroke, so a field emptied
      on the way to a new figure is ignored rather than wiping the goal. */
-  else if(field==='targetAmt'){if(a.target&&n0(val)>0)a.target.amount=r2(n0(val))}
+  /* Typing 0 retires a goal that is done with — a bucket whose bill has been
+     paid and will not come again. */
+  else if(field==='targetAmt'){if(a.target&&String(val).trim()==='0')delete a.target;
+    else if(a.target&&n0(val)>0)a.target.amount=r2(n0(val))}
   else if(field==='targetBy'){if(a.target){if(val)a.target.by=val;else delete a.target.by}}
   else a[field]=n0(val);
 }
