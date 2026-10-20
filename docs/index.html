@@ -2547,8 +2547,10 @@ function simulate(debts,{strategy='avalanche',budget=0,firstBudget=null,fromWeek
   const fundDelta=w=>{let d=0;
     for(const f of FU){
       if(w===0)continue;
-      if(f.renew.has(w))f.b-=f.amount;
-      const c=f.b<f.amount-0.005?Math.min(f.weekly,f.amount-f.b):0;
+      /* a fund can be re-priced from a week on — a premium that drops */
+      const amt=f.next&&w>=f.next.w?f.next.amount:f.amount;
+      if(f.renew.has(w))f.b-=amt;
+      const c=f.b<amt-0.005?Math.min(f.weekly,amt-f.b):0;
       f.b+=c;d+=f.baseline-c;
     }
     return d};
@@ -4227,7 +4229,18 @@ function viewProjections(el){
   const carW=Math.max(0,Math.floor(daysBetween(k,carDate)/7));
   const carLumps=car.on&&n0(car.amount)>0?[{w:carW,amount:n0(car.amount),label:'Other car sold'}]:[];
   const refLumps=sheetLumps(k),refOwed=r2(refLumps.reduce((t,l)=>t+l.amount,0)),refN=refLumps.reduce((t,l)=>t+l.n,0);
-  const planLumps=[...refLumps,...TW.moves],lumps=[...planLumps,...carLumps];
+  /* What if a motorcycle is sold. The same shape as the car: one lump on the
+     date given. Its insurance is a six-month premium, not a weekly, so what
+     changes is the premium the fund saves for from the next term on —
+     today's figure until a lower quote is typed. */
+  const moto=S.plan.whatIf.motoSale=S.plan.whatIf.motoSale||{on:false,amount:3000,date:''};
+  const motoF=sheetFunds(k).find(f=>f.id==='motorcycle-insurance');
+  if(moto.premium==null&&motoF)moto.premium=motoF.amount;
+  const motoDate=moto.date||addWeeks(k,1);
+  const motoW=Math.max(0,Math.floor(daysBetween(k,motoDate)/7));
+  const motoLumps=moto.on&&n0(moto.amount)>0?[{w:motoW,amount:n0(moto.amount),label:'Motorcycle sold'}]:[];
+  const motoPrem=moto.on&&motoF&&n0(moto.premium)+0.005<motoF.amount?r2(n0(moto.premium)):null;
+  const planLumps=[...refLumps,...TW.moves],lumps=[...planLumps,...carLumps,...motoLumps];
   /* With the car gone, its insurance drops to what is typed here, from the
      week after the sale. What it costs now is read off the sheet, so the
      saving follows whatever the sheet sends it. */
@@ -4240,8 +4253,9 @@ function viewProjections(el){
   const planRaises=TW.raises.filter(r=>!(saleRaises.length&&r.acct==='car-insurance'&&r.from>carW));
   const raises=[...planRaises,...saleRaises];
   const baseOpts={...sheetSimOpts(k,budget,UI.strategy),firstBudget,steps:projSteps};
-  const sim=simulate(debts,{...baseOpts,lumps,raises});
-  const isWhatIf=carLumps.length>0||saleRaises.length>0;
+  const simFunds=motoPrem==null?baseOpts.funds:baseOpts.funds.map(f=>f.id===motoF.id?{...f,next:{w:motoW+1,amount:motoPrem}}:f);
+  const sim=simulate(debts,{...baseOpts,funds:simFunds,lumps,raises});
+  const isWhatIf=carLumps.length>0||saleRaises.length>0||motoLumps.length>0||motoPrem!=null;
   const base=isWhatIf?simulate(debts,{...baseOpts,lumps:planLumps,raises:TW.raises}):sim;
   const never=sim.weeks===Infinity;
   const when=w=>addWeeks(k,w);
@@ -4327,10 +4341,21 @@ function viewProjections(el){
       ${insRow?`<label class="wi-f">car insurance then <span class="mark">$</span><input class="cell inline" data-wi="insurance" inputmode="decimal"
         style="${figureWidth(n0(car.insurance).toFixed(2))}" value="${n0(car.insurance).toFixed(2)}" aria-label="Car insurance per week after the sale">/wk
         <span class="wi-now">now ${money(insNow)}</span></label>`:''}
+    </div>
+    <div class="wi-row">
+      <label class="wi-on"><input type="checkbox" data-wim="on" ${moto.on?'checked':''}> Sell a motorcycle</label>
+      <label class="wi-f">for <span class="mark">$</span><input class="cell inline" data-wim="amount" inputmode="decimal"
+        style="${figureWidth(n0(moto.amount).toFixed(2))}" value="${n0(moto.amount).toFixed(2)}" aria-label="Motorcycle sale amount"></label>
+      <label class="wi-f">money in <input class="cell cell-date" type="date" data-wim="date" value="${motoDate}" aria-label="Date the motorcycle money arrives"></label>
+      ${motoF?`<label class="wi-f">insurance then <span class="mark">$</span><input class="cell inline" data-wim="premium" inputmode="decimal"
+        style="${figureWidth(n0(moto.premium).toFixed(2))}" value="${n0(moto.premium).toFixed(2)}" aria-label="Motorcycle insurance per term after the sale">per ${motoF.every} months
+        <span class="wi-now">now ${money(motoF.amount)}</span></label>`:''}
+    </div>
+    <div class="wi-row">
       <span class="wi-says">${isWhatIf
         ?(base.weeks===Infinity||sim.weeks===Infinity?'':`Debt free <b>${longDate(sim.debtFreeDate)}</b> instead of ${longDate(base.debtFreeDate)}`
           +` — ${monthsLabel(weeksToMonths(base.weeks)-weeksToMonths(sim.weeks))} sooner, ${money0(base.totalInterest-sim.totalInterest)} less interest`)
-        :'Off — the projection below is without it.'}${carLumps.length&&raises.length?`<span class="wi-now"> · includes ${money(insSave)}/wk off insurance</span>`:''}</span>
+        :'Both off — the projection below is without them.'}${saleRaises.length?`<span class="wi-now"> · includes ${money(insSave)}/wk off car insurance</span>`:''}${motoPrem!=null?`<span class="wi-now"> · motorcycle premium ${money(motoPrem)} from the next term</span>`:''}</span>
     </div>
   </section>
 
@@ -5527,6 +5552,16 @@ document.addEventListener('change',e=>{
     else if(d.wi==='amount'){const v=n0(String(t.value).replace(/[$,]/g,''));if(v>=0)car.amount=r2(v)}
     else if(d.wi==='date')car.date=t.value||'';
     else if(d.wi==='insurance'){const v=n0(String(t.value).replace(/[$,]/g,''));if(v>=0)car.insurance=r2(v)}
+    save();render();return;
+  }
+  if(d.wim){
+    S.plan.whatIf=S.plan.whatIf||{};
+    const m=S.plan.whatIf.motoSale=S.plan.whatIf.motoSale||{on:false,amount:3000,date:''};
+    const v=n0(String(t.value).replace(/[$,]/g,''));
+    pushUndo(null);
+    if(d.wim==='on')m.on=t.checked;
+    else if(d.wim==='date')m.date=t.value||'';
+    else if(v>=0)m[d.wim]=r2(v);
     save();render();return;
   }
   if(d.caldate){const c=S.plan.calendar.find(x=>x.id===d.caldate);
