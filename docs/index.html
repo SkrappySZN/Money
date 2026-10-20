@@ -2077,6 +2077,8 @@ function computeWeek(k){
         r.e.out=r.out;
         r.e.drawsForCards=true;
         r.drawsForCards=true;
+        /* minimums beyond the weekly AND everything it held: the paycheck covers the rest */
+        r.overDraw=r2(Math.max(0,paidDirect-r.minAmt-r.out));
       }
     }
     /* `autoOut` names the account this bucket exists to pay. Whatever goes to
@@ -3423,7 +3425,13 @@ const SHEET_COLS=[
    cell:r=>`<td class="num ${r.a.kind==='card'&&r.after>n0(r.a.limit)?'neg':r.after<0?'neg':''}"`
      +`${r.a.passthrough?' title="Passes straight through — funded and sent onward the same week, so nothing accumulates"':''}>`
      +`${KIND_DEBT(r.a.kind)&&n0(r.balance)>0.005&&Math.abs(r.after)<0.005
-        ?'<span class="paidoff">paid off</span>':fig(r.after)}</td>`},
+        ?'<span class="paidoff">paid off</span>'
+        /* A bucket emptied this week reads 0.00, not blank: it had money and
+           now has none, which is the point. Only a row nothing touched stays
+           blank. A span keeps the sheet's blank-the-zeros pass off it. */
+        :Math.abs(r.after)<0.005&&(n0(r.balance)>0.005||n0(r.out)>0.005)
+          ?`<span${r.overDraw?` title="Emptied — this week's card minimums took all ${money(r.balance)} it held, and ${money(r.overDraw)} more came from the paycheck"`:''}>${fig(0)}</span>`
+        :fig(r.after)}</td>`},
   {k:'usageAfter',label:'Usage',
    cell:r=>dimCell(r.a.kind==='card'&&r.a.limit?pct(n0(r.usageAfter)):'—')},
   {k:'availAfter',label:'Avail',
