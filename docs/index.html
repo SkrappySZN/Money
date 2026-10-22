@@ -5483,6 +5483,45 @@ function setAcctField(key,val){
    string appends to it, and n0() would read "$12,500.005" as twelve and a
    half thousand and change. */
 const isMoneyCell=t=>t&&t.dataset&&(t.dataset.fmt==='money'||t.dataset.fmt==='fig');
+/* Math in a cell, as in a spreadsheet: 491.49-122.01, or =55.64+35.74. Neil
+   asked for it 2026-10-22 — he was working balances out on a calculator and
+   typing the answer in. Before this, n0() dropped the operator and read
+   100+50 as 10050 without a word.
+
+   A cell normally commits on every keystroke. A sum cannot: halfway through,
+   "100+5" is not a figure anyone meant. So once a cell holds an operator it
+   waits, and the sum is worked out on Enter or on leaving the cell. One that
+   does not parse puts back the figure the cell had when it was entered.
+
+   Parsed here rather than eval'd, so a cell can only ever do arithmetic. */
+const isSum=v=>{const s=String(v??'').replace(/[$,\s]/g,'');
+  return s.startsWith('=')||/[+*/()x×÷]/.test(s)||/.-/.test(s)};
+function evalSum(v){
+  const s=String(v??'').replace(/[$,\s]/g,'').replace(/^=/,'').replace(/[x×]/g,'*').replace(/÷/g,'/');
+  let i=0;
+  const num=()=>{const m=/^\d*\.?\d+|^\d+\.?/.exec(s.slice(i));if(!m)throw 0;i+=m[0].length;return +m[0]};
+  const atom=()=>{
+    if(s[i]==='-'){i++;return -atom()}
+    if(s[i]==='+'){i++;return atom()}
+    if(s[i]==='('){i++;const x=sum();if(s[i]!==')')throw 0;i++;return x}
+    return num()};
+  const term=()=>{let x=atom();
+    while(s[i]==='*'||s[i]==='/'){const op=s[i++],y=atom();
+      if(op==='/'&&y===0)throw 0;x=op==='*'?x*y:x/y}
+    return x};
+  const sum=()=>{let x=term();
+    while(s[i]==='+'||s[i]==='-'){const op=s[i++],y=term();x=op==='+'?x+y:x-y}
+    return x};
+  try{const x=sum();return i===s.length&&Number.isFinite(x)?r2(x):null}catch(e){return null}
+}
+function settleSum(t){
+  const v=evalSum(t.value),was=t.dataset.was??'';
+  if(v==null)toast(`Couldn’t work out ${t.value.trim()} — kept ${was||'0.00'}`);
+  t.value=v==null?was:v.toFixed(2);
+  const d=t.dataset;
+  if(d.k){pushUndo('k:'+d.k);setWeekField(d.k,t.value)}else{pushUndo('a:'+d.a);setAcctField(d.a,t.value)}
+  save();rerenderKeepFocus();
+}
 /* A number field takes the whole figure on the way in, so typing replaces it.
    With the caret left wherever the click landed, typing 300 into "0|.00" came
    out as 3000.00. Selecting in focusin is not enough on its own: the mouseup
@@ -5501,7 +5540,7 @@ document.addEventListener('mouseup',e=>{
   swallowMouseup=null;
 });
 document.addEventListener('focusin',e=>{
-  if(isMoneyCell(e.target))e.target.value=n0(e.target.value).toFixed(2);
+  if(isMoneyCell(e.target)){e.target.value=n0(e.target.value).toFixed(2);e.target.dataset.was=e.target.value}
   if(isNumField(e.target))e.target.select();
 });
 document.addEventListener('focusout',e=>{
@@ -5510,6 +5549,7 @@ document.addEventListener('focusout',e=>{
 });
 document.addEventListener('input',e=>{
   const t=e.target;
+  if(isMoneyCell(t)&&isSum(t.value))return;
   if(t.dataset.k!=null&&t.dataset.k!==''){
     pushUndo('k:'+t.dataset.k);setWeekField(t.dataset.k,t.value);save();rerenderKeepFocus()}
   else if(t.dataset.a){
@@ -5592,6 +5632,7 @@ document.addEventListener('change',e=>{
     else if(f==='label'){if(!v)return;pushUndo(null);c.label=t.value.trim()}
     else{if(v===''||isNaN(+v)||+v<0)return;pushUndo(null);c[f]=r2(+v)}
     save();render();return}
+  if((d.k||d.a)&&isMoneyCell(t)&&isSum(t.value)){settleSum(t);return}
   if(d.k!=null&&d.k!==''||d.a){
     /* The `input` handler above has already committed this field and re-rendered.
        That re-render blurs the live element, which makes Chrome fire a late
@@ -5704,6 +5745,9 @@ document.addEventListener('keydown',e=>{
     e.preventDefault();
     if(e.shiftKey)redo();else undo();
     return;
+  }
+  if(e.key==='Enter'&&isMoneyCell(e.target)&&(e.target.dataset.k||e.target.dataset.a)&&isSum(e.target.value)){
+    e.preventDefault();settleSum(e.target);return;
   }
   /* Ask the event where it came from rather than trusting activeElement: a
      re-render between keydown and handler can leave focus on <body>, and a bare
