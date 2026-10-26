@@ -4189,9 +4189,23 @@ function typicalWeek(k){
   /* money already being set aside for a loan replaces any hold on it; its
      dated changes still apply from their dates */
   for(const[id,v]of Object.entries(staged))debtSched[id]=[{w:0,weekly:v,label:'Set aside each week'},...(debtSched[id]||[]).filter(x=>x.w>0)];
-  const budget=r2(n0(C.totals.income)-Object.values(weekly).reduce((t,v)=>t+v,0));
+  const pay=usualPay(k);
+  const budget=r2(pay-Object.values(weekly).reduce((t,v)=>t+v,0));
   const at=(id,w)=>{let v=n0(weekly[id]);for(const x of tl[id]||[])if(w>=x.w)v=x.weekly;return v};
-  return{weekly,budget,raises,debtSched,moves,at,changed:new Set(changes.map(c=>c.acct))};
+  return{weekly,budget,pay,raises,debtSched,moves,at,changed:new Set(changes.map(c=>c.acct))};
+}
+/* The paycheck a typical week runs on. Not the newest sheet's: a week with
+   reffing or a bonus in it was being repeated for every week after, and on
+   2026-10-26 a $1,412.22 sheet moved debt free from mid-2028 to Oct 2027.
+   The middle of the last eight sheets ignores the odd big week, and still
+   follows a raise or a new 401k rate once it has been paid a few times. */
+const USUAL_PAY_WEEKS=8;
+function usualPay(k){
+  const xs=weekKeys().filter(w=>w<=k).slice(-USUAL_PAY_WEEKS)
+    .map(w=>n0(S.weeks[w].income)).filter(v=>v>0).sort((a,b)=>a-b);
+  if(!xs.length)return n0((computeWeek(k)||{totals:{}}).totals.income);
+  const m=xs.length>>1;
+  return r2(xs.length%2?xs[m]:(xs[m-1]+xs[m])/2);
 }
 /* Funds whose goal is spent and saved again every term. */
 function sheetFunds(k){
@@ -4334,7 +4348,7 @@ function viewProjections(el){
       <div class="m-note">${never?`${money(budget)}/wk can't outrun the interest`:monthsLabel(weeksToMonths(sim.weeks))+' from this sheet'}</div></div>
     <div class="metric"><div class="m-label">To debt each week</div>
       <span class="m-value">${money(budget)}</span>
-      <div class="m-note">in a typical week${Math.abs(firstBudget-budget)>0.005?` · this sheet sends ${money(firstBudget)}`:''}${sim.endBudget>budget+0.005?` · ${money(sim.endBudget)} once the changes land`:''}</div></div>
+      <div class="m-note">in a typical week, on a ${money(TW.pay)} paycheck${Math.abs(firstBudget-budget)>0.005?` · this sheet sends ${money(firstBudget)}`:''}${sim.endBudget>budget+0.005?` · ${money(sim.endBudget)} once the changes land`:''}</div></div>
     <div class="metric"><div class="m-label">Interest along the way</div>
       <span class="m-value">${never?'—':money0(sim.totalInterest)}</span></div>
   </div>
@@ -4379,7 +4393,8 @@ function viewProjections(el){
   <section class="band" aria-labelledby="pt-h">
     <h2 class="sect-label" id="pt-h">All loans and cards</h2>
     <p class="lede muted">The first week is this sheet exactly as entered — a payment it skips stays skipped.
-      After that every week is a typical one: each bucket, savings row and the 401k gets what this sheet gives it,
+      After that every week is a typical one, paid your usual ${money(TW.pay)} — the middle of your last
+      ${USUAL_PAY_WEEKS} paychecks, so one big week is not repeated forever. Each bucket, savings row and the 401k gets what this sheet gives it,
       every loan gets its weekly payment, card minimums come from the card-minimum bucket, and the rest of the
       paycheck is attack, moving down the order as each debt clears. Nothing new is charged. The changes listed on
       Plan move those amounts from their dates, and a fund that renews takes its weekly back while it refills.
