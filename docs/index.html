@@ -5733,6 +5733,7 @@ document.addEventListener('click',e=>{
     case'toggleok':UI.showOk=b.getAttribute('aria-expanded')!=='true';render();break;
     case'signin':signInModal();break;
     case'signout':signOut();break;
+    case'setpw':if(SESSION)setPasswordModal();break;
     case'hideref':S.plan.ref.show=false;save();render();toast('Hidden — it lives in your backup');break;
     case'addcal':addCalItem();break;
     case'addchg':addChange();break;
@@ -5905,11 +5906,22 @@ function modal(html,okLabel,onOk){
       <button class="btn pri" data-m="ok">${esc(okLabel)}</button></div></div></div>`;
   const close=()=>root.innerHTML='';
   root.querySelector('[data-m=x]').onclick=close;
-  root.querySelector('[data-m=ok]').onclick=()=>{if(onOk()!==false)close()};
+  /* An async onOk is waited for, so its `return false` keeps the modal open
+     too — a wrong password used to close the box and lose what was typed. */
+  const ok=root.querySelector('[data-m=ok]');
+  ok.onclick=async()=>{
+    const r=onOk();
+    if(!r||typeof r.then!=='function'){if(r!==false)close();return}
+    ok.disabled=true;
+    try{if(await r!==false)close()}finally{ok.disabled=false}
+  };
   root.querySelector('.scrim').onclick=e=>{if(e.target===root.querySelector('.scrim'))close()};
   document.addEventListener('keydown',function esc2(e){
     if(e.key==='Escape'){close();document.removeEventListener('keydown',esc2)}});
 }
+/* Enter in a password box submits, as every sign-in form does. */
+const enterSubmits=()=>$('#modalRoot').querySelectorAll('input[type=password]').forEach(i=>
+  i.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('#modalRoot [data-m=ok]').click()}}));
 function confirmModal(title,body,okLabel,onOk,altLabel,onAlt,danger){
   if(!altLabel)return modal(`<h3>${esc(title)}</h3><p>${esc(body)}</p>`,okLabel,onOk);
   const root=$('#modalRoot');
@@ -6189,24 +6201,30 @@ function paintSync(){
   const line=SYNC.msg||(S.sync&&S.sync.at?'Synced '+timeAgo(S.sync.at):'Not synced yet');
   el.innerHTML=`<div class="sync ${cls}"><span class="dot"></span>${esc(line)}</div>
     <div class="railstat">${esc(SESSION.email||'')}</div>
-    <div class="railact"><button data-act="signout">Sign out</button></div>`;
+    <div class="railact"><button data-act="setpw">Set password</button> <button data-act="signout">Sign out</button></div>`;
 }
+/* Password first, the emailed link as the fallback. Neil asked for passwords
+   2026-10-26: a link opens in whatever browser the mail app picks, not the one
+   being signed in, and the free plan will not put a code in the email without
+   custom SMTP. The link still does for a first sign-in or a forgotten password
+   — leave the password empty. */
+const authErr=async r=>{try{const j=await r.json();return j.msg||j.error_description||j.message||('error '+r.status)}catch(e){return 'error '+r.status}};
 function signInModal(){
-  modal(`<h3>Sign in</h3><p>We email you a link. Open it on this device and you are in —
-      no password to remember or leak.</p>
-    <div class="fieldrow"><label>Email</label><input type="text" id="siEmail" placeholder="you@example.com"
-      value="${esc((SESSION&&SESSION.email)||'')}"></div>
-    <div class="fieldrow"><label>Or paste the 6-digit code, if you got one</label>
-      <input type="text" id="siCode" placeholder="000000"></div>`,
-    'Send link',async()=>{
-      const email=$('#siEmail').value.trim(),code=$('#siCode').value.trim();
+  modal(`<h3>Sign in</h3><p>Email and password. Leave the password empty and we email you a
+      sign-in link instead — for the first time, or if you have forgotten it.</p>
+    <div class="fieldrow"><label>Email</label><input type="email" id="siEmail" autocomplete="username"
+      placeholder="you@example.com" value="${esc((SESSION&&SESSION.email)||'')}"></div>
+    <div class="fieldrow"><label>Password</label>
+      <input type="password" id="siPass" autocomplete="current-password"></div>`,
+    'Sign in',async()=>{
+      const email=$('#siEmail').value.trim(),pass=$('#siPass').value;
       if(!email){toast('Email first');return false}
       try{
-        if(code){
-          const r=await sb('/auth/v1/verify',{method:'POST',
-            body:JSON.stringify({email,token:code,type:'email'})},false);
-          if(!r.ok){toast('That code did not work');return false}
-          setSession(await r.json());await fetchUser();paintSync();await firstSync();return;
+        if(pass){
+          const r=await sb('/auth/v1/token?grant_type=password',{method:'POST',
+            body:JSON.stringify({email,password:pass})},false);
+          if(!r.ok){toast('Sign in failed — '+await authErr(r));return false}
+          setSession(await r.json());await fetchUser();paintSync();await firstSync();toast('Signed in');return;
         }
         const back=encodeURIComponent(location.origin+location.pathname);
         const r=await sb('/auth/v1/otp?redirect_to='+back,{method:'POST',
@@ -6215,7 +6233,30 @@ function signInModal(){
         toast('Check your email');
       }catch(e){toast('Network error');return false}
     });
-  setTimeout(()=>{const e=$('#siEmail');if(e)e.focus()},40);
+  enterSubmits();
+  setTimeout(()=>{const e=$(SESSION&&SESSION.email?'#siPass':'#siEmail');if(e)e.focus()},40);
+}
+/* An account made by emailed link has no password until one is set here. */
+function setPasswordModal(){
+  modal(`<h3>Set password</h3><p>Sign in with ${esc(SESSION.email||'your email')} and this password from now on.</p>
+    <input type="email" autocomplete="username" value="${esc(SESSION.email||'')}" hidden>
+    <div class="fieldrow"><label>New password</label>
+      <input type="password" id="spPass" autocomplete="new-password"></div>
+    <div class="fieldrow"><label>Again</label>
+      <input type="password" id="spPass2" autocomplete="new-password"></div>`,
+    'Set password',async()=>{
+      const p=$('#spPass').value,p2=$('#spPass2').value;
+      if(p.length<8){toast('At least 8 characters');return false}
+      if(p!==p2){toast('The two do not match');return false}
+      try{
+        if(!await ensureToken()){toast('Signed out — sign in again first');return false}
+        const r=await sb('/auth/v1/user',{method:'PUT',body:JSON.stringify({password:p})});
+        if(!r.ok){toast('Could not set it — '+await authErr(r));return false}
+        toast('Password set');
+      }catch(e){toast('Network error');return false}
+    });
+  enterSubmits();
+  setTimeout(()=>{const e=$('#spPass');if(e)e.focus()},40);
 }
 function signOut(){
   SESSION=null;saveSession();
