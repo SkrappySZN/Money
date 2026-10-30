@@ -4308,6 +4308,11 @@ function sheetLumps(k){
   }
   return Object.values(by).map(l=>({...l,amount:r2(l.amount),label:`Reffing pay — ${l.n} game${l.n===1?'':'s'}`}));
 }
+/* Where the money goes once the last debt clears — a vehicle fund, named for
+   the car in mind but good for any. Every dollar that went to debt goes to it,
+   less the truck payment taken on before then. Kept in the plan so it syncs. */
+const vehicleFund=()=>{S.plan.whatIf=S.plan.whatIf||{};
+  return S.plan.whatIf.vehicleFund=S.plan.whatIf.vehicleFund||{name:'R8',target:60000,truck:184.50}};
 const sheetSimOpts=(k,budget,strategy,funds)=>({...simOpts(k,budget,strategy),sheetFirst:true,funds:funds||sheetFunds(k),lumps:sheetLumps(k)});
 
 function viewProjections(el){
@@ -4464,6 +4469,23 @@ function viewProjections(el){
         :'Both off — the projection below is without them.'}${saleRaises.length?`<span class="wi-now"> · includes ${money(insSave)}/wk off car insurance</span>`:''}${motoPrem!=null?`<span class="wi-now"> · motorcycle premium ${money(motoPrem)} from the next term</span>`:''}</span>
     </div>
   </section>
+
+  ${never?'':(()=>{const vf=vehicleFund(),wk=r2(Math.max(0,n0(sim.endBudget)-n0(vf.truck)));
+    const n=wk>0.005?Math.ceil(n0(vf.target)/wk-1e-9):Infinity;
+    return `<section class="band tight whatif" aria-labelledby="vf-h">
+    <h2 class="sect-label" id="vf-h">After debt free</h2>
+    <div class="wi-row">
+      <label class="wi-f"><input class="cell inline" data-vf="name" style="width:${Math.max(4,String(vf.name).length+1)}ch"
+        value="${esc(vf.name)}" aria-label="What the fund is for"> fund, goal <span class="mark">$</span><input class="cell inline" data-vf="target" inputmode="decimal"
+        style="${figureWidth(n0(vf.target).toFixed(2))}" value="${n0(vf.target).toFixed(2)}" aria-label="Fund goal"></label>
+      <label class="wi-f">less a truck payment of <span class="mark">$</span><input class="cell inline" data-vf="truck" inputmode="decimal"
+        style="${figureWidth(n0(vf.truck).toFixed(2))}" value="${n0(vf.truck).toFixed(2)}" aria-label="Truck payment per week">/wk</label>
+    </div>
+    <div class="wi-row"><span class="wi-says">${wk>0.005
+      ?`From <b>${longDate(sim.debtFreeDate)}</b>, the ${money(sim.endBudget)}/wk that went to debt less the truck leaves <b>${money(wk)}/wk</b> — ${money0(n0(vf.target))} by <b>${longDate(addWeeks(sim.debtFreeDate,n))}</b>, ${monthsLabel(weeksToMonths(n))} after debt free.`
+      :'The truck payment takes everything debt used to — nothing left for the fund.'}
+      <span class="wi-now">Saved money only, no interest earned. The projection above does not carry the truck payment, so if the truck comes before debt free, that date slips.</span></span></div>
+  </section>`})()}
 
   <section class="band" aria-labelledby="pt-h">
     <h2 class="sect-label" id="pt-h">All loans and cards</h2>
@@ -5709,6 +5731,12 @@ document.addEventListener('change',e=>{
     if(d.wim==='on')m.on=t.checked;
     else if(d.wim==='date')m.date=t.value||'';
     else if(v>=0)m[d.wim]=r2(v);
+    save();render();return;
+  }
+  if(d.vf){
+    const f=vehicleFund();pushUndo(null);
+    if(d.vf==='name')f.name=String(t.value).trim()||'Vehicle';
+    else{const v=n0(String(t.value).replace(/[$,]/g,''));if(v>=0)f[d.vf]=r2(v)}
     save();render();return;
   }
   if(d.caldate){const c=S.plan.calendar.find(x=>x.id===d.caldate);
