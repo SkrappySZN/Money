@@ -657,6 +657,14 @@ td.dcell.is-empty input:disabled{color:transparent;-webkit-text-fill-color:trans
 .sheet-page td.dcell.is-met[data-show]::after{color:var(--positive)}
 .sheet-page td.dcell[data-show] input:not(:focus){color:transparent;-webkit-text-fill-color:transparent}
 .sheet-page td.dcell[data-show]:focus-within::after{opacity:0}
+/* The skip note sits in the empty left end of the Min field, under the
+   figure's own line, so it costs no width or height. */
+.sheet-page td.skiptag{position:relative}
+.sheet-page td.skiptag::after{content:attr(data-tag);position:absolute;left:6px;top:50%;
+  transform:translateY(-50%);pointer-events:none;font-size:var(--text-1);color:var(--ink-muted)}
+.sheet-page td.skiptag.is-skipped::after{color:var(--positive)}
+.sheet-page td.skiptag.is-short::after{color:var(--attention);font-weight:var(--weight-semibold)}
+.sheet-page td.skiptag:focus-within::after{opacity:0}
 /* Typewriter figures run wide (0.6em a glyph), so the headers give the room
    back: two-word labels stack instead of setting the column's width. */
 .sheet-page table.grid thead th{white-space:normal;vertical-align:bottom;line-height:1.25;
@@ -2514,10 +2522,10 @@ function paidSinceClose(k,r){
 const shiftMonth=(s,m)=>{const d=parseISO(s),day=d.getDate();
   const x=new Date(d.getFullYear(),d.getMonth()+m,1);
   x.setDate(Math.min(day,new Date(x.getFullYear(),x.getMonth()+1,0).getDate()));return iso(x)};
-function minProgress(k,r){
+function minProgress(k,r,before=false){
   if(r.a.kind!=='loan'||!n0(r.minAmt)||!r.due)return null;
   const min=n0(r.minAmt),floor=shiftMonth(r.due,-3),cyc={};let next=null;
-  for(const w of weekKeys().filter(w=>w<=k&&paydayOf(w)>floor)){
+  for(const w of weekKeys().filter(w=>(before?w<k:w<=k)&&paydayOf(w)>floor)){
     const e=S.weeks[w].entries[r.a.id];
     const v=e&&e.paid?sentOn(w,r.a.id):0;if(v<=0.005)continue;
     let m=-2;while(shiftMonth(r.due,m)<paydayOf(w))m++;
@@ -2530,7 +2538,27 @@ function minProgress(k,r){
   const c=cyc[r.due]||{n:0,paid:0,last:0};
   const per=c.last||sentOn(k,r.a.id)||weeklyOf(r);
   const of=per>0.005?Math.ceil(min/per-0.01):MIN_DIVISOR;
-  return {n:c.n,of:Math.max(of,c.n),paid:c.paid,met:c.paid+0.005>=min,next};
+  return {n:c.n,of:Math.max(of,c.n),paid:c.paid,met:c.paid+0.005>=min,next,cyc};
+}
+/* Whether this sheet's loan payment can be left out. It can when earlier
+   sheets' ticked payments already cover the current due date, and the
+   paychecks after this one that land by the next due date can still cover it
+   at the usual weekly amount — counting anything already spilled into it.
+   Paychecks landing on the due date itself count, as they do above. Returns
+   'can' (a payment is planned but not needed), 'skipped' (left at $0, and
+   fine) or 'short' (left at $0, and the next due date will come up short);
+   null when there is nothing to say — no loan, a payment already ticked
+   paid, or a due date earlier sheets have not covered. */
+function skipState(k,r){
+  const P=minProgress(k,r,true);if(!P||!P.met)return null;
+  const e=S.weeks[k].entries[r.a.id],sent=sentOn(k,r.a.id);
+  if(sent>0.005&&e&&e.paid)return null;
+  const N=shiftMonth(r.due,1),per=weeklyOf(r);
+  const left=Math.max(0,n0(r.minAmt)-(P.cyc[N]?P.cyc[N].paid:0));
+  const need=left<=0.005?0:per>0.005?Math.ceil(left/per-0.01):Infinity;
+  let have=0;for(let d=addDays(paydayOf(k),7);d<=N;d=addDays(d,7))have++;
+  const ok=have>=need;
+  return sent>0.005?(ok?{s:'can',N,have,need,per}:null):{s:ok?'skipped':'short',N,have,need,per};
 }
 </script>
 <script>
@@ -3357,7 +3385,16 @@ function cellNum(r,f,cls=''){
   const ro=(a.autoOther==='cardMinShortfall'&&f==='other')||isLocked(currentWeek());
   /* An empty this-week cell holds nothing and shows a faint $0.00 as its
      placeholder, so the band reads as blanks waiting to be filled. */
-  return `<td class="num"><input class="cell ${cls}${n0(r[f])===0?' is-zero':''}" data-fmt="fig"`
+  /* A loan payment the month no longer needs gets a small note beside the
+     figure; skipState says when. */
+  const K=f==='min'?skipState(currentWeek(),r):null;
+  const tag=!K?'':K.s==='can'?'can skip':K.s==='skipped'?'skipped ✓':'short';
+  const tip=!K?'':`${dueLabel(r.due)} is already covered by earlier payments. `
+    +`${K.have} paycheck${K.have===1?'':'s'} after this one land by ${dueLabel(K.N)}`
+    +(K.need?`, and ${K.need} at ${money(K.per)} cover it`:', which is already covered')
+    +(K.s==='short'?' — skipping this one leaves it short':K.s==='can'?' — this payment can be skipped':'');
+  return `<td class="num${K?` skiptag is-${K.s}" data-tag="${tag}" title="${tip}`:''}">`
+    +`<input class="cell ${cls}${n0(r[f])===0?' is-zero':''}" data-fmt="fig"`
     +` data-k="${id}:${f}" value="${n0(r[f])===0?'':figInput(n0(r[f]))}" placeholder="$0.00"`
     +`${ro?' readonly title="Auto: card minimums not paid directly"':''}></td>`;
 }
