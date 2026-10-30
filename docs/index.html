@@ -2499,18 +2499,22 @@ function paidSinceClose(k,r){
   const from=cycleFrom(k,r);
   return r2(weekKeys().filter(w=>w>=from&&w<=k).reduce((s,w)=>s+sentOn(w,r.a.id),0));
 }
-/* A loan's monthly minimum is paid a slice per paycheck, so the useful question
-   on any one sheet is how far through this due date's slices it is — 3/4 means
-   one more to go, 4/4 means the next sheet can skip it. Counted in paychecks
-   that land after the last due date and on or before this one. */
+/* A loan's monthly minimum is paid in slices, one per paycheck, so the useful
+   question on any one sheet is how far through this due date's slices it is —
+   3/4 means one more to go, 4/4 means the rest of the month can skip it. The
+   slice count comes from the payment actually being made (the latest one since
+   the last due date, else the usual weekly share), not from how many paychecks
+   the month happens to hold: a five-Friday month is still four slices and a
+   free week. */
 function minProgress(k,r){
   if(r.a.kind!=='loan'||!n0(r.minAmt)||!r.due)return null;
   const from=cycleFrom(k,r);
-  let of=0;for(let w=from;paydayOf(w)<=r.due&&of<6;w=addWeeks(w,1))of++;
   const ws=weekKeys().filter(w=>w>=from&&w<=k);
-  const n=ws.filter(w=>sentOn(w,r.a.id)>0.005).length;
-  const paid=r2(ws.reduce((s,w)=>s+sentOn(w,r.a.id),0));
-  return {n,of:Math.max(of,n),paid,met:paid+0.005>=n0(r.minAmt)};
+  const sent=ws.map(w=>sentOn(w,r.a.id)).filter(v=>v>0.005);
+  const per=sent.length?sent[sent.length-1]:weeklyOf(r);
+  const of=per>0.005?Math.ceil(n0(r.minAmt)/per-0.01):MIN_DIVISOR;
+  const paid=r2(sent.reduce((s,v)=>s+v,0));
+  return {n:sent.length,of:Math.max(of,sent.length),paid,met:paid+0.005>=n0(r.minAmt)};
 }
 </script>
 <script>
