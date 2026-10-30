@@ -2507,7 +2507,9 @@ function paidSinceClose(k,r){
    itself. Only the month before this due date can spill into it, so an early
    overpayment does not ripple forward for ever. The slice count comes from the
    payment actually being made, not from how many paychecks the month holds: a
-   five-Friday month is still four slices and a free week. */
+   five-Friday month is still four slices and a free week. Only payments
+   ticked paid count, so a sheet's own slice shows up the moment its box is
+   ticked, and a sheet still being planned reads the same as the one before. */
 const shiftMonth=(s,m)=>{const d=parseISO(s),day=d.getDate();
   const x=new Date(d.getFullYear(),d.getMonth()+m,1);
   x.setDate(Math.min(day,new Date(x.getFullYear(),x.getMonth()+1,0).getDate()));return iso(x)};
@@ -2515,7 +2517,8 @@ function minProgress(k,r){
   if(r.a.kind!=='loan'||!n0(r.minAmt)||!r.due)return null;
   const min=n0(r.minAmt),floor=shiftMonth(r.due,-2),cyc={};let next=null;
   for(const w of weekKeys().filter(w=>w<=k&&paydayOf(w)>floor)){
-    const v=sentOn(w,r.a.id);if(v<=0.005)continue;
+    const e=S.weeks[w].entries[r.a.id];
+    const v=e&&e.paid?sentOn(w,r.a.id):0;if(v<=0.005)continue;
     let m=-1;while(shiftMonth(r.due,m)<paydayOf(w))m++;
     let D=shiftMonth(r.due,m);
     while(cyc[D]&&cyc[D].paid+0.005>=min&&m<24)D=shiftMonth(r.due,++m);
@@ -2524,7 +2527,7 @@ function minProgress(k,r){
     if(w===k&&D!==r.due)next=D;
   }
   const c=cyc[r.due]||{n:0,paid:0,last:0};
-  const per=c.last||weeklyOf(r);
+  const per=c.last||sentOn(k,r.a.id)||weeklyOf(r);
   const of=per>0.005?Math.ceil(min/per-0.01):MIN_DIVISOR;
   return {n:c.n,of:Math.max(of,c.n),paid:c.paid,met:c.paid+0.005>=min,next};
 }
