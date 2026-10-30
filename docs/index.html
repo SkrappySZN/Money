@@ -657,14 +657,11 @@ td.dcell.is-empty input:disabled{color:transparent;-webkit-text-fill-color:trans
 .sheet-page td.dcell.is-met[data-show]::after{color:var(--positive)}
 .sheet-page td.dcell[data-show] input:not(:focus){color:transparent;-webkit-text-fill-color:transparent}
 .sheet-page td.dcell[data-show]:focus-within::after{opacity:0}
-/* The skip note sits in the empty left end of the Min field, under the
-   figure's own line, so it costs no width or height. */
-.sheet-page td.skiptag{position:relative}
-.sheet-page td.skiptag::after{content:attr(data-tag);position:absolute;left:6px;top:50%;
-  transform:translateY(-50%);pointer-events:none;font-size:var(--text-1);color:var(--ink-muted)}
-.sheet-page td.skiptag.is-skipped::after{color:var(--positive)}
-.sheet-page td.skiptag.is-short::after{color:var(--attention);font-weight:var(--weight-semibold)}
-.sheet-page td.skiptag:focus-within::after{opacity:0}
+/* The skip note trails the account name, small and quiet unless it is a
+   warning. */
+.sheet-page .skiptag{font-size:var(--text-1);color:var(--ink-muted);margin-left:var(--space-1);white-space:nowrap}
+.sheet-page .skiptag.is-skipped{color:var(--positive)}
+.sheet-page .skiptag.is-short{color:var(--attention);font-weight:var(--weight-semibold)}
 /* Typewriter figures run wide (0.6em a glyph), so the headers give the room
    back: two-word labels stack instead of setting the column's width. */
 .sheet-page table.grid thead th{white-space:normal;vertical-align:bottom;line-height:1.25;
@@ -3379,21 +3376,24 @@ function stepsFor(k){
   });
 }
 
+/* A loan payment the month no longer needs gets a small note after the
+   account's name, where the row has room for it; skipState says when. */
+function skipTag(r){
+  const K=r.isRollup?null:skipState(currentWeek(),r);if(!K)return '';
+  const tag=K.s==='can'?'can skip':K.s==='skipped'?'skipped ✓':'skipped — short';
+  const tip=`${dueLabel(r.due)} is already covered by earlier payments. `
+    +`${K.have} paycheck${K.have===1?'':'s'} after this one land by ${dueLabel(K.N)}`
+    +(K.need?`, and ${K.need} at ${money(K.per)} cover it`:', which is already covered')
+    +(K.s==='short'?' — skipping this one leaves it short':K.s==='can'?' — this payment can be skipped':'');
+  return ` <span class="skiptag is-${K.s}" title="${tip}">${tag}</span>`;
+}
 function cellNum(r,f,cls=''){
   const a=r.a,id=a.id;
   if(r.isRollup||a.kind==='income')return `<td class="num dim">${fig(n0(r[f]))}</td>`;
   const ro=(a.autoOther==='cardMinShortfall'&&f==='other')||isLocked(currentWeek());
   /* An empty this-week cell holds nothing and shows a faint $0.00 as its
      placeholder, so the band reads as blanks waiting to be filled. */
-  /* A loan payment the month no longer needs gets a small note beside the
-     figure; skipState says when. */
-  const K=f==='min'?skipState(currentWeek(),r):null;
-  const tag=!K?'':K.s==='can'?'can skip':K.s==='skipped'?'skipped ✓':'short';
-  const tip=!K?'':`${dueLabel(r.due)} is already covered by earlier payments. `
-    +`${K.have} paycheck${K.have===1?'':'s'} after this one land by ${dueLabel(K.N)}`
-    +(K.need?`, and ${K.need} at ${money(K.per)} cover it`:', which is already covered')
-    +(K.s==='short'?' — skipping this one leaves it short':K.s==='can'?' — this payment can be skipped':'');
-  return `<td class="num${K?` skiptag is-${K.s}" data-tag="${tag}" title="${tip}`:''}">`
+  return `<td class="num">`
     +`<input class="cell ${cls}${n0(r[f])===0?' is-zero':''}" data-fmt="fig"`
     +` data-k="${id}:${f}" value="${n0(r[f])===0?'':figInput(n0(r[f]))}" placeholder="$0.00"`
     +`${ro?' readonly title="Auto: card minimums not paid directly"':''}></td>`;
@@ -3428,7 +3428,7 @@ const SHEET_COLS=[
        :`<input type="checkbox" class="paidbox" data-paid="${r.a.id}"${r.e&&r.e.paid?' checked':''}`
         +`${isLocked(currentWeek())?' disabled':''}`
         +` aria-label="Mark ${esc(r.a.name)} paid this week">`)
-     +`<span class="acct">${esc(r.a.name)}</span></th>`},
+     +`<span class="acct">${esc(r.a.name)}</span>${skipTag(r)}</th>`},
 
   /* Limit and APR live on the account, not the week, so these write through
      `data-a` and change every week at once. Only debts carry them — the
