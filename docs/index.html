@@ -654,6 +654,7 @@ td.dcell.is-empty input:disabled{color:transparent;-webkit-text-fill-color:trans
   left:0;right:0;text-align:center;top:50%;transform:translateY(-50%);pointer-events:none;
   font-family:var(--font-figures);color:var(--ink)}
 .sheet-page td.dcell.is-thisweek[data-show]::after{color:var(--attention);font-weight:var(--weight-semibold)}
+.sheet-page td.dcell.is-met[data-show]::after{color:var(--positive)}
 .sheet-page td.dcell[data-show] input:not(:focus){color:transparent;-webkit-text-fill-color:transparent}
 .sheet-page td.dcell[data-show]:focus-within::after{opacity:0}
 /* Typewriter figures run wide (0.6em a glyph), so the headers give the room
@@ -2485,17 +2486,31 @@ function runChecks(k,rows,T){
    weeks are keyed by their Friday, so a close falling mid-week would
    otherwise exclude the very week it belongs to. `close` leads because the
    cycle is defined by the statement closing, not by when it comes due. */
-function paidSinceClose(k,r){
+function cycleFrom(k,r){
   const anchor=r.close||r.due;
-  let from=k;
-  if(anchor){
-    const d=parseISO(anchor);
-    let guard=0;
-    do{d.setMonth(d.getMonth()-1)}while(weekStartOf(d)>k&&guard++<60);
-    from=weekStartOf(d);
-  }
-  return r2(weekKeys().filter(w=>w>=from&&w<=k)
-    .reduce((s,w)=>{const e=S.weeks[w].entries[r.a.id];return s+(e?n0(e.min)+n0(e.attack)+n0(e.other):0)},0));
+  if(!anchor)return k;
+  const d=parseISO(anchor);
+  let guard=0;
+  do{d.setMonth(d.getMonth()-1)}while(weekStartOf(d)>k&&guard++<60);
+  return weekStartOf(d);
+}
+const sentOn=(w,id)=>{const e=S.weeks[w].entries[id];return e?n0(e.min)+n0(e.attack)+n0(e.other):0};
+function paidSinceClose(k,r){
+  const from=cycleFrom(k,r);
+  return r2(weekKeys().filter(w=>w>=from&&w<=k).reduce((s,w)=>s+sentOn(w,r.a.id),0));
+}
+/* A loan's monthly minimum is paid a slice per paycheck, so the useful question
+   on any one sheet is how far through this due date's slices it is — 3/4 means
+   one more to go, 4/4 means the next sheet can skip it. Counted in paychecks
+   that land after the last due date and on or before this one. */
+function minProgress(k,r){
+  if(r.a.kind!=='loan'||!n0(r.minAmt)||!r.due)return null;
+  const from=cycleFrom(k,r);
+  let of=0;for(let w=from;paydayOf(w)<=r.due&&of<6;w=addWeeks(w,1))of++;
+  const ws=weekKeys().filter(w=>w>=from&&w<=k);
+  const n=ws.filter(w=>sentOn(w,r.a.id)>0.005).length;
+  const paid=r2(ws.reduce((s,w)=>s+sentOn(w,r.a.id),0));
+  return {n,of:Math.max(of,n),paid,met:paid+0.005>=n0(r.minAmt)};
 }
 </script>
 <script>
@@ -3335,9 +3350,12 @@ function cellDate(r,f){
      while the sheet is being worked — a statement minimum to enter, a
      payment to make. Worth noticing, not wrong, so it takes attention. */
   const now=v&&v>=k&&v<=addDays(k,6);
-  return `<td class="num dcell${v?'':' is-empty'}${now?' is-thisweek':''}"`
-    +`${v?` data-show="${dueLabel(v)}"`:''}`
-    +` title="${v?`${f==='close'?'Statement closes':'Due'} ${dueLabel(v)}, ${v.slice(0,4)}${now?' — this week':''}`:''}">`
+  const P=f==='due'&&v?minProgress(k,r):null;
+  const show=v?dueLabel(v)+(P?` · ${P.n}/${P.of}${P.met?' ✓':''}`:''):'';
+  return `<td class="num dcell${v?'':' is-empty'}${now?' is-thisweek':''}${P&&P.met?' is-met':''}"`
+    +`${v?` data-show="${show}"`:''}`
+    +` title="${v?`${f==='close'?'Statement closes':'Due'} ${dueLabel(v)}, ${v.slice(0,4)}${now?' — this week':''}`
+      +(P?` — ${P.n} of ${P.of} payments, ${money(P.paid)} of the ${money(r.minAmt)} minimum${P.met?', covered':''}`:''):''}">`
     +`<input class="cell cell-date" type="date"`
     +`${isLocked(k)?' disabled':''}`
     +` data-k="${id}:${f}" value="${v}"></td>`;
