@@ -2161,6 +2161,16 @@ function computeWeek(k){
       r.out=r2(Math.min(fromPile,Math.max(0,r.balance)));
       r.e.out=r.out;
       }
+      /* The bucket can also pay something off its usual card — a subscription
+         that billed to the wrong one. Whatever is typed in Out past the
+         automatic draw is held in `outExtra` and leaves the same way, capped
+         at what the bucket holds. The payment itself is entered on the card it
+         went to, and this nets it off the paycheck like any other draw. */
+      r.outAuto=r.out;
+      if(n0(r.e.outExtra)>0){
+        r.out=r2(r.out+Math.min(n0(r.e.outExtra),Math.max(0,r.balance+r.other-r.out)));
+        r.e.out=r.out;
+      }
     }
   }
 
@@ -3497,6 +3507,7 @@ const SHEET_COLS=[
   {k:'out',band:true,label:'Out',
    cell:r=>!KIND_INFLOW(r.a.kind)?dimCell('—')
      :r.isRollup?`<td class="num dim">${fig(n0(r.out))}</td>`
+     :r.otherOnly?cellNum(r,'out')
      :r.a.autoOut
        ?`<td class="num dim" title="Auto: drawn down by ${r.otherOnly?'the Other paid':'whatever was paid'} to ${esc((acct(r.a.autoOut)||{}).name||r.a.autoOut)} this week">${fig(n0(r.out))}</td>`
      :r.drawsForCards
@@ -5564,6 +5575,13 @@ function setWeekField(key,val){
   const a=acct(id);
   if(field==='other'&&a&&a.autoOut){
     if(String(val).trim()==='')delete e.otherSet;else e.otherSet=n0(val);
+    return;
+  }
+  /* A card-linked bucket's Out reads as the whole draw; only what is typed
+     past the automatic part is its own to keep. */
+  if(field==='out'&&a&&a.autoOut){
+    const auto=n0((computeWeek(k).byId[id]||{}).outAuto);
+    e.outExtra=r2(Math.max(0,n0(val)-auto));
     return;
   }
   e[field]=(field==='close'||field==='due')?val:n0(val);
