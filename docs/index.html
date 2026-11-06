@@ -4324,6 +4324,37 @@ function sheetLumps(k){
    less the truck payment taken on before then. Kept in the plan so it syncs. */
 const vehicleFund=()=>{S.plan.whatIf=S.plan.whatIf||{};
   return S.plan.whatIf.vehicleFund=S.plan.whatIf.vehicleFund||{name:'R8',target:60000,truck:184.50}};
+/* The 401(k), on its own. Its balance is typed from the plan each week, so
+   it moves with the fund's price as much as with what goes in — this shows
+   which fund that is, and what the weekly contribution grows to over a few
+   horizons at a few steady yearly returns. Illustrations, not a forecast: a
+   real year can land anywhere, and a down one is included on purpose. */
+const RETIRE_RATES=[[-0.10,'Down 10% a year'],[0.07,'Up 7% a year'],[0.12,'Up 12% a year']];
+const RETIRE_HORIZONS=[[1,'1 month'],[3,'3 months'],[6,'6 months'],[12,'1 year'],[60,'5 years'],[120,'10 years']];
+function retireBand(k,C){
+  const a=acct('401k'),r=a&&C.byId[a.id];if(!r||a.archived)return '';
+  const bal=n0(r.balance),wk=r2(n0(r.total)||weeklyOf(r));
+  const grow=(months,rate)=>{let b=bal;const n=Math.round(months*WPM),g=Math.pow(1+rate,1/52)-1;
+    for(let i=0;i<n;i++)b=b*(1+g)+wk;return b};
+  const t=(a.ticker||'').toUpperCase();
+  return `<section class="band tight whatif" aria-labelledby="rt-h">
+    <h2 class="sect-label" id="rt-h">${esc(a.name)}</h2>
+    <div class="wi-row">
+      <label class="wi-f">Invested in <input class="cell inline" data-rt="ticker" style="width:7ch"
+        value="${esc(t)}" placeholder="ticker" aria-label="Fund ticker"></label>
+      ${t?`<a class="wi-f" href="https://finance.yahoo.com/quote/${encodeURIComponent(t)}/history/" target="_blank" rel="noopener">daily prices ↗</a>`:''}
+      <span class="wi-f">${money(bal)} now · ${money(wk)}/wk going in</span>
+    </div>
+    <table class="cmp">
+      <thead><tr><th>In</th><th>Put in</th>${RETIRE_RATES.map(([,l])=>`<th>${l}</th>`).join('')}</tr></thead>
+      <tbody>${RETIRE_HORIZONS.map(([m,l])=>`<tr><td>${l}</td><td>${money0(bal+wk*Math.round(m*WPM))}</td>`
+        +RETIRE_RATES.map(([g])=>`<td>${money0(grow(m,g))}</td>`).join('')+'</tr>').join('')}</tbody>
+    </table>
+    <p class="lede muted">What ${money(wk)} a week adds up to if the fund returned the same amount every year. Real returns
+      swing — a single day can move it a few percent — so these are a range to picture, not a promise.
+      The balance on each sheet is whatever the plan shows that day, price swings included.</p>
+  </section>`;
+}
 const sheetSimOpts=(k,budget,strategy,funds)=>({...simOpts(k,budget,strategy),sheetFirst:true,funds:funds||sheetFunds(k),lumps:sheetLumps(k)});
 
 function viewProjections(el){
@@ -4497,6 +4528,8 @@ function viewProjections(el){
       :'The truck payment takes everything debt used to — nothing left for the fund.'}
       <span class="wi-now">Saved money only, no interest earned. The projection above does not carry the truck payment, so if the truck comes before debt free, that date slips.</span></span></div>
   </section>`})()}
+
+  ${retireBand(k,C)}
 
   <section class="band" aria-labelledby="pt-h">
     <h2 class="sect-label" id="pt-h">All loans and cards</h2>
@@ -5749,6 +5782,11 @@ document.addEventListener('change',e=>{
     if(d.wim==='on')m.on=t.checked;
     else if(d.wim==='date')m.date=t.value||'';
     else if(v>=0)m[d.wim]=r2(v);
+    save();render();return;
+  }
+  if(d.rt){
+    const a=acct('401k');if(!a)return;pushUndo(null);
+    const v=String(t.value).trim().toUpperCase();if(v)a.ticker=v;else delete a.ticker;
     save();render();return;
   }
   if(d.vf){
