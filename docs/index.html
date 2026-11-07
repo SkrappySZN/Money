@@ -2557,15 +2557,43 @@ function minProgress(k,r,before=false){
    null when there is nothing to say — no loan, a payment already ticked
    paid, or a due date earlier sheets have not covered. */
 function skipState(k,r){
-  const P=minProgress(k,r,true);if(!P||!P.met)return null;
+  const P=minProgress(k,r,true);if(!P)return null;
+  /* The covered due date is this sheet's own, or — once it has rolled on to
+     the next month — the one before it, while this sheet's paycheck still
+     lands ahead of it. Either way the month after is the one to check. */
+  const prev=shiftMonth(r.due,-1),pc=P.cyc[prev];
+  const rolled=!P.met&&paydayOf(k)<=prev&&pc&&pc.paid+0.005>=n0(r.minAmt);
+  if(!P.met&&!rolled)return null;
+  const covered=rolled?prev:r.due;
   const e=S.weeks[k].entries[r.a.id],sent=sentOn(k,r.a.id);
   if(sent>0.005&&e&&e.paid)return null;
-  const N=shiftMonth(r.due,1),per=weeklyOf(r);
+  const N=rolled?r.due:shiftMonth(r.due,1),per=weeklyOf(r);
   const left=Math.max(0,n0(r.minAmt)-(P.cyc[N]?P.cyc[N].paid:0));
   const need=left<=0.005?0:per>0.005?Math.ceil(left/per-0.01):Infinity;
   let have=0;for(let d=addDays(paydayOf(k),7);d<=N;d=addDays(d,7))have++;
   const ok=have>=need;
-  return sent>0.005?(ok?{s:'can',N,have,need,per}:null):{s:ok?'skipped':'short',N,have,need,per};
+  return sent>0.005?(ok?{s:'can',covered,N,have,need,per}:null):{s:ok?'skipped':'short',covered,N,have,need,per};
+}
+/* A loan's due date moves on by itself once its minimum is covered. On a
+   sheet that is still open, a due date that earlier sheets' ticked payments
+   already cover is stepped to the next month — as many as are covered — and
+   the date it started from is kept in `dueAuto`, so unticking a payment puts
+   it back. A due date typed by hand clears `dueAuto` and is left alone after
+   that. Runs when a sheet is made and whenever a box is ticked. */
+const nextDue=(d,a)=>rollDate(d,addDays(d,1),a.dueDay||parseISO(d).getDate());
+function rollCoveredDue(k){
+  if(!S.weeks[k]||isLocked(k))return;
+  const C=computeWeek(k);if(!C)return;
+  for(const r of C.rows){
+    if(r.isRollup||r.a.kind!=='loan'||!n0(r.minAmt))continue;
+    const e=S.weeks[k].entries[r.a.id];if(!e)continue;
+    const from=e.dueAuto||r.due;if(!from)continue;
+    const P=minProgress(k,{...r,due:from},true);if(!P)continue;
+    let D=from,g=0;
+    while(P.cyc[D]&&P.cyc[D].paid+0.005>=n0(r.minAmt)&&g++<24)D=nextDue(D,r.a);
+    if(D===from){if(e.dueAuto){e.due=e.dueAuto;delete e.dueAuto}}
+    else if(D!==e.due||!e.dueAuto){e.dueAuto=from;e.due=D}
+  }
 }
 </script>
 <script>
@@ -3391,7 +3419,7 @@ function stepsFor(k){
 function skipTag(r){
   const K=r.isRollup?null:skipState(currentWeek(),r);if(!K)return '';
   const tag=K.s==='can'?'can skip':K.s==='skipped'?'skipped ✓':'skipped — short';
-  const tip=`${dueLabel(r.due)} is already covered by earlier payments. `
+  const tip=`${dueLabel(K.covered)} is already covered by earlier payments. `
     +`${K.have} paycheck${K.have===1?'':'s'} after this one land by ${dueLabel(K.N)}`
     +(K.need?`, and ${K.need} at ${money(K.per)} cover it`:', which is already covered')
     +(K.s==='short'?' — skipping this one leaves it short':K.s==='can'?' — this payment can be skipped':'');
@@ -5542,6 +5570,7 @@ function newWeek(){
   }
   const applied=applyPlanToNewWeek(last,nk,C,entries);
   S.weeks[nk]={income:C.totals.income,entries};
+  rollCoveredDue(nk);
   UI.week=nk;UI.tab='sheet';save();render();
   toast('Balances projected forward and last week\u2019s allocation carried'
     +(applied.length?` · from the plan: ${applied.join(', ')}`:'')+' — correct anything the bank disagrees with');
@@ -5617,6 +5646,7 @@ function setWeekField(key,val){
     e.outExtra=r2(Math.max(0,n0(val)-auto));
     return;
   }
+  if(field==='due')delete e.dueAuto;
   e[field]=(field==='close'||field==='due')?val:n0(val);
 }
 function setAcctField(key,val){
@@ -5735,6 +5765,7 @@ document.addEventListener('change',e=>{
     pushUndo(null);
     /* the day it was ticked is the day the Calendar shows a payoff on */
     const pe=entryOf(currentWeek(),d.paid);pe.paid=t.checked;pe.paidOn=t.checked?iso(new Date()):null;
+    for(const w of weekKeys())if(w>currentWeek())rollCoveredDue(w);
     save();render();return}
   if(d.step){const st=planSteps().find(x=>x.id===d.step);if(st){st.on=t.checked;save();render()}return}
   if(d.cal){const c=S.plan.calendar.find(x=>x.id===d.cal);if(c){c.done=t.checked;save();render()}return}
