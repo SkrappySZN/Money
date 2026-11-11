@@ -4709,7 +4709,14 @@ function viewProjections(el){
      table listed, with the fund wobbles (a renewing fund refilling or taking
      its weekly back) left out — they net out and read as noise. */
   const NOISE=/is refilled — its weekly returns|renews — its weekly goes back/;
-  const target=w=>{const o=sim.debts.filter(d=>!d.grace&&(d.paidOff==null||d.paidOff>w)).sort((a,b)=>(a.paidOff??1e9)-(b.paidOff??1e9))[0];return o?o.name:''};
+  /* the debts extra money is aimed at, in the order the strategy aims it —
+     an interest-free card or a loan on its own fixed schedule is not one */
+  const aimable=sim.debts.filter(d=>!d.grace&&!(d.sched&&d.sched.length));
+  const rank=(UI.strategy==='custom'?((S.plan&&S.plan.order)||[]).map(id=>aimable.find(d=>d.id===id)).filter(Boolean)
+    :[...aimable].sort((a,b)=>UI.strategy==='snowball'?n0(a.balance)-n0(b.balance):n0((acct(b.id)||{}).apr)-n0((acct(a.id)||{}).apr)));
+  for(const d of aimable)if(!rank.includes(d))rank.push(d);
+  const target=w=>{const o=rank.find(d=>d.paidOff==null||d.paidOff>w);return o?o.name:''};
+  const tableRows=[...rank,...accts.filter(d=>!rank.includes(d))].filter(d=>d.paidOff==null||d.paidOff>1);
   const stratName={avalanche:'highest rate first',snowball:'smallest balance first',custom:'your payoff order'}[UI.strategy]||UI.strategy;
   const ms=[];let prevX=attackAt(1);
   ms.push({d:when(1),t:'Where it starts',w:'',x:prevX,to:target(1)});
@@ -4847,13 +4854,13 @@ function viewProjections(el){
       <section class="h-sec">
         <h2 class="h-h2">Payoff order</h2>
         <table class="h-tbl"><thead><tr><th></th><th>Debt</th><th class="r">Owed</th><th class="r">Rate</th><th class="r">Clears</th></tr></thead><tbody>
-        ${accts.map((d,j)=>{const b=n0((debts.find(x=>x.id===d.id)||{}).balance),lim=(acct(d.id)||{}).limit,u=lim?b/lim:0;
-          return `<tr class="${j===0&&!d.grace?'is-now':''}"><td class="h-ix">${d.grace?'—':String(j+1).padStart(2,'0')}</td>
+        ${tableRows.map(d=>{const b=n0((debts.find(x=>x.id===d.id)||{}).balance),lim=(acct(d.id)||{}).limit,u=lim?b/lim:0,j=rank.indexOf(d);
+          return `<tr class="${j===0?'is-now':''}"><td class="h-ix">${j<0?'—':String(j+1).padStart(2,'0')}</td>
           <td>${esc(d.name)}${(acct(d.id)||{}).kind==='card'&&u>0.5?`<span class="h-use"><i style="width:${Math.min(100,u*100)}%;background:${u>0.95?'var(--ox,var(--negative))':'var(--brass,var(--attention))'}"></i></span>`:''}</td>
           <td class="r h-num">${money0(b)}</td><td class="r h-num">${d.grace?'0%':pct(n0((acct(d.id)||{}).apr),2)}</td>
           <td class="r">${d.paidOff==null?'—':(()=>{const D=mdy(when(d.paidOff));return D.md+(D.y!==new Date().getFullYear()?` ’${String(D.y).slice(2)}`:'')})()}</td></tr>`}).join('')}
         </tbody></table>
-        <div class="h-foot">The line after a card is how full it is.</div>
+        <div class="h-foot">Numbered in the order extra money goes to them. Unnumbered ones are interest-free or on a fixed schedule. The line after a card is how full it is.</div>
       </section>
     </div>
   </div>
