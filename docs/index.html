@@ -1365,6 +1365,18 @@ html[data-look="ledger"] .legacy .card{border-radius:2px}
 .p-subs p{margin:0;color:var(--ink-muted);font-size:14px}
 .p-ref td.h-num{font-size:13px}
 
+/* ── Subscriptions (ledger look) ──────────────────────────────────── */
+.s-row{grid-template-columns:96px minmax(0,1fr) 170px}
+.s-row .r-to .h-link{font-size:12px}
+.s-row.is-gone .r-t,.s-row.is-gone .r-amt{color:var(--ink-muted)}
+.s-row.is-gone .r-t{text-decoration:line-through;text-decoration-color:var(--rule-strong)}
+.s-chg{color:var(--attention)}
+.s-wk{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:18px;padding:18px 0;border-bottom:1px solid var(--rule);align-items:baseline}
+.s-wl{font-family:var(--font-figures);font-size:15px}
+.s-wh{font-size:13px;color:var(--ink-muted);margin-top:4px}
+.s-wh span{font-family:var(--font-figures);font-size:12px;color:var(--ink-secondary)}
+.s-none{color:var(--ink-absent)}
+
 /* ── Shell ────────────────────────────────────────────────────────
    Book tabs. The body is the passbook's cover; a slim strip across its
    top carries the brand, the week's numbers, sync and backup. The page
@@ -5349,6 +5361,18 @@ function viewPlan(el){
         ${done.length?`<details class="p-past"><summary class="h-link">Done (${done.length})</summary><div class="p-rows">${done.map(calRow).join('')}</div></details>`:''}
         ${cal.length?'':'<p class="h-empty">Nothing on the calendar.</p>'}
       </section>
+
+      <section class="h-sec" aria-labelledby="open-h">
+        <h2 class="h-h2" id="open-h">Open items <span class="h-cap">${openLeft.length} left</span></h2>
+        ${openLeft.length?`<div class="p-rows">${openLeft.map(o=>`<div class="p-rem is-open">
+          <span><input type="checkbox" class="l-chk" data-open="${o.id}" aria-label="Done: ${esc(o.t)}"></span>
+          <span><div class="p-rt">${esc(o.t)}</div>${o.n?`<div class="p-rn">${esc(o.n)}</div>`:''}</span></div>`).join('')}</div>`
+          :'<p class="h-empty">Nothing open.</p>'}
+        ${openDone.length?`<details class="p-past"><summary class="h-link">Done (${openDone.length})</summary><div class="p-rows">${openDone.map(o=>`<div class="p-rem is-open is-done">
+          <span><input type="checkbox" class="l-chk" data-open="${o.id}" checked aria-label="Not done: ${esc(o.t)}"></span>
+          <span><div class="p-rt">${esc(o.t)}</div></span></div>`).join('')}</div></details>`:''}
+      </section>
+
     </div>
 
     <div>
@@ -5378,17 +5402,6 @@ function viewPlan(el){
           <p>${liveSubs.length
             ?`${liveSubs.length} active${nextSub?` · next is ${esc(nextSub.x.name)}, ${money(subAmountOn(nextSub.x,nextSub.d))} on ${dueLabel(nextSub.d)}`:''}.`
             :'None tracked yet.'}</p></div>
-      </section>
-
-      <section class="h-sec" aria-labelledby="open-h">
-        <h2 class="h-h2" id="open-h">Open items <span class="h-cap">${openLeft.length} left</span></h2>
-        ${openLeft.length?`<div class="p-rows">${openLeft.map(o=>`<div class="p-rem is-open">
-          <span><input type="checkbox" class="l-chk" data-open="${o.id}" aria-label="Done: ${esc(o.t)}"></span>
-          <span><div class="p-rt">${esc(o.t)}</div>${o.n?`<div class="p-rn">${esc(o.n)}</div>`:''}</span></div>`).join('')}</div>`
-          :'<p class="h-empty">Nothing open.</p>'}
-        ${openDone.length?`<details class="p-past"><summary class="h-link">Done (${openDone.length})</summary><div class="p-rows">${openDone.map(o=>`<div class="p-rem is-open is-done">
-          <span><input type="checkbox" class="l-chk" data-open="${o.id}" checked aria-label="Not done: ${esc(o.t)}"></span>
-          <span><div class="p-rt">${esc(o.t)}</div></span></div>`).join('')}</div></details>`:''}
       </section>
 
       ${P.ref&&P.ref.show?`<section class="h-sec" aria-labelledby="ref-h">
@@ -5442,60 +5455,71 @@ function viewSubs(el){
       +(card&&need!==perMo?` The other ${money(r2(perMo-need))} a month is paid from ${
         [...new Set(live.filter(y=>y.x.card!==card).map(y=>esc(cardName(y.x.card))))].join(' and ')}, not this bucket.`:'')};
 
-  el.innerHTML=`<main class="page">
-  <header class="masthead">
-    <div><h1 class="page-title">Subscriptions</h1>
-      <div class="dateline">${live.length} active${gone.length?` · ${gone.length} cancelled`:''}</div></div>
-    <div class="controls"><button class="ctl ctl-primary" data-act="addsub">+ Subscription</button></div>
-  </header>
-
-  <div class="strip">
-    <div class="metric"><div class="m-label">Per month</div><span class="m-value">${money(perMo)}</span>
-      ${yearly.length?`<div class="m-note">yearly ones spread over 12</div>`:''}</div>
-    <div class="metric"><div class="m-label">Per week</div><span class="m-value">${money(centsUp(perMo/MIN_DIVISOR))}</span>
-      <div class="m-note">a month split ${MIN_DIVISOR} ways, like the sheet</div></div>
-    <div class="metric"><div class="m-label">Per year</div><span class="m-value">${money(r2(perMo*12))}</span></div>
-    <div class="metric"><div class="m-label">Next charge</div>
-      <span class="m-value">${live[0]&&live[0].d?money(subAmountOn(live[0].x,live[0].d)):'—'}</span>
-      <div class="m-note">${live[0]&&live[0].d?`${esc(live[0].x.name)} · ${dueLabel(live[0].d)}, ${when(live[0].d)}`:''}</div></div>
+  /* Subscriptions, in the ledger look: the Roadmap's ruled rows, the next
+     charge date on the left in the figures face, the price on the right. */
+  const per=x=>x.cycle==='year'?'/yr':'/mo';
+  const D=d=>`<b>${dueLabel(d)}</b>${d.slice(0,4)}`;
+  el.innerHTML=`<main class="page h-page">
+  <div class="h-top">
+    <div><h1 class="h-title">Subscriptions</h1>
+      <div class="h-d">${live.length} active${gone.length?` · ${gone.length} cancelled`:''} — every recurring charge, the card it lands on, and when</div></div>
+    <div class="h-act"><button class="ctl ctl-primary" data-act="addsub">+ Subscription</button></div>
   </div>
 
-  <section class="band" aria-labelledby="sl-h">
-    <h2 class="sect-label" id="sl-h">Coming up</h2>
-    <p class="lede muted">${bucket()}</p>
-    ${live.length?`<ul class="rank subs">${live.map(({x,d})=>`<li>
-      <span class="n">${d?dueLabel(d):'—'}</span>
-      <span><span class="nm">${esc(x.name)}</span>
-        <div class="meta">${d?when(d):'no date'} · ${cadence(x)} · ${esc(cardName(x.card))}${x.to&&x.to.from>now
-          ?` · ${money(n0(x.amt))} → ${money(n0(x.to.amt))} from ${dueLabel(x.to.from)}`:''}</div></span>
-      <span class="rt"><div class="rv">${money(d?subAmountOn(x,d):subAmountOn(x,now))}</div>
-        <div class="rl">${x.cycle==='year'?'per year':'per month'}</div></span>
-      <span class="rt"><button class="ctl" data-subedit="${x.id}" aria-label="Edit ${esc(x.name)}">Edit</button></span>
-    </li>`).join('')}</ul>`
-      :'<p class="lede">Nothing tracked. Add one with <b>+ Subscription</b>.</p>'}
-  </section>
+  <div class="h-strip is-4">
+    <div class="h-fig"><div class="h-cap">Per month</div><div class="h-v">${money(perMo)}</div>
+      <div class="h-n">${yearly.length?'yearly ones spread over 12':`${live.length} active`}</div></div>
+    <div class="h-fig"><div class="h-cap">Per week</div><div class="h-v">${money(centsUp(perMo/MIN_DIVISOR))}</div>
+      <div class="h-n">a month split ${MIN_DIVISOR} ways, like the sheet</div></div>
+    <div class="h-fig"><div class="h-cap">Per year</div><div class="h-v">${money(r2(perMo*12))}</div>
+      <div class="h-n">at today's prices</div></div>
+    <div class="h-fig"><div class="h-cap">Next charge</div>
+      <div class="h-v is-brass">${live[0]&&live[0].d?money(subAmountOn(live[0].x,live[0].d)):'—'}</div>
+      <div class="h-n">${live[0]&&live[0].d?`<b>${esc(live[0].x.name)}</b> · ${dueLabel(live[0].d)}, ${when(live[0].d)}`:'nothing scheduled'}</div></div>
+  </div>
 
-  <section class="band" aria-labelledby="sw-h">
-    <h2 class="sect-label" id="sw-h">What lands, by pay week</h2>
-    <ul class="rank">
-      ${subWeeks.map(w=>`<li><span class="n"></span>
-        <span><span class="nm">${weekLabel(w.wk)}</span>
-          <div class="meta">${w.hits.length?w.hits.map(h=>`${esc(h.name)} ${money(h.amount)}`).join(' · '):'nothing bills'}</div></span>
-        <span class="rt"><div class="rv">${w.total?money(w.total):'—'}</div><div class="rl">${w.hits.length?`${w.hits.length} charge${w.hits.length===1?'':'s'}`:''}</div></span></li>`).join('')}
-    </ul>
-  </section>
+  <div class="h-cols">
+    <div>
+      <section class="h-sec" aria-labelledby="sl-h">
+        <h2 class="h-h2" id="sl-h">Coming up <span class="h-cap">soonest first</span></h2>
+        <p class="h-lede">${bucket()}</p>
+        ${live.length?`<div class="r-ms">${live.map(({x,d})=>`<div class="r-row s-row">
+          <div class="r-when">${d?D(d):'<b>—</b>'}</div>
+          <div><div class="r-t">${esc(x.name)}</div>
+            <div class="r-w">${d?when(d):'no date'} · ${cadence(x)} · ${esc(cardName(x.card))}${x.to&&x.to.from>now
+              ?` · <span class="s-chg">${money(n0(x.amt))} → ${money(n0(x.to.amt))} from ${dueLabel(x.to.from)}</span>`:''}</div></div>
+          <div class="r-x"><div class="r-amt">${money(d?subAmountOn(x,d):subAmountOn(x,now))}<small> ${per(x)}</small></div>
+            <div class="r-to"><button class="h-link" data-subedit="${x.id}" aria-label="Edit ${esc(x.name)}">edit</button></div></div>
+        </div>`).join('')}</div>`
+          :'<p class="h-empty">Nothing tracked. Add one with <b>+ Subscription</b>.</p>'}
+      </section>
 
-  ${gone.length?`<section class="band" aria-labelledby="sc-h">
-    <h2 class="sect-label" id="sc-h">Cancelled</h2>
-    <ul class="rank subs">${gone.map(x=>`<li class="is-clear">
-      <span class="n"></span>
-      <span><span class="nm">${esc(x.name)}</span><div class="meta">cancelled ${dueLabel(x.ended)} · was ${cadence(x)}</div></span>
-      <span class="rt"><div class="rv">${money(subAmountOn(x,x.ended))}</div><div class="rl">${x.cycle==='year'?'per year':'per month'}</div></span>
-      <span class="rt"><button class="ctl" data-subedit="${x.id}" aria-label="Edit ${esc(x.name)}">Edit</button></span>
-    </li>`).join('')}</ul>
-  </section>`:''}
+      ${gone.length?`<section class="h-sec" aria-labelledby="sc-h">
+        <h2 class="h-h2" id="sc-h">Cancelled <span class="h-cap">${gone.length}</span></h2>
+        <div class="r-ms">${gone.map(x=>`<div class="r-row s-row is-gone">
+          <div class="r-when">${D(x.ended)}</div>
+          <div><div class="r-t">${esc(x.name)}</div><div class="r-w">cancelled ${dueLabel(x.ended)} · was ${cadence(x)}</div></div>
+          <div class="r-x"><div class="r-amt">${money(subAmountOn(x,x.ended))}<small> ${per(x)}</small></div>
+            <div class="r-to"><button class="h-link" data-subedit="${x.id}" aria-label="Edit ${esc(x.name)}">edit</button></div></div>
+        </div>`).join('')}</div>
+      </section>`:''}
+    </div>
+
+    <div class="r-right">
+      <section class="h-sec" aria-labelledby="sw-h">
+        <h2 class="h-h2" id="sw-h">By pay week</h2>
+        <p class="h-lede">What bills inside each of the next four pay weeks.</p>
+        <div class="h-list">${subWeeks.map(w=>`<div class="s-wk">
+          <div><div class="s-wl">${weekLabel(w.wk)}</div>
+            <div class="s-wh">${w.hits.length?w.hits.map(h=>`${esc(h.name)} <span>${money(h.amount)}</span>`).join(' · '):'nothing bills'}</div></div>
+          <div class="r-x"><div class="h-amt${w.total?'':' s-none'}">${w.total?money(w.total):'—'}</div>
+            <div class="r-to">${w.hits.length?`${w.hits.length} charge${w.hits.length===1?'':'s'}`:''}</div></div></div>`).join('')}</div>
+      </section>
+    </div>
+  </div>
 </main>`;
 }
+
 /* Add (no id) or edit a subscription. Cancel dates it today; Delete removes
    it outright, for one entered by mistake. Both undo with ⌘Z. */
 /* The Subscriptions bucket's weekly target follows the subscriptions it pays
