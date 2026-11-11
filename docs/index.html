@@ -1295,6 +1295,73 @@ html[data-look="ledger"] .legacy{color-scheme:dark;
 html[data-look="ledger"] .legacy h1{font-family:var(--font-display);font-weight:400;font-size:40px;letter-spacing:-.01em}
 html[data-look="ledger"] .legacy .card{border-radius:2px}
 
+/* ── Ledger page header, shared by Plan, Subscriptions, Calendar, Reffing
+   and Accounts: the serif title and its italic line, the page's actions on
+   the right, then the figures strip from Home under its 2px ink rule. ── */
+.h-top{display:flex;justify-content:space-between;align-items:flex-end;gap:var(--space-4);margin-bottom:28px}
+.h-title{font-family:var(--font-display);font-weight:400;font-size:40px;line-height:1.05;letter-spacing:-.01em;margin:0 0 8px;color:var(--ink)}
+.h-strip.is-3{grid-template-columns:repeat(3,1fr)}
+.h-strip.is-4{grid-template-columns:repeat(4,1fr)}
+.h-v.is-ox{color:var(--ox,var(--negative))}.h-v.is-sage{color:var(--sage,var(--positive))}.h-v.is-dim{color:var(--ink-absent)}
+.h-sub{margin:36px 0 10px}
+.h-sub:first-child{margin-top:0}
+.h-empty{color:var(--ink-muted);font-size:14px;padding:16px 0;border-bottom:1px solid var(--rule);margin:0}
+/* a bare field that reads as text until hovered or focused */
+.l-in{font:inherit;color:inherit;background:none;border:0;border-bottom:1px dashed transparent;padding:0;border-radius:0;min-width:0}
+.l-in:hover{border-bottom-color:var(--rule-strong)}
+.l-in:focus{outline:none;border-bottom:1px solid var(--brass,var(--attention));color:var(--ink)}
+.l-in[type=date]{font-family:var(--font-figures);font-size:14px;color:var(--ink-muted);width:9.6em}
+.l-in[type=date]:focus{color:var(--ink)}
+.l-in[type=date]::-webkit-calendar-picker-indicator{opacity:.35;cursor:pointer}
+.l-in[type=date]:hover::-webkit-calendar-picker-indicator{opacity:.8}
+/* a square tick box, sage when ticked */
+.l-chk{appearance:none;-webkit-appearance:none;width:14px;height:14px;margin:0;border:1px solid var(--rule-strong);border-radius:1px;background:none;cursor:pointer;vertical-align:-2px;position:relative;flex:0 0 auto}
+.l-chk:hover{border-color:var(--sage,var(--positive))}
+.l-chk:checked{background:var(--sage,var(--positive));border-color:var(--sage,var(--positive))}
+.l-chk:checked::after{content:'';position:absolute;left:4px;top:1px;width:4px;height:8px;border:solid var(--paper);border-width:0 2px 2px 0;transform:rotate(45deg)}
+.l-chk:focus-visible{outline:1px solid var(--ink);outline-offset:2px}
+/* small text buttons inside rows: reorder, remove, edit */
+.l-btn{background:none;border:0;padding:2px 6px;font:inherit;font-size:14px;color:var(--ink-muted);cursor:pointer;line-height:1.2}
+.l-btn:hover{color:var(--ink)}
+.l-btn:disabled{color:var(--ink-absent);opacity:.4;cursor:default}
+.l-btn.is-del:hover{color:var(--ox,var(--negative))}
+.l-btn:focus-visible{outline:none;color:var(--ink);text-decoration:underline}
+
+/* ── Plan (ledger look) ───────────────────────────────────────────── */
+.p-rows{border-top:1px solid var(--rule-strong)}
+.p-chg{display:grid;grid-template-columns:120px minmax(0,1fr) 190px 28px;gap:24px;padding:20px 0;border-bottom:1px solid var(--rule);align-items:baseline}
+.p-chg .p-t{font-family:var(--font-display);font-size:19px;width:100%}
+.p-w{color:var(--ink-muted);font-size:14px;margin-top:4px}
+.p-x{text-align:right;white-space:nowrap}
+.p-amt{font-family:var(--font-figures);font-size:20px;display:inline-flex;align-items:baseline;justify-content:flex-end}
+.p-amt .l-in{text-align:right}
+.p-amt small{font-size:12px;color:var(--ink-muted);margin-left:4px}
+.p-to{font-size:12px;color:var(--ink-muted);margin-top:2px}
+.p-chg.is-move .p-amt{color:var(--brass,var(--attention))}
+.p-chg.is-past{opacity:.5}
+.p-chg.is-past:hover,.p-chg.is-past:focus-within{opacity:1}
+.p-past{margin-top:24px}
+.p-past summary{display:inline-block;font-size:14px;margin-bottom:16px;cursor:pointer}
+.p-rem{display:grid;grid-template-columns:22px 120px minmax(0,1fr);gap:20px;padding:15px 0;border-bottom:1px solid var(--rule);align-items:baseline}
+.p-rem .p-rt{font-size:16px}
+.p-rem .p-rn{color:var(--ink-muted);font-size:13px;margin-top:2px}
+.p-rem.is-late .l-in[type=date]{color:var(--negative)}
+.p-rem.is-done .p-rt{color:var(--ink-muted);text-decoration:line-through;text-decoration-color:var(--rule-strong)}
+.p-rem.is-done .l-in[type=date]{color:var(--ink-absent)}
+.p-rem.is-open{grid-template-columns:22px minmax(0,1fr)}
+.p-rank .r{text-align:right}
+.p-rank td{vertical-align:baseline}
+.p-rank .p-nm{font-size:16px}
+.p-rank .p-meta{font-size:12px;color:var(--ink-muted);margin-top:3px;white-space:normal}
+.p-rank tr.is-clear .p-nm{color:var(--ink-muted)}
+.p-rank .p-mv{white-space:nowrap;width:1%}
+.p-tag{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--sage,var(--positive));margin-left:10px;vertical-align:2px}
+.p-tag.is-warn{color:var(--attention)}
+.p-subs{display:flex;align-items:baseline;gap:14px;padding:18px 0;border-top:1px solid var(--rule-strong);border-bottom:1px solid var(--rule)}
+.p-subs .r-amt{font-size:24px}
+.p-subs p{margin:0;color:var(--ink-muted);font-size:14px}
+.p-ref td.h-num{font-size:13px}
+
 /* ── Shell ────────────────────────────────────────────────────────
    Book tabs. The body is the passbook's cover; a slim strip across its
    top carries the brand, the week's numbers, sync and backup. The page
@@ -5204,115 +5271,138 @@ function viewPlan(el){
   const chg=[...(P.changes||[])].sort((a,b)=>a.from.localeCompare(b.from));
   const nowRows=[...overdue.map(c=>({c,late:true})),...soon.filter(c=>c.d<weekEnd).map(c=>({c,late:false}))];
 
-  const calRow=c=>`<li class="${c.done?'done':''}">
-    <span><input type="checkbox" data-cal="${c.id}" ${c.done?'checked':''} aria-label="Done: ${esc(c.t)}"></span>
-    <span class="pd${!c.done&&c.d<today?' is-overdue':''}"><input type="date" data-caldate="${c.id}" value="${c.d}"
+  /* Plan, in the ledger look. Upcoming changes and the dated reminders read
+     like the Roadmap — ruled rows, the date in the figures face, the amount
+     on the right — and stay editable in place. The payoff order, the
+     subscriptions line and open items sit in the right column. */
+  const calRow=c=>`<div class="p-rem${c.done?' is-done':!c.done&&c.d<today?' is-late':''}">
+    <span><input type="checkbox" class="l-chk" data-cal="${c.id}" ${c.done?'checked':''} aria-label="Done: ${esc(c.t)}"></span>
+    <span><input type="date" class="l-in" data-caldate="${c.id}" value="${c.d}"
       aria-label="Date for ${esc(c.t)}" title="Change the date"></span>
-    <span><div class="pt">${esc(c.t)}</div>${c.n?`<div class="pn">${esc(c.n)}</div>`:''}</span></li>`;
+    <span><div class="p-rt">${esc(c.t)}</div>${c.n?`<div class="p-rn">${esc(c.n)}</div>`:''}</span></div>`;
+  const chgRow=c=>{const a=acct(c.acct),past=c.from<=k,mv=c.type==='move',f=mv?'amount':'weekly',v=n0(c[f]).toFixed(2);
+    return `<div class="p-chg${past?' is-past':''}${mv?' is-move':''}">
+      <span><input type="date" class="l-in" data-chg="${c.id}:from" value="${c.from}" aria-label="Sheet it starts on"></span>
+      <span><input class="l-in chg-in p-t" data-chg="${c.id}:label" value="${esc(c.label)}" aria-label="What changes">
+        <div class="p-w">${a?esc(a.name):'missing account'} · ${mv?'moved onto it from savings, once':`from the ${weekLabel(c.from)} sheet`}${past?' · reached':''}</div></span>
+      <span class="p-x"><span class="p-amt">$<input class="l-in chg-in" inputmode="decimal" data-chg="${c.id}:${f}" value="${v}"
+        style="${figureWidth(v)}" aria-label="${mv?'Amount':'Weekly amount'}">${mv?'<small>once</small>':'<small>/wk</small>'}</span></span>
+      <span class="p-x"><button class="l-btn is-del" data-chgdel="${c.id}" aria-label="Remove ${esc(c.label)}" title="Remove">×</button></span></div>`};
+  const ahead=chg.filter(c=>c.from>k),gone=chg.filter(c=>c.from<=k);
+  const late=nowRows.filter(x=>x.late).length;
 
-  el.innerHTML=`<main class="page">
-  <header class="masthead">
-    <div><h1 class="page-title">Plan</h1>
-      <div class="dateline">Reminders, upcoming changes and payoff order</div></div>
-    <div class="controls">
+  el.innerHTML=`<main class="page h-page">
+  <div class="h-top">
+    <div><h1 class="h-title">Plan</h1>
+      <div class="h-d">Reminders, upcoming changes and the payoff order</div></div>
+    <div class="h-act">
       <button class="ctl" data-act="addcal">+ Date</button>
       <button class="ctl" data-act="addopen">+ Open item</button>
+      <button class="ctl ctl-primary" data-act="addchg">+ Change</button>
     </div>
-  </header>
+  </div>
 
-  ${nowRows.length?`<section class="band tight" aria-labelledby="now-h">
-    <h2 class="sect-label" id="now-h">Needs you now</h2>
-    <ul class="attn-list">${nowRows.map(({c,late})=>`<li class="attn-row${late?'':' upcoming'}"><p>
-      <span class="${late?'fig-breach':'when'}">${dueLabel(c.d)}</span> — ${esc(c.t)}${c.n?`. ${esc(c.n)}`:''}${late
-        ?` <span class="pn-inline">${Math.abs(daysBetween(c.d,today))} days ago</span>`:''}</p></li>`).join('')}</ul>
-  </section>`:''}
+  <div class="h-strip is-4">
+    <div class="h-fig"><div class="h-cap">Needs you now</div>
+      <div class="h-v${late?' is-ox':nowRows.length?' is-brass':' is-dim'}">${nowRows.length}</div>
+      <div class="h-n">${nowRows.length?`${late?`<b class="is-bad">${late} overdue</b>`:''}${late&&nowRows.length>late?' · ':''}${nowRows.length>late?`${nowRows.length-late} this week`:''}`:'nothing dated this week'}</div></div>
+    <div class="h-fig"><div class="h-cap">Next change</div>
+      <div class="h-v">${ahead.length?dueLabel(ahead[0].from):'—'}</div>
+      <div class="h-n">${ahead.length?esc(ahead[0].label):'every week after this one looks like this sheet'}</div></div>
+    <div class="h-fig"><div class="h-cap">Subscriptions</div>
+      <div class="h-v">${money(subsNow)}</div>
+      <div class="h-n">a month · ${liveSubs.length} active</div></div>
+    <div class="h-fig"><div class="h-cap">Open items</div>
+      <div class="h-v${openLeft.length?'':' is-dim'}">${openLeft.length}</div>
+      <div class="h-n">${openDone.length?`${openDone.length} done`:'nothing ticked off yet'}</div></div>
+  </div>
 
-  <section class="band${nowRows.length?'':' tight'}" aria-labelledby="chg-h">
-    <h2 class="sect-label" id="chg-h">Upcoming changes<span class="count">what Projections plans around</span>
-      <button class="ctl sect-action" data-act="addchg">+ Change</button></h2>
-    <p class="lede muted">A row's weekly amount changing on a set date. Each new sheet picks it up on that date,
-      and Projections plans around it.</p>
-    ${(()=>{const row=c=>{const a=acct(c.acct),past=c.from<=k;
-      return `<li class="${past?'is-past':''}">
-      <span><button class="chg-del" data-chgdel="${c.id}" aria-label="Remove ${esc(c.label)}" title="Remove">×</button></span>
-      <span class="pd"><input type="date" data-chg="${c.id}:from" value="${c.from}" aria-label="Sheet it starts on"></span>
-      <span><div class="pt"><input class="chg-in" data-chg="${c.id}:label" value="${esc(c.label)}" aria-label="What changes"></div>
-        <div class="pn">${a?esc(a.name):'missing account'} — ${c.type==='move'
-          ?`$<input class="chg-in" inputmode="decimal" data-chg="${c.id}:amount" value="${n0(c.amount).toFixed(2)}" aria-label="Amount"> moved onto it from savings, once`
-          :`$<input class="chg-in" inputmode="decimal" data-chg="${c.id}:weekly" value="${n0(c.weekly).toFixed(2)}" aria-label="Weekly amount">/wk from the ${weekLabel(c.from)} sheet`}${past?' · reached':''}</div></span></li>`};
-      const ahead=chg.filter(c=>c.from>k),gone=chg.filter(c=>c.from<=k);
-      return (ahead.length?`<ul class="plan-list dated chg-list">${ahead.map(row).join('')}</ul>`
-        :'<p class="lede muted">Nothing coming up — every week after this one looks like this sheet.</p>')
-        +(gone.length?`<details class="chg-past"><summary class="lede muted">Already reached (${gone.length}) — on the sheets now</summary>
-          <ul class="plan-list dated chg-list">${gone.map(row).join('')}</ul></details>`:'');})()}
-  </section>
+  <div class="h-cols">
+    <div>
+      ${nowRows.length?`<section class="h-sec" aria-labelledby="now-h">
+        <h2 class="h-h2" id="now-h">Needs you now</h2>
+        <p class="h-lede">Reminders dated this week, and any from the last seven days not ticked off.</p>
+        ${nowRows.map(({c,late})=>`<div class="h-note is-${late?'bad':'warn'}">
+          <div class="h-k">${late?`Overdue · ${dueLabel(c.d)}, ${Math.abs(daysBetween(c.d,today))} days ago`:dueLabel(c.d)}</div>
+          <div class="h-nt">${esc(c.t)}${c.n?`. ${esc(c.n)}`:''}</div></div>`).join('')}
+      </section>`:''}
 
-  <section class="band" aria-labelledby="subs-h">
-    <h2 class="sect-label" id="subs-h">Subscriptions<span class="count">${money(subsNow)}/month</span>
-      <button class="ctl sect-action" data-tab="subs">Open Subscriptions</button></h2>
-    <p class="lede muted">${liveSubs.length
-      ?`${liveSubs.length} active${nextSub?` · next is ${esc(nextSub.x.name)}, ${money(subAmountOn(nextSub.x,nextSub.d))} on ${dueLabel(nextSub.d)}`:''}.`
-      :'None tracked yet.'}</p>
-  </section>
+      <section class="h-sec" aria-labelledby="chg-h">
+        <h2 class="h-h2" id="chg-h">Upcoming changes <button class="h-link h-cap" data-act="addchg">+ change</button></h2>
+        <p class="h-lede">A row's weekly amount changing on a set date. Each new sheet picks it up on that date, and Projections plans around it.</p>
+        ${ahead.length?`<div class="p-rows chg-list">${ahead.map(chgRow).join('')}</div>`
+          :'<p class="h-empty">Nothing coming up — every week after this one looks like this sheet.</p>'}
+        ${gone.length?`<details class="p-past chg-past"><summary class="h-link">Already reached (${gone.length}) — on the sheets now</summary>
+          <div class="p-rows chg-list">${gone.map(chgRow).join('')}</div></details>`:''}
+      </section>
 
-  <section class="band" aria-labelledby="order-h">
-    <h2 class="sect-label" id="order-h">Payoff order</h2>
-    <p class="lede muted">What <b>My order</b> follows on Projections. Rate-sorting cannot see utilization
-      or a freed minimum; this can.</p>
-    <ul class="rank">
-      ${ordered.map((id,i)=>{const a=acct(id),d=byId[id];
-        return `<li class="${i===0&&d?'lead':''}${d?'':' is-clear'}">
-        <span class="n">${i+1}</span>
-        <span><span class="nm">${esc(a.name)}</span>${d?'':'<span class="state clear">clear</span>'}
-          <div class="meta">${d?`${money(d.balance)}${d.kind==='card'&&d.limit?` · ${pct(d.balance/d.limit,0)} used`:''} · ${pct(d.nominalApr,2)} APR · ${money(d.weekInterest)}/wk`:'nothing owed'}</div></span>
-        <span class="rt reorder">
-          <button data-porder="${id}:-1" aria-label="Move ${esc(a.name)} up" ${i===0?'disabled':''}>↑</button>
-          <button data-porder="${id}:1" aria-label="Move ${esc(a.name)} down" ${i===ordered.length-1?'disabled':''}>↓</button></span>
-      </li>`}).join('')}
-      ${missing.map(d=>`<li class="is-missing">
-        <span class="n">—</span>
-        <span><span class="nm">${esc(d.name)}</span><div class="meta">not in the order — falls to the end</div></span>
-        <span class="rt"><button class="ctl" data-porderadd="${d.id}">Add</button></span></li>`).join('')}
-    </ul>
-  </section>
+      <section class="h-sec" aria-labelledby="pcal-h">
+        <h2 class="h-h2" id="pcal-h">Reminders <span class="h-cap">on the Calendar</span></h2>
+        ${soon.length?`<div class="h-cap h-sub">Next four weeks</div><div class="p-rows">${soon.map(calRow).join('')}</div>`:''}
+        ${later.length?`<div class="h-cap h-sub">After that</div><div class="p-rows">${later.map(calRow).join('')}</div>`:''}
+        ${done.length?`<details class="p-past"><summary class="h-link">Done (${done.length})</summary><div class="p-rows">${done.map(calRow).join('')}</div></details>`:''}
+        ${cal.length?'':'<p class="h-empty">Nothing on the calendar.</p>'}
+      </section>
+    </div>
 
-  <section class="band" aria-labelledby="open-h">
-    <h2 class="sect-label" id="open-h">Open items<span class="count">${openLeft.length} left</span></h2>
-    ${openLeft.length?`<ul class="plan-list">${openLeft.map(o=>`<li>
-      <span><input type="checkbox" data-open="${o.id}" aria-label="Done: ${esc(o.t)}"></span>
-      <span><div class="pt">${esc(o.t)}</div>${o.n?`<div class="pn">${esc(o.n)}</div>`:''}</span></li>`).join('')}</ul>`
-      :'<p class="lede muted">Nothing open.</p>'}
-    ${openDone.length?`<h3 class="sub-label">Done</h3><ul class="plan-list">${openDone.map(o=>`<li class="done">
-      <span><input type="checkbox" data-open="${o.id}" checked aria-label="Not done: ${esc(o.t)}"></span>
-      <span><div class="pt">${esc(o.t)}</div></span></li>`).join('')}</ul>`:''}
-  </section>
+    <div>
+      <section class="h-sec" aria-labelledby="order-h">
+        <h2 class="h-h2" id="order-h">Payoff order</h2>
+        <p class="h-lede">What <b>My order</b> follows on Projections. Rate-sorting cannot see utilization or a freed minimum; this can.</p>
+        <table class="h-tbl p-rank"><thead><tr><th></th><th>Debt</th><th class="r">Owed</th><th class="r"></th></tr></thead><tbody>
+        ${ordered.map((id,i)=>{const a=acct(id),d=byId[id];
+          return `<tr class="${i===0&&d?'is-now':''}${d?'':' is-clear'}">
+          <td class="h-ix">${String(i+1).padStart(2,'0')}</td>
+          <td><div class="p-nm">${esc(a.name)}${d?'':'<span class="p-tag">clear</span>'}</div>
+            <div class="p-meta">${d?`${d.kind==='card'&&d.limit?`${pct(d.balance/d.limit,0)} used · `:''}${pct(d.nominalApr,2)} APR · ${money(d.weekInterest)}/wk interest`:'nothing owed'}</div></td>
+          <td class="r h-num">${d?money(d.balance):'—'}</td>
+          <td class="r p-mv">
+            <button class="l-btn" data-porder="${id}:-1" aria-label="Move ${esc(a.name)} up" title="Move up" ${i===0?'disabled':''}>↑</button><button class="l-btn" data-porder="${id}:1" aria-label="Move ${esc(a.name)} down" title="Move down" ${i===ordered.length-1?'disabled':''}>↓</button></td></tr>`}).join('')}
+        ${missing.map(d=>`<tr class="is-missing">
+          <td class="h-ix">—</td>
+          <td><div class="p-nm">${esc(d.name)}<span class="p-tag is-warn">not in the order</span></div><div class="p-meta">falls to the end</div></td>
+          <td class="r h-num">${money(d.balance)}</td>
+          <td class="r p-mv"><button class="l-btn" data-porderadd="${d.id}">Add</button></td></tr>`).join('')}
+        </tbody></table>
+      </section>
 
-  ${P.ref&&P.ref.show?`<section class="band" aria-labelledby="ref-h">
-    <h2 class="sect-label" id="ref-h">Handoff snapshot · ${dueLabel(P.ref.asOf)}
-      <button class="ctl sect-action" data-act="hideref">Hide</button></h2>
-    <p class="lede muted">Reference only — <b>the weekly sheet is the source of truth</b>.
-      Rows that differ are usually the sheet being ahead of the doc.</p>
-    <div class="cmp-wrap"><table class="cmp">
-      <thead><tr><th>Account</th><th>Sheet ${weekLabel(k)}</th><th>Handoff</th><th>Δ</th></tr></thead>
-      <tbody>${Object.entries(P.ref.rows).map(([id,v])=>{
-        const a=acct(id); if(!a)return'';
-        const r=C.byId[id]; if(!r)return'';
-        const d=r2(v-r.balance);
-        return `<tr><td>${esc(a.name)}</td><td>${money(r.balance)}</td><td>${money(v)}</td>
-          <td>${Math.abs(d)<0.5?'—':(d>0?'+':'−')+money(Math.abs(d))}</td></tr>`}).join('')}</tbody>
-    </table></div>
-    ${(P.minsToVerify||[]).length?`<ul class="attn-list" style="margin-top:var(--space-3)">${P.minsToVerify.map(m=>{
-      const a=acct(m.acct);if(!a)return'';
-      return `<li class="attn-row upcoming"><p><b>${esc(a.name)}</b> minimum is an estimate — <span class="fig">${money(m.est)}</span>, ${esc(m.n)}. Real number lands when the statement closes ${dueLabel(m.when)}.</p></li>`}).join('')}</ul>`:''}
-  </section>`:''}
+      <section class="h-sec" aria-labelledby="subs-h">
+        <h2 class="h-h2" id="subs-h">Subscriptions <button class="h-link h-cap" data-tab="subs">open →</button></h2>
+        <div class="p-subs"><span class="r-amt">${money(subsNow)}<small> /mo</small></span>
+          <p>${liveSubs.length
+            ?`${liveSubs.length} active${nextSub?` · next is ${esc(nextSub.x.name)}, ${money(subAmountOn(nextSub.x,nextSub.d))} on ${dueLabel(nextSub.d)}`:''}.`
+            :'None tracked yet.'}</p></div>
+      </section>
 
-  <section class="band" aria-labelledby="pcal-h">
-    <h2 class="sect-label" id="pcal-h">Calendar</h2>
-    ${soon.length?`<h3 class="sub-label">Next four weeks</h3><ul class="plan-list dated">${soon.map(calRow).join('')}</ul>`:''}
-    ${later.length?`<h3 class="sub-label">After that</h3><ul class="plan-list dated">${later.map(calRow).join('')}</ul>`:''}
-    ${done.length?`<h3 class="sub-label">Done</h3><ul class="plan-list dated">${done.map(calRow).join('')}</ul>`:''}
-    ${cal.length?'':'<p class="lede muted">Nothing on the calendar.</p>'}
-  </section>
+      <section class="h-sec" aria-labelledby="open-h">
+        <h2 class="h-h2" id="open-h">Open items <span class="h-cap">${openLeft.length} left</span></h2>
+        ${openLeft.length?`<div class="p-rows">${openLeft.map(o=>`<div class="p-rem is-open">
+          <span><input type="checkbox" class="l-chk" data-open="${o.id}" aria-label="Done: ${esc(o.t)}"></span>
+          <span><div class="p-rt">${esc(o.t)}</div>${o.n?`<div class="p-rn">${esc(o.n)}</div>`:''}</span></div>`).join('')}</div>`
+          :'<p class="h-empty">Nothing open.</p>'}
+        ${openDone.length?`<details class="p-past"><summary class="h-link">Done (${openDone.length})</summary><div class="p-rows">${openDone.map(o=>`<div class="p-rem is-open is-done">
+          <span><input type="checkbox" class="l-chk" data-open="${o.id}" checked aria-label="Not done: ${esc(o.t)}"></span>
+          <span><div class="p-rt">${esc(o.t)}</div></span></div>`).join('')}</div></details>`:''}
+      </section>
+
+      ${P.ref&&P.ref.show?`<section class="h-sec" aria-labelledby="ref-h">
+        <h2 class="h-h2" id="ref-h">Handoff snapshot · ${dueLabel(P.ref.asOf)} <button class="h-link h-cap" data-act="hideref">hide</button></h2>
+        <p class="h-lede">Reference only — <b>the weekly sheet is the source of truth</b>. Rows that differ are usually the sheet being ahead of the doc.</p>
+        <table class="h-tbl p-ref"><thead><tr><th>Account</th><th class="r">Sheet ${weekLabel(k)}</th><th class="r">Handoff</th><th class="r">Δ</th></tr></thead>
+          <tbody>${Object.entries(P.ref.rows).map(([id,v])=>{
+            const a=acct(id); if(!a)return'';
+            const r=C.byId[id]; if(!r)return'';
+            const d=r2(v-r.balance);
+            return `<tr><td>${esc(a.name)}</td><td class="r h-num">${money(r.balance)}</td><td class="r h-num">${money(v)}</td>
+              <td class="r h-num">${Math.abs(d)<0.5?'—':(d>0?'+':'−')+money(Math.abs(d))}</td></tr>`}).join('')}</tbody>
+        </table>
+        ${(P.minsToVerify||[]).length?`<div style="margin-top:28px">${P.minsToVerify.map(m=>{
+          const a=acct(m.acct);if(!a)return'';
+          return `<div class="h-note is-warn"><div class="h-k">Minimum to check · ${dueLabel(m.when)}</div>
+            <div class="h-nt"><b>${esc(a.name)}</b> minimum is an estimate — ${money(m.est)}, ${esc(m.n)}. Real number lands when the statement closes ${dueLabel(m.when)}.</div></div>`}).join('')}</div>`:''}
+      </section>`:''}
+    </div>
+  </div>
 </main>`;
 }
 
