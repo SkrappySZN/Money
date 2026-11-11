@@ -657,6 +657,11 @@ td.dcell.is-empty input:disabled{color:transparent;-webkit-text-fill-color:trans
 .sheet-page td.dcell.is-met[data-show]::after{color:var(--positive)}
 .sheet-page td.dcell[data-show] input:not(:focus){color:transparent;-webkit-text-fill-color:transparent}
 .sheet-page td.dcell[data-show]:focus-within::after{opacity:0}
+/* A due date carries its progress ("Nov 20 · 3/4"), drawn over the field in
+   the typewriter face. The field set the column width but was narrower than
+   that label, so it ran into the next column. Size the due field to the
+   label: 12 typewriter characters plus the picker. */
+.sheet-page td.dcell:has(input[data-k$=":due"]) input.cell-date{width:calc(7.6em + 16px)}
 /* The skip note trails the account name, small and quiet unless it is a
    warning. */
 .sheet-page .skiptag{font-size:var(--text-1);color:var(--ink-muted);margin-left:var(--space-1);white-space:nowrap}
