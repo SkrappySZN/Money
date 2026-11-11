@@ -3381,6 +3381,10 @@ function fitSheet(){
   /* Fit the width only. Fitting the height too drove the type down to 11px
      on a 900px-tall window and still scrolled; the sheet reads better large,
      with every column across and the rows scrolling under the header. */
+  /* the page is exactly as tall as the window below the header, measured
+     rather than guessed, so the browser itself never scrolls */
+  const pg=t.closest('.sheet-page');
+  if(pg){const top=pg.getBoundingClientRect().top+window.scrollY;pg.style.height=Math.max(300,innerHeight-top-2)+'px'}
   /* Whole sheet on screen, no scrolling either way: the largest type at
      which every column fits across and every row through Total fits down.
      The header above it is kept to one slim line so the rows get the room. */
