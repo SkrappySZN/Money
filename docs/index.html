@@ -1529,7 +1529,15 @@ html[data-look="ledger"] .tabs .in-nav button{writing-mode:horizontal-tb;border-
 html[data-look="ledger"] .tabs .in-nav button:hover{color:var(--ink)}
 html[data-look="ledger"] .tabs .in-nav .ctl-primary{color:var(--accent-on);background:var(--accent);padding:6px 14px}
 html[data-look="ledger"] .tabs .in-nav .controls{gap:4px;flex-wrap:nowrap}
-html[data-look="ledger"] .shell .page.sheet-page{padding-top:10px;height:calc(100vh - 105px)}
+html[data-look="ledger"] .shell .page.sheet-page{padding-top:10px;height:calc(100vh - 107px)}
+/* the tab row carries the sheet controls too, so everything in it tightens
+   on this page to keep it one line */
+html[data-look="ledger"] .tabs:has(.in-nav){gap:18px;padding-right:20px}
+html[data-look="ledger"] .tabs:has(.in-nav) > button{font-size:14px}
+html[data-look="ledger"] .tabs .in-nav{gap:10px}
+html[data-look="ledger"] .tabs .in-nav button{padding:5px 6px;font-size:13px}
+html[data-look="ledger"] .tabs .in-nav .seg{gap:8px}
+html[data-look="ledger"] .sheet-page table.grid th,html[data-look="ledger"] .sheet-page table.grid td{padding-left:3px;padding-right:3px}
 
 /* ── Shell ────────────────────────────────────────────────────────
    Book tabs. The body is the passbook's cover; a slim strip across its
