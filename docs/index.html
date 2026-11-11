@@ -1516,6 +1516,21 @@ html[data-look="ledger"] .sheet-page .sheet-masthead .dateline{display:none}
 html[data-look="ledger"] .sheet-page .sheet-tally .t-value{font-size:16px}
 html[data-look="ledger"] .shell .page.sheet-page{padding:8px 20px 0}
 
+/* the Allocation controls, moved into the tab row */
+html[data-look="ledger"] .tabs .sheet-masthead.in-nav{margin:0 0 0 auto;padding:0;border:0;display:flex;align-items:center;gap:var(--space-3);
+  align-self:center;flex-wrap:nowrap}
+html[data-look="ledger"] .tabs .in-nav .dateline{display:none}
+html[data-look="ledger"] .tabs .in-nav .page-title{font-size:16px;line-height:1.2}
+html[data-look="ledger"] .tabs .in-nav:has(#weekPick) .page-title{display:none}
+html[data-look="ledger"] .tabs .in-nav > div:first-child:empty{display:none}
+html[data-look="ledger"] .tabs .in-nav .sheet-tally{margin-left:0;flex-direction:row;align-items:baseline;gap:8px}
+html[data-look="ledger"] .tabs .in-nav .sheet-tally .t-value{font-size:15px}
+html[data-look="ledger"] .tabs .in-nav button{writing-mode:horizontal-tb;border-bottom:0;padding:6px 8px;font-size:14px;color:var(--ink-muted)}
+html[data-look="ledger"] .tabs .in-nav button:hover{color:var(--ink)}
+html[data-look="ledger"] .tabs .in-nav .ctl-primary{color:var(--accent-on);background:var(--accent);padding:6px 14px}
+html[data-look="ledger"] .tabs .in-nav .controls{gap:4px;flex-wrap:nowrap}
+html[data-look="ledger"] .shell .page.sheet-page{padding-top:10px;height:calc(100vh - 105px)}
+
 /* ── Shell ────────────────────────────────────────────────────────
    Book tabs. The body is the passbook's cover; a slim strip across its
    top carries the brand, the week's numbers, sync and backup. The page
@@ -3316,7 +3331,12 @@ function renderInner(){
             plan:viewPlan,subs:viewSubs,history:viewHistory,accounts:viewAccounts}[UI.tab]||viewWeek;
   document.documentElement.dataset.look='ledger';
   if(CONVERTED.has(UI.tab)){
-    v.className=''; fn(v); fitSheet();
+    v.className=''; fn(v);
+    /* On Allocation the sheet's controls ride in the tab row, so the grid
+       starts right under it. Clicks are handled on the document, so moving
+       the header keeps every button working. */
+    if(UI.tab==='sheet'){const m=v.querySelector('.sheet-masthead'),nav=$('#nav');if(m&&nav){m.classList.add('in-nav');nav.appendChild(m)}}
+    fitSheet();
   }else{
     /* not restyled yet: render into the old shell, scoped so the old CSS applies */
     v.className='legacy';
