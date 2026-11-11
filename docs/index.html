@@ -1544,6 +1544,11 @@ html[data-look="ledger"] .tabs .in-nav button{padding:5px 6px;font-size:13px}
 html[data-look="ledger"] .tabs .in-nav .seg{gap:8px}
 html[data-look="ledger"] .sheet-page table.grid th,html[data-look="ledger"] .sheet-page table.grid td{padding-left:3px;padding-right:3px}
 
+/* Attack figures were drawn in the accent, which in the ledger look is the
+   oxblood button colour — dim red on dark, hard to read for red-green
+   colour blindness. They take brass, the ledger's "money to debt" colour. */
+html[data-look="ledger"] input.cell.is-attack:not(.is-zero){color:var(--brass);font-weight:700}
+
 /* ── Shell ────────────────────────────────────────────────────────
    Book tabs. The body is the passbook's cover; a slim strip across its
    top carries the brand, the week's numbers, sync and backup. The page
