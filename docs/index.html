@@ -1475,6 +1475,32 @@ html[data-look="ledger"] .legacy .card{border-radius:2px}
 .f-notes{margin:24px 0 0;padding-left:1.2em;color:var(--ink-muted);font-size:13px;max-width:80ch}
 .f-notes li{margin-bottom:4px}
 
+/* ── Accounts (ledger look) ───────────────────────────────────────── */
+.a-sec{margin-top:64px}
+.a-tbl td{padding:8px 20px 8px 0;font-size:15px}
+.a-tbl th{padding-right:20px}
+.a-tbl td:last-child,.a-tbl th:last-child{padding-right:0}
+.a-tbl tr:hover td{background:var(--rule-faint)}
+.a-tbl tr.a-grp:hover td{background:none}
+.a-grp td{padding:40px 0 12px;border-bottom:1px solid var(--rule-strong)}
+.a-tbl tbody tr.a-grp:first-child td{padding-top:20px}
+.a-gn{font-family:var(--font-display);font-size:22px;margin-right:8px}
+.a-name{width:100%;min-width:16ch;font-size:15px}
+.a-num{font-family:var(--font-figures);font-size:14px;text-align:right;width:9ch}
+.a-num::placeholder{color:var(--ink-absent)}
+.a-tbl .l-in[type=date]{font-size:13px}
+.a-sel{font:inherit;font-size:14px;color:var(--ink-secondary);background:none;border:0;border-bottom:1px dashed transparent;padding:0;cursor:pointer}
+.a-sel:hover{border-bottom-color:var(--rule-strong)}
+.a-sel:focus{outline:none;border-bottom:1px solid var(--brass,var(--attention));color:var(--ink)}
+.a-sel option{background:var(--paper-deep);color:var(--ink)}
+.a-grace{display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--ink-muted)}
+.a-grace.is-on{color:var(--sage,var(--positive))}
+.a-mv{white-space:nowrap;width:1%}
+.a-tbl tr.is-arch td{opacity:.45}
+.a-tbl tr.is-arch:hover td{opacity:1}
+.a-btns{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.a-reset{color:var(--ox,var(--negative))!important;margin-left:auto}
+
 /* ── Shell ────────────────────────────────────────────────────────
    Book tabs. The body is the passbook's cover; a slim strip across its
    top carries the brand, the week's numbers, sync and backup. The page
@@ -3246,7 +3272,7 @@ const TABS=[
 /* Hidden views keep their code and still render if reached, but have no place
    in the nav and no key. Keys number whatever is left, in order. */
 TABS.filter(t=>!t.hidden).forEach((t,i)=>t.k=String((i+1)%10));
-const CONVERTED=new Set(['week','sheet','calendar','attack','payoff','projections','plan','subs','reffing']);   // grows as each view lands
+const CONVERTED=new Set(['week','sheet','calendar','attack','payoff','projections','plan','subs','reffing','accounts']);   // grows as each view lands
 /* Replacing #view.innerHTML removes whatever input is focused, and if the user
    has typed in it the browser fires `change` at it SYNCHRONOUSLY, mid-render.
    Any handler that re-renders then re-enters us halfway through and the outer
@@ -5803,60 +5829,78 @@ const KIND_GROUP={income:'checking',cash:'buckets',savings:'savings',loan:'loans
 function viewAccounts(el){
   const showArch=!!UI.showArchived;
   const list=S.accounts.slice().sort((a,b)=>a.order-b.order).filter(a=>showArch||!a.archived);
+  const live=liveAccounts(),nKind=f=>live.filter(f).length,nArch=S.accounts.filter(a=>a.archived).length;
   /* Text fields with a decimal keyboard, not type=number. These commit and
      re-render on every keystroke, and a number input will not report or take
      back its caret position, so each redraw dropped the caret at the front:
      typing 450 over a selected value came out as 054. */
-  el.innerHTML=`
-  <div class="head"><div><h1>Accounts</h1>
-    <div class="sub">${liveAccounts().length} active · edit here and every week reflows around it</div></div>
-    <div class="spacer"></div>
-    <div style="display:flex;gap:8px">
-      <button class="btn sm ${showArch?'pri':''}" data-act="togglearch">${showArch?'Hide archived':'Show archived'}</button>
-      <button class="btn pri sm" data-act="addacct">+ Account</button>
+  /* Accounts, in the ledger look: one ruled table, a serif head for each
+     group, every setting a bare field that reads as text until touched. */
+  el.innerHTML=`<main class="page h-page">
+  <div class="h-top">
+    <div><h1 class="h-title">Accounts</h1>
+      <div class="h-d">${live.length} active · edit here and every week reflows around it</div></div>
+    <div class="h-act">
+      <button class="ctl" data-act="togglearch" aria-pressed="${showArch}">${showArch?'Hide archived':'Show archived'}</button>
+      <button class="ctl ctl-primary" data-act="addacct">+ Account</button>
     </div>
   </div>
-  <div class="card" style="padding:var(--sp-3) var(--sp-3) var(--sp-2)">
-    <div class="acct hd"><div>Name</div><div>Type</div><div class="hideS">Limit</div><div class="hideS">APR</div>
-      <div class="hideS">Min / month</div><div class="hideS">Weekly out</div>
-      <div class="hideS" title="What a sinking fund is saving toward. Reaching it is what frees the weekly amount.">Goal</div>
-      <div class="hideS" title="When the goal is needed by — for a bill that renews, the next renewal">Goal by</div>
-      <div class="hideS" title="No interest while the statement balance is paid in full">Grace</div><div></div></div>
+
+  <div class="h-strip is-4">
+    <div class="h-fig"><div class="h-cap">Cards</div><div class="h-v">${nKind(a=>a.kind==='card')}</div>
+      <div class="h-n">${nKind(a=>a.kind==='card'&&a.grace)} on grace</div></div>
+    <div class="h-fig"><div class="h-cap">Loans</div><div class="h-v">${nKind(a=>a.kind==='loan')}</div>
+      <div class="h-n">paid on their own schedules</div></div>
+    <div class="h-fig"><div class="h-cap">Buckets &amp; savings</div><div class="h-v">${nKind(a=>KIND_INFLOW(a.kind))}</div>
+      <div class="h-n">${nKind(a=>KIND_INFLOW(a.kind)&&a.target)} saving toward a goal</div></div>
+    <div class="h-fig"><div class="h-cap">Archived</div><div class="h-v${nArch?'':' is-dim'}">${nArch}</div>
+      <div class="h-n">history keeps them</div></div>
+  </div>
+
+  <section class="h-sec a-sec">
+    <table class="h-tbl a-tbl">
+      <thead><tr><th>Name</th><th>Type</th><th class="r">Limit</th><th class="r">APR %</th>
+        <th class="r">Min / month</th><th class="r">Weekly out</th>
+        <th class="r" title="What a sinking fund is saving toward. Reaching it is what frees the weekly amount.">Goal</th>
+        <th title="When the goal is needed by — for a bill that renews, the next renewal">Goal by</th>
+        <th title="No interest while the statement balance is paid in full">Grace</th><th></th></tr></thead>
+      <tbody>
     ${GROUPS.map(g=>{
       const rows=list.filter(a=>(a.group||KIND_GROUP[a.kind])===g.id);
       if(!rows.length)return'';
-      return`<div class="acct" style="border:none;padding-top:14px"><div class="cap">${g.label}</div></div>`+
-        rows.map(a=>`<div class="acct ${a.archived?'arch':''}">
-        <div style="display:flex;align-items:center;gap:8px;min-width:0">
-          <input type="text" data-a="${a.id}:name" value="${esc(a.name)}">
-        </div>
-        <div><select data-a="${a.id}:kind">${Object.keys(KIND_GROUP).map(kk=>
-          `<option value="${kk}" ${a.kind===kk?'selected':''}>${kk[0].toUpperCase()+kk.slice(1)}</option>`).join('')}</select></div>
-        <div class="hideS">${KIND_DEBT(a.kind)?`<input type="text" inputmode="decimal" data-a="${a.id}:limit" value="${n0(a.limit)||''}" placeholder="—">`:''}</div>
-        <div class="hideS">${KIND_DEBT(a.kind)?`<input type="text" inputmode="decimal" data-a="${a.id}:aprPct" value="${a.apr?r2(a.apr*100):''}" placeholder="—">`:''}</div>
-        <div class="hideS"><input type="text" inputmode="decimal" data-a="${a.id}:minAmt" value="${n0(a.minAmt)||''}" placeholder="—"></div>
-        <div class="hideS">${KIND_INFLOW(a.kind)?`<input type="text" inputmode="decimal" data-a="${a.id}:weeklyOutflow" value="${n0(a.weeklyOutflow)||''}" placeholder="0">`:''}</div>
-        <div class="hideS">${a.target?`<input type="text" inputmode="decimal" data-a="${a.id}:targetAmt" value="${n0(a.target.amount)||''}" placeholder="—" title="Goal for ${esc(a.name)}">`:''}</div>
-        <div class="hideS">${a.target?`<input type="date" data-a="${a.id}:targetBy" value="${a.target.by||''}" title="${a.target.every?`Renews every ${a.target.every} months — this is the next renewal`:'Needed by'}">`:''}</div>
-        <div class="hideS">${a.kind==='card'?`<label class="gracebox" title="No interest while the whole statement balance is paid by the due date. A partial payment ends it and the APR applies to everything, retroactively."><input type="checkbox" class="paidbox" data-grace="${a.id}"${a.grace?' checked':''}><span>${a.grace?'on':'off'}</span></label>`:''}</div>
-        <div style="display:flex;gap:4px;justify-content:flex-end">
-          <button class="btn sm ghost" data-move="${a.id}:-1" title="Move up">↑</button>
-          <button class="btn sm ghost" data-move="${a.id}:1" title="Move down">↓</button>
-          <button class="btn sm ghost" data-arch="${a.id}" title="${a.archived?'Restore':'Archive'}">${a.archived?'↺':'×'}</button>
-        </div></div>`).join('')}).join('')}
-  </div>
-  <div class="card">
-    <div class="cap">Data</div>
-    <p class="sub" style="margin:8px 0 14px;max-width:70ch">${SESSION?'Saved in this browser and synced to your account, so every device you sign in on sees the same ledger.'
+      return`<tr class="a-grp"><td colspan="10"><span class="a-gn">${g.label}</span> <span class="h-cap">${rows.length}</span></td></tr>`+
+        rows.map(a=>`<tr class="${a.archived?'is-arch':''}">
+        <td><input type="text" class="l-in a-name" data-a="${a.id}:name" value="${esc(a.name)}" aria-label="Name"></td>
+        <td><select class="a-sel" data-a="${a.id}:kind" aria-label="Type of ${esc(a.name)}">${Object.keys(KIND_GROUP).map(kk=>
+          `<option value="${kk}" ${a.kind===kk?'selected':''}>${kk[0].toUpperCase()+kk.slice(1)}</option>`).join('')}</select></td>
+        <td class="r">${KIND_DEBT(a.kind)?`<input type="text" class="l-in a-num" inputmode="decimal" data-a="${a.id}:limit" value="${n0(a.limit)||''}" placeholder="—" aria-label="Limit">`:''}</td>
+        <td class="r">${KIND_DEBT(a.kind)?`<input type="text" class="l-in a-num" inputmode="decimal" data-a="${a.id}:aprPct" value="${a.apr?r2(a.apr*100):''}" placeholder="—" aria-label="APR">`:''}</td>
+        <td class="r"><input type="text" class="l-in a-num" inputmode="decimal" data-a="${a.id}:minAmt" value="${n0(a.minAmt)||''}" placeholder="—" aria-label="Minimum per month"></td>
+        <td class="r">${KIND_INFLOW(a.kind)?`<input type="text" class="l-in a-num" inputmode="decimal" data-a="${a.id}:weeklyOutflow" value="${n0(a.weeklyOutflow)||''}" placeholder="0" aria-label="Weekly out">`:''}</td>
+        <td class="r">${a.target?`<input type="text" class="l-in a-num" inputmode="decimal" data-a="${a.id}:targetAmt" value="${n0(a.target.amount)||''}" placeholder="—" title="Goal for ${esc(a.name)}" aria-label="Goal">`:''}</td>
+        <td>${a.target?`<input type="date" class="l-in" data-a="${a.id}:targetBy" value="${a.target.by||''}" title="${a.target.every?`Renews every ${a.target.every} months — this is the next renewal`:'Needed by'}" aria-label="Goal by">`:''}</td>
+        <td>${a.kind==='card'?`<label class="a-grace${a.grace?' is-on':''}" title="No interest while the whole statement balance is paid by the due date. A partial payment ends it and the APR applies to everything, retroactively."><input type="checkbox" class="l-chk" data-grace="${a.id}"${a.grace?' checked':''}><span>${a.grace?'on':'off'}</span></label>`:''}</td>
+        <td class="r a-mv">
+          <button class="l-btn" data-move="${a.id}:-1" title="Move up" aria-label="Move ${esc(a.name)} up">↑</button><button class="l-btn" data-move="${a.id}:1" title="Move down" aria-label="Move ${esc(a.name)} down">↓</button><button class="l-btn${a.archived?'':' is-del'}" data-arch="${a.id}" title="${a.archived?'Restore':'Archive'}" aria-label="${a.archived?'Restore':'Archive'} ${esc(a.name)}">${a.archived?'↺':'×'}</button>
+        </td></tr>`).join('')}).join('')}
+      </tbody>
+    </table>
+    <div class="h-foot">↑ ↓ set the order rows appear in on every sheet. × archives an account — its history stays; Show archived brings it back to restore.</div>
+  </section>
+
+  <section class="h-sec a-data" aria-labelledby="data-h">
+    <h2 class="h-h2" id="data-h">Your data</h2>
+    <p class="h-lede">${SESSION?'Saved in this browser and synced to your account, so every device you sign in on sees the same ledger.'
       :'Saved in this browser only until you sign in — then it syncs to your account.'}
       An exported backup is still worth keeping now and then.</p>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn" data-act="export">Export backup</button>
-      <button class="btn" data-act="import">Import backup</button>
-      <button class="btn" data-act="csv">Export CSV</button>
-      <button class="btn ghost" data-act="reset" style="color:var(--bad)">Reset to imported sheet</button>
+    <div class="a-btns">
+      <button class="ctl" data-act="export">Export backup</button>
+      <button class="ctl" data-act="import">Import backup</button>
+      <button class="ctl" data-act="csv">Export CSV</button>
+      <button class="ctl a-reset" data-act="reset">Reset to imported sheet</button>
     </div>
-  </div>`;
+  </section>
+</main>`;
 }
 </script>
 <script>
