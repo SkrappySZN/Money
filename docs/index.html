@@ -6247,6 +6247,15 @@ function newWeek(){
     if(r.due&&!a.dueDay)a.dueDay=parseISO(r.due).getDate();
     e.close=rollDate(r.close,nk,a.closeDay);
     e.due=rollDate(r.due,nk,a.dueDay);
+    /* A card's Due is when its last statement is due. Once that statement is
+       taken care of — its minimum paid, or the card paid off — the date that
+       matters is the next statement's, a month on. It used to wait for the old
+       date to pass, so a card read the old due date a week after it was paid. */
+    if(a.kind==='card'&&r.due&&e.due===r.due&&r.close&&r.due>r.close){
+      const met=n0(r.minAmt)>0.005&&paidSinceClose(last,r)+0.005>=n0(r.minAmt);
+      const clear=n0(r.balance)>0.005&&n0(r.after)<=0.005;
+      if(met||clear)e.due=nextDue(r.due,a);
+    }
     entries[a.id]=e;
   }
   const applied=applyPlanToNewWeek(last,nk,C,entries);
