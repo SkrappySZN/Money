@@ -1379,6 +1379,9 @@ html[data-look="ledger"] .legacy .card{border-radius:2px}
 
 /* ── Calendar (ledger look) ───────────────────────────────────────── */
 .c-tbl td{vertical-align:baseline}
+.c-tbl th,.c-tbl td{padding-right:28px}
+.c-tbl th:last-child,.c-tbl td:last-child{padding-right:0}
+.h-strip + .h-sec{margin-top:64px}
 .c-meta{display:block;font-size:12px;color:var(--ink-muted);margin-top:3px;white-space:normal}
 .c-sk.is-yes{color:var(--sage,var(--positive))}
 .c-sk.is-short{color:var(--attention)}
@@ -1429,6 +1432,48 @@ html[data-look="ledger"] .legacy .card{border-radius:2px}
 .c-mk.is-note{border-radius:50%;background:var(--steel,var(--accent))}
 .c-mk.is-proj{border-radius:50%;border:1px solid var(--sage,var(--positive));width:5px;height:5px}
 .c-lp{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--brass,var(--attention))}
+
+/* ── Reffing (ledger look) ────────────────────────────────────────── */
+.f-games{margin-top:64px}
+.f-tbl td{padding:9px 24px 9px 0;font-size:15px}
+.f-tbl th{padding-right:24px}
+.f-tbl td:last-child,.f-tbl th:last-child{padding-right:0}
+.f-tbl .l-in{font-size:15px}
+.f-tbl .l-in[type=date]{font-size:14px}
+.f-tx{width:100%;min-width:10ch}
+.f-rate{font-family:var(--font-figures);font-size:14px!important;text-align:right;width:9ch}
+.f-tbl tr.is-owed .f-rate{color:var(--brass,var(--attention))}
+.f-mo td{padding:40px 0 12px;border-bottom:1px solid var(--rule-strong)}
+.f-tbl tbody tr.f-mo:first-child td{padding-top:20px}
+.f-mn{font-family:var(--font-display);font-size:22px;margin-right:6px}
+.f-mt{font-size:13px;color:var(--ink-muted)}
+.f-mt .h-num{color:var(--ink)}
+.f-owed{color:var(--brass,var(--attention))}
+.f-role{display:inline-flex;gap:12px}
+.f-role button{background:none;border:0;border-bottom:1px solid transparent;padding:0 0 1px;font:inherit;font-size:13px;color:var(--ink-absent);cursor:pointer}
+.f-role button:hover{color:var(--ink-secondary)}
+.f-role button[aria-pressed="true"]{color:var(--ink);border-bottom-color:var(--brass,var(--attention))}
+.f-role button:focus-visible{outline:none;color:var(--ink);border-bottom-color:var(--ink)}
+.f-pd label{display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:13px}
+.f-tbl tr.is-owed .f-pd{color:var(--brass,var(--attention))}
+.f-tbl tr.is-paid .f-pd{color:var(--sage,var(--positive))}
+.f-det{margin-top:64px;border-top:1px solid var(--rule-strong);padding-top:20px}
+.f-det summary{cursor:pointer;display:flex;align-items:baseline;gap:16px;list-style:none}
+.f-det summary::-webkit-details-marker{display:none}
+.f-det summary .h-h2{margin:0}
+.f-det summary::after{content:'+';margin-left:auto;color:var(--ink-muted);font-size:18px}
+.f-det[open] summary::after{content:'−'}
+.f-det[open] summary{margin-bottom:24px}
+.f-paste{width:100%;min-height:9rem;font:13px/1.5 var(--font-figures);color:var(--ink);background:var(--paper-deep);border:1px solid var(--rule);border-radius:0;padding:14px 16px;resize:vertical}
+.f-paste:focus{outline:none;border-color:var(--rule-strong)}
+.f-line{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px;margin-top:16px;font-size:14px;color:var(--ink-secondary)}
+.f-sel{font:inherit;color:var(--ink);background:none;border:0;border-bottom:1px solid var(--rule-strong);padding:0 2px}
+.f-rates{margin-top:28px;table-layout:fixed}
+.f-rates th:first-child{width:46%;color:var(--ink-secondary)}
+.f-rates td{white-space:normal}
+.f-note,.f-fee{color:var(--ink-muted);font-size:12px}
+.f-notes{margin:24px 0 0;padding-left:1.2em;color:var(--ink-muted);font-size:13px;max-width:80ch}
+.f-notes li{margin-bottom:4px}
 
 /* ── Shell ────────────────────────────────────────────────────────
    Book tabs. The body is the passbook's cover; a slim strip across its
@@ -4359,69 +4404,74 @@ function viewReffing(el){
   const owedElsewhere=r2(sum(games.filter(g=>!g.paid&&seasonOf(g.date)!==sy)));
   const months=[...new Set(inS.map(g=>g.date.slice(0,7)))];
   const i=seasons.indexOf(sy);
-  const row=g=>`<tr class="${g.paid?'':'is-owed'}">
-    <td><input class="rf" type="date" data-rf="${g.id}:date" value="${g.date}" aria-label="Date"></td>
-    <td><input class="rf" data-rf="${g.id}:rink" value="${esc(g.rink||'')}" list="refRinks" aria-label="Rink"></td>
-    <td><input class="rf" data-rf="${g.id}:level" value="${esc(g.level||'')}" list="refLevels" aria-label="Level"></td>
-    <td><span class="role-seg" role="group" aria-label="Role">${['ref','lines'].map(x=>`<button data-refrole="${g.id}:${x}" aria-pressed="${g.role===x}"
+  /* Reffing, in the ledger look: one ruled table of games under month
+     heads, every cell still editable in place. */
+  const row=g=>`<tr class="${g.paid?'is-paid':'is-owed'}">
+    <td><input class="l-in" type="date" data-rf="${g.id}:date" value="${g.date}" aria-label="Date"></td>
+    <td><input class="l-in f-tx" data-rf="${g.id}:rink" value="${esc(g.rink||'')}" list="refRinks" aria-label="Rink"></td>
+    <td><input class="l-in f-tx" data-rf="${g.id}:level" value="${esc(g.level||'')}" list="refLevels" aria-label="Level"></td>
+    <td><span class="f-role" role="group" aria-label="Role">${['ref','lines'].map(x=>`<button data-refrole="${g.id}:${x}" aria-pressed="${g.role===x}"
       title="${x==='ref'?'Referee':'Linesperson'}${g.div&&!g.rateManual?' — reprices from the rate sheet':''}">${x==='ref'?'Ref':'Lines'}</button>`).join('')}</span></td>
-    <td class="r"><input class="rf money" data-rf="${g.id}:rate" inputmode="decimal" value="${money(n0(g.rate))}" aria-label="Rate"></td>
-    <td class="pd"><label><input type="checkbox" class="paidbox" data-rf="${g.id}:paid" ${g.paid?'checked':''}>${g.paid?`paid${g.paidOn?' '+dueLabel(g.paidOn):''}`:'waiting'}</label></td>
-    <td class="r"><button class="del" data-refdel="${g.id}" title="Remove this game — ⌘Z undoes it" aria-label="Remove game">×</button></td></tr>`;
+    <td class="r"><input class="l-in f-rate" data-rf="${g.id}:rate" inputmode="decimal" value="${money(n0(g.rate))}" aria-label="Rate"></td>
+    <td class="f-pd"><label><input type="checkbox" class="l-chk" data-rf="${g.id}:paid" ${g.paid?'checked':''}><span>${g.paid?`paid${g.paidOn?' '+dueLabel(g.paidOn):''}`:'waiting'}</span></label></td>
+    <td class="r"><button class="l-btn is-del" data-refdel="${g.id}" title="Remove this game — ⌘Z undoes it" aria-label="Remove game">×</button></td></tr>`;
+  const waiting=inS.filter(g=>!g.paid).length;
 
-  el.innerHTML=`<main class="page">
-  <header class="masthead">
-    <div><h1 class="page-title">Reffing</h1>
-      <div class="dateline">${seasonLabel(sy)} season · Sep–Aug</div></div>
-    <div class="controls">
+  el.innerHTML=`<main class="page h-page">
+  <div class="h-top">
+    <div><h1 class="h-title">Reffing</h1>
+      <div class="h-d">${seasonLabel(sy)} season · September to August</div></div>
+    <div class="h-act">
       <button class="ctl" data-refseason="${seasons[i-1]??''}" aria-label="Previous season" ${i<=0?'disabled':''}>←</button>
       <button class="ctl" data-refseason="${seasons[i+1]??''}" aria-label="Next season" ${i>=seasons.length-1?'disabled':''}>→</button>
       <button class="ctl ctl-primary" data-act="addref">+ Game</button>
     </div>
-  </header>
-
-  <div class="strip">
-    <div class="metric"><div class="m-label">Earned</div><span class="m-value">${money(earned)}</span>
-      <div class="m-note">${inS.length} game${inS.length===1?'':'s'}</div></div>
-    <div class="metric"><div class="m-label">Received</div><span class="m-value">${money(received)}</span></div>
-    <div class="metric"><div class="m-label">Still owed</div>
-      <span class="m-value ${owed>0.005?'is-flagged':''}">${money(owed)}</span>
-      <div class="m-note">${inS.filter(g=>!g.paid).length} game${inS.filter(g=>!g.paid).length===1?'':'s'} waiting${owedElsewhere>0.005?` · ${money(owedElsewhere)} more from other seasons`:''}</div></div>
   </div>
 
-  <section class="band tight">
-    ${inS.length?`<div class="cmp-wrap"><table class="ref">
+  <div class="h-strip is-3">
+    <div class="h-fig"><div class="h-cap">Earned</div><div class="h-v">${money(earned)}</div>
+      <div class="h-n">${inS.length} game${inS.length===1?'':'s'} this season</div></div>
+    <div class="h-fig"><div class="h-cap">Received</div><div class="h-v${received>0.005?' is-sage':''}">${money(received)}</div>
+      <div class="h-n">${inS.length-waiting} game${inS.length-waiting===1?'':'s'} paid</div></div>
+    <div class="h-fig"><div class="h-cap">Still owed</div>
+      <div class="h-v${owed>0.005?' is-brass':' is-dim'}">${money(owed)}</div>
+      <div class="h-n">${waiting} game${waiting===1?'':'s'} waiting${owedElsewhere>0.005?` · <b>${money(owedElsewhere)}</b> more from other seasons`:''}</div></div>
+  </div>
+
+  <section class="h-sec f-games">
+    ${inS.length?`<table class="h-tbl f-tbl">
       <thead><tr><th>Date</th><th>Rink</th><th>Level</th><th>Role</th><th class="r">Rate</th><th>Payment</th><th></th></tr></thead>
       <tbody>${months.map(m=>{const g=inS.filter(x=>x.date.startsWith(m)),t=sum(g),o=r2(t-sum(g.filter(x=>x.paid)));
-        return `<tr class="mo"><td colspan="3"><span class="mn">${MONTH_NAMES[+m.slice(5,7)-1]}</span></td>
-          <td colspan="4" class="mt">Total <b>${money(t)}</b> · ${o>0.005?`<span class="owed">${money(o)} owed</span>`:'nothing owed'}</td></tr>`
-          +g.map(row).join('')}).join('')}</tbody></table></div>`
-      :`<p class="lede">No games in the ${seasonLabel(sy)} season yet. Add one with <b>+ Game</b>, or paste them in from the spreadsheet below.</p>`}
+        return `<tr class="f-mo"><td colspan="3"><span class="f-mn">${MONTH_NAMES[+m.slice(5,7)-1]}</span> <span class="h-cap">${m.slice(0,4)}</span></td>
+          <td colspan="4" class="r f-mt"><span class="h-num">${money(t)}</span> · ${o>0.005?`<span class="f-owed">${money(o)} owed</span>`:'nothing owed'}</td></tr>`
+          +g.map(row).join('')}).join('')}</tbody></table>`
+      :`<p class="h-empty">No games in the ${seasonLabel(sy)} season yet. Add one with <b>+ Game</b>, or paste them in below.</p>`}
     <datalist id="refRinks">${[...new Set(games.map(g=>g.rink).filter(Boolean))].map(x=>`<option value="${esc(x)}">`).join('')}</datalist>
     <datalist id="refLevels">${[...new Set(games.map(g=>g.level).filter(Boolean))].map(x=>`<option value="${esc(x)}">`).join('')}</datalist>
   </section>
 
-  <details class="ref-import">
-    <summary>Paste games from the portal or the spreadsheet</summary>
-    <textarea id="refPaste" placeholder="Paste the games table from the LAHOA portal (timetoscore), or rows from the old spreadsheet — date, rink, level, rate and the payment checkbox. Headings and blank rows are skipped, and a game already here is never added twice."></textarea>
-    <div class="row">Your name on the portal <input id="refMe" class="cell" style="width:16ch;text-align:left" value="${esc((S.reffing&&S.reffing.me)||'')}" placeholder="as it appears there"> — it decides referee or linesperson.</div>
-    <div class="row">Dates without a year belong to the
-      <select id="refPasteSeason">${Array.from({length:6},(_,j)=>seasonOf(today)-j).map(y=>`<option value="${y}" ${y===sy?'selected':''}>${seasonLabel(y)}</option>`).join('')}</select>
-      season <button class="ctl" data-act="refimport">Import</button></div>
+  <details class="f-det">
+    <summary><span class="h-h2">Paste games</span><span class="h-cap">from the portal or the spreadsheet</span></summary>
+    <textarea id="refPaste" class="f-paste" placeholder="Paste the games table from the LAHOA portal (timetoscore), or rows from the old spreadsheet — date, rink, level, rate and the payment checkbox. Headings and blank rows are skipped, and a game already here is never added twice."></textarea>
+    <div class="f-line">Your name on the portal <input id="refMe" class="l-in f-tx" style="width:16ch" value="${esc((S.reffing&&S.reffing.me)||'')}" placeholder="as it appears there"> — it decides referee or linesperson.</div>
+    <div class="f-line">Dates without a year belong to the
+      <select id="refPasteSeason" class="f-sel">${Array.from({length:6},(_,j)=>seasonOf(today)-j).map(y=>`<option value="${y}" ${y===sy?'selected':''}>${seasonLabel(y)}</option>`).join('')}</select>
+      season <button class="ctl ctl-primary" data-act="refimport">Import</button></div>
   </details>
 
-  ${(()=>{const R=refRates();const cell=(v,gi,ri,f)=>`<input class="rf money" data-rr="${gi}:${ri}:${f}" inputmode="decimal" value="${v==null?'':money(n0(v))}" placeholder="TBD" aria-label="${f}">`;
-    return `<details class="ref-import ref-rates">
-    <summary>Pay rates · ${esc(R.season)} · from ${esc(R.source)}</summary>
-    ${R.groups.map((g,gi)=>`<table class="ref"><thead><tr><th>${esc(g.name)}</th><th class="r">Referee</th><th class="r">Linesperson</th><th class="r">Single game fee</th></tr></thead>
-      <tbody>${g.rows.map((r,ri)=>`<tr><td>${esc(r.div)}${r.note?` <span class="wi-now">${esc(r.note)}</span>`:''}</td>
+  ${(()=>{const R=refRates();const cell=(v,gi,ri,f)=>`<input class="l-in f-rate" data-rr="${gi}:${ri}:${f}" inputmode="decimal" value="${v==null?'':money(n0(v))}" placeholder="TBD" aria-label="${f}">`;
+    return `<details class="f-det ref-rates">
+    <summary><span class="h-h2">Pay rates</span><span class="h-cap">${esc(R.season)} · from ${esc(R.source)}</span></summary>
+    ${R.groups.map((g,gi)=>`<table class="h-tbl f-tbl f-rates"><thead><tr><th>${esc(g.name)}</th><th class="r">Referee</th><th class="r">Linesperson</th><th class="r">Single game fee</th></tr></thead>
+      <tbody>${g.rows.map((r,ri)=>`<tr><td>${esc(r.div)}${r.note?` <span class="f-note">${esc(r.note)}</span>`:''}</td>
         <td class="r">${cell(r.ref,gi,ri,'ref')}</td><td class="r">${r.lines===null&&r.note?'—':cell(r.lines,gi,ri,'lines')}</td>
-        <td class="r wi-now">${r.noFee||!refFeeFor(rateKey(gi,ri))?'—':money(refFeeFor(rateKey(gi,ri)))}</td></tr>`).join('')}</tbody></table>`).join('')}
-    <ul class="ref-notes">${R.notes.map(n=>`<li>${esc(n)}</li>`).join('')}</ul>
-    <div class="row">Edit any rate when LAHOA changes it. <button class="ctl" data-act="refratesreset">Reset to LAHOA's ${esc(LAHOA_RATES.season)} rates</button></div>
+        <td class="r h-num f-fee">${r.noFee||!refFeeFor(rateKey(gi,ri))?'—':money(refFeeFor(rateKey(gi,ri)))}</td></tr>`).join('')}</tbody></table>`).join('')}
+    <ul class="f-notes">${R.notes.map(n=>`<li>${esc(n)}</li>`).join('')}</ul>
+    <div class="f-line">Edit any rate when LAHOA changes it. <button class="h-link" data-act="refratesreset">Reset to LAHOA's ${esc(LAHOA_RATES.season)} rates</button></div>
   </details>`})()}
 </main>`;
 }
+
 /* the rate a level paid last time — at this rink if it has been reffed here */
 function refRateFor(rink,level){
   const g=refGames().filter(x=>x.level===level).sort((a,b)=>b.date.localeCompare(a.date));
