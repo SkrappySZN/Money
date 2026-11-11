@@ -5400,10 +5400,12 @@ function viewCalendar(el){
 function viewPlan(el){
   const k=currentWeek(),C=computeWeek(k);
   const P=S.plan;
-  const today=thisWeek(),weekEnd=addWeeks(paydayOf(k),1);
+  /* the real date, not the week's start — overdue and "days ago" were a few days off */
+  const today=iso(new Date()),weekEnd=addWeeks(paydayOf(k),1);
   const cal=[...P.calendar].sort((a,b)=>a.d.localeCompare(b.d));
-  /* a reminder a week past its date has had its moment — it stays in the
-     dated list below to tick off, but stops shouting at the top */
+  /* a reminder a week past its date has had its moment — it stops shouting at
+     the top, and waits under Reminders in "Past, not ticked off" */
+  const past=cal.filter(c=>!c.done&&c.d<today);
   const overdue=cal.filter(c=>!c.done&&c.d<today&&c.d>=addDays(today,-7));
   const soon=cal.filter(c=>!c.done&&c.d>=today&&c.d<addDays(today,28));
   const later=cal.filter(c=>!c.done&&c.d>=addDays(today,28));
@@ -5494,6 +5496,7 @@ function viewPlan(el){
         <h2 class="h-h2" id="pcal-h">Reminders <span class="h-cap">on the Calendar</span></h2>
         ${soon.length?`<div class="h-cap h-sub">Next four weeks</div><div class="p-rows">${soon.map(calRow).join('')}</div>`:''}
         ${later.length?`<div class="h-cap h-sub">After that</div><div class="p-rows">${later.map(calRow).join('')}</div>`:''}
+        ${past.length?`<details class="p-past"><summary class="h-link">Past, not ticked off (${past.length}) — tick them or change the date</summary><div class="p-rows">${past.map(calRow).join('')}</div></details>`:''}
         ${done.length?`<details class="p-past"><summary class="h-link">Done (${done.length})</summary><div class="p-rows">${done.map(calRow).join('')}</div></details>`:''}
         ${cal.length?'':'<p class="h-empty">Nothing on the calendar.</p>'}
       </section>
