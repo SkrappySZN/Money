@@ -2369,8 +2369,16 @@ function runChecks(k,rows,T){
       out.push({s:'bad',t:`<b>${esc(r.a.name)} is ${money(short)} short</b> of its ${money(r.minAmt)} minimum and due ${dueLabel(r.due)} — before this paycheck lands ${dueLabel(pay)}, so it has to come from money already in the bank.`});
     else if(r.due&&r.due<nextPay)
       out.push({s:'bad',t:`<b>${esc(r.a.name)} is ${money(short)} short</b> of its ${money(r.minAmt)} minimum and due ${dueLabel(r.due)} — this is the last paycheck before it.`});
-    else
-      out.push({s:'warn',t:`${esc(r.a.name)} needs ${money(short)} more before ${r.due?dueLabel(r.due):'its due date'} to clear the ${money(r.minAmt)} minimum.`});
+    else{
+      /* a loan paid weekly is fine when the paydays left before it is due
+         cover what is short — that is the plan working, not a problem */
+      let left=0;if(r.a.kind==='loan'&&r.due)for(let d=nextPay;d<=r.due;d=addWeeks(d,1))left++;
+      const per=r.a.kind==='loan'?weeklyOf(r):0;
+      if(per>0.005&&left*per+0.05>=short)
+        out.push({s:'ok',t:`${esc(r.a.name)} is on track — ${money(short)} left on the ${money(r.minAmt)} minimum, covered by ${left} more weekly payment${left===1?'':'s'} before ${dueLabel(r.due)}.`});
+      else
+        out.push({s:'warn',t:`${esc(r.a.name)} needs ${money(short)} more before ${r.due?dueLabel(r.due):'its due date'} to clear the ${money(r.minAmt)} minimum.`});
+    }
   }
   /* The shortfall loop above skips anything with no minimum recorded, so a
      card sitting at $0 produces no check at all — silence exactly where the
@@ -2414,12 +2422,17 @@ function runChecks(k,rows,T){
   }
   /* grace cards: free to carry, ruinous to underpay */
   for(const r of rows.filter(x=>x.inGrace)){
-    if(r.total>0.005&&r.total+0.005<r.balance)
-      out.push({s:'bad',t:`<b>${esc(r.a.name)} is being paid ${money(r.total)} against a ${money(r.balance)} balance.</b> A partial payment ends grace and ${pct(n0(r.a.apr),2)} applies to the whole balance retroactively — pay it in full or leave it alone.`});
-    else if(r.total+0.005>=r.balance)
-      out.push({s:'ok',t:`${esc(r.a.name)} paid in full at ${money(r.balance)} — grace intact, ${money(0)} of interest.`});
+    /* Grace only needs the STATEMENT balance paid by its due date. The sheet
+       knows the whole balance, not the statement, and charges made since the
+       last close belong to the next statement — so paying part of the balance
+       is not by itself a problem. Say what has to happen instead of alarming. */
+    const by=r.a.graceDue?dueLabel(r.a.graceDue):(r.due?dueLabel(r.due):'the due date');
+    if(r.total+0.005>=r.balance)
+      out.push({s:'ok',t:`${esc(r.a.name)} paid in full at ${money(r.balance)} — no interest.`});
+    else if(r.total>0.005)
+      out.push({s:'warn',t:`<b>${esc(r.a.name)}: paying ${money(r.total)} of ${money(r.balance)}.</b> To stay interest-free, the statement balance has to be paid in full by ${by}. Charges since the statement closed can wait for the next one.`});
     else
-      out.push({s:'warn',t:`<b>${esc(r.a.name)}: ${money(r.balance)} due in full by ${r.a.graceDue?dueLabel(r.a.graceDue):(r.due?dueLabel(r.due):'the due date')}.</b> In grace, so it costs nothing to carry — but it has to go all at once.`});
+      out.push({s:'warn',t:`<b>${esc(r.a.name)}: ${money(r.balance)} on the card.</b> Interest-free as long as each statement is paid in full by its due date (${by}) — pay the statement amount, not just part of it.`});
   }
   /* sinking funds against their target date */
   for(const r of rows.filter(x=>x.a.target&&!x.isRollup)){
@@ -3695,7 +3708,7 @@ function viewAttack(el){
      oxblood margin rule and the collapsed "going well" list are the one
      implementation rather than a second set that drifts. */
   const notes=[];
-  for(const g of grace)notes.push({s:'warn',t:`<b>${esc(g.name)} is in grace — do not attack it.</b> ${money(g.balance)} due in full by ${g.graceDue?dueLabel(g.graceDue):'the due date'}. It costs ${money(0)} to carry, but a partial payment ends grace and ${pct(g.nominalApr,2)} applies to the whole balance.`});
+  for(const g of grace)notes.push({s:'warn',t:`<b>${esc(g.name)} is interest-free — no need to attack it.</b> ${money(g.balance)} on the card. Pay each statement in full by its due date${g.graceDue?` (${dueLabel(g.graceDue)})`:''} and it costs ${money(0)}; leave part of a statement unpaid and ${pct(g.nominalApr,2)} interest starts.`});
   if(T.attack<=0)notes.push({s:'warn',t:`No attack money assigned this week. Minimums alone leave <b>${money(T.weekInterest)}</b> of interest on the table over the next 7 days.`});
   else if(onTarget)notes.push({s:'ok',t:`This week's <b>${money(T.attack)}</b> is already going to ${esc(top.name)}.`});
   else notes.push({s:'warn',t:`This week's attack is on <b>${attackRows.map(r=>esc(r.a.name)).join(', ')||'nothing'}</b>. ${esc(top.name)} is what your ${strat==='custom'?'order':strat} says.`});
@@ -4389,6 +4402,18 @@ function retireBand(k,C){
   </section>`;
 }
 const sheetSimOpts=(k,budget,strategy,funds)=>({...simOpts(k,budget,strategy),sheetFirst:true,funds:funds||sheetFunds(k),lumps:sheetLumps(k)});
+/* The Projections run with nothing switched on in What if — the plan as it
+   stands. Other pages (the Calendar's projected payoff dates) read it so a
+   date shown anywhere is the same date Projections shows. */
+function baseProjection(k){
+  const C=computeWeek(k),TW=C&&typicalWeek(k);if(!TW)return null;
+  const debts=sheetDebts(k).map(d=>({...d,sched:TW.debtSched[d.id]||[]}));if(!debts.length)return null;
+  const steps=stepsFor(k).filter(st=>{const tr=st.trigger||{};return tr.type!=='target'||!TW.changed.has(tr.acct)})
+    .map(st=>{const tr=st.trigger||{};return tr.type==='target'&&tr.acct in TW.weekly?{...st,weekly:TW.weekly[tr.acct]}:st})
+    .filter(st=>(st.trigger||{}).type!=='target'||n0(st.weekly)>0.005);
+  return simulate(debts,{...sheetSimOpts(k,TW.budget,UI.strategy),firstBudget:n0(C.totals.debtFunded),steps,
+    lumps:[...sheetLumps(k),...TW.moves],raises:TW.raises});
+}
 
 function viewProjections(el){
   const k=currentWeek(),C=computeWeek(k),T=C.totals;
@@ -4464,7 +4489,9 @@ function viewProjections(el){
       if(f.week===w&&(f.trigger||{}).type!=='payoff')here.push({what:f.label,gain:n0(f.weekly)});
     for(const r of raises)if(r.from===w)here.push({what:r.sale?`${r.label} — the rest joins attack`:r.label,gain:r.weekly});
     /* a debt's weekly starting or changing on its date moves attack the other way */
-    for(const d of sim.debts)for(const x of d.sched||[])
+    /* an interest-free card is paid in full by the projection anyway, so a
+       scheduled amount on one moves nothing worth listing */
+    for(const d of sim.debts)if(!d.grace)for(const x of d.sched||[])
       if(x.w===w&&w>=1&&(d.paidOff==null||d.paidOff>w)){const ch=r2(x.weekly-minAt(d,w-1));
         if(Math.abs(ch)>0.005)here.push({what:x.label,gain:-ch,debt:true})}
     const stepGain=here.filter(e=>!e.debt).reduce((t,e)=>t+e.gain,0);
@@ -4477,7 +4504,7 @@ function viewProjections(el){
     /* a debt clearing in week 1 was paid off by the sheet itself — it is part
        of the starting point, not something that happens later */
     for(const d of sim.debts)
-      if(w>1&&d.paidOff===w&&n0(minAt(d,w-1))>0.005)here.push({what:`${d.name} paid off — its minimum joins attack`,gain:n0(minAt(d,w-1))});
+      if(w>1&&!d.grace&&d.paidOff===w&&n0(minAt(d,w-1))>0.005)here.push({what:`${d.name} paid off — its minimum joins attack`,gain:n0(minAt(d,w-1))});
     for(const l of lumps)if(l.w===w)here.unshift({what:l.to?l.label:`${l.label} — ${money(l.amount)} to ${l.cards?'cards':'debt'}, once`,gain:l.amount,once:true});
     if(here.length)events.push({w,here,after:attackAt(w)});
   }
@@ -4493,7 +4520,7 @@ function viewProjections(el){
   el.innerHTML=`<main class="page">
   <header class="masthead">
     <div><h1 class="page-title">Projections</h1>
-      <div class="dateline">From the ${weekLabel(k)} sheet · best case</div></div>
+      <div class="dateline">From the ${weekLabel(k)} sheet · assumes nothing new goes on the cards</div></div>
     <div class="controls">${stratSeg(UI.strategy)}</div>
   </header>
 
@@ -4566,14 +4593,11 @@ function viewProjections(el){
 
   <section class="band" aria-labelledby="pt-h">
     <h2 class="sect-label" id="pt-h">All loans and cards</h2>
-    <p class="lede muted">The first week is this sheet exactly as entered — a payment it skips stays skipped.
-      After that every week is a typical one, paid your usual ${money(TW.pay)} — the middle of your last
-      ${USUAL_PAY_WEEKS} paychecks, so one big week is not repeated forever. Each bucket, savings row and the 401k gets what this sheet gives it,
-      every loan gets its weekly payment, card minimums come from the card-minimum bucket, and the rest of the
-      paycheck is attack, moving down the order as each debt clears. Nothing new is charged. The changes listed on
-      Plan move those amounts from their dates, and a fund that renews takes its weekly back while it refills.
-      It updates whenever the sheet does.${refN?` Includes <b>${money(refOwed)}</b> of reffing
-      pay still owed for ${refN} game${refN===1?'':'s'}, going to the cards two weeks after each game.`:''}</p>
+    <p class="lede muted">Starts from this sheet exactly as entered. Every week after it uses your usual
+      ${money(TW.pay)} paycheck (the middle of your last ${USUAL_PAY_WEEKS}), gives each bucket and savings row what
+      this sheet does, pays each loan its weekly amount, and sends the rest to debt in the order you picked above.
+      Changes on the Plan page kick in on their dates.${refN?` Includes <b>${money(refOwed)}</b> of reffing pay
+      still owed for ${refN} game${refN===1?'':'s'}, going to the cards two weeks after each game.`:''}</p>
     <div class="chart" id="projTotal"></div>
   </section>
 
@@ -4772,6 +4796,14 @@ function viewCalendar(el){
       put(c.d,{rank:2,cls:'ev-note'+(c.d<today?' is-done':''),name:t,amt:0,title:t+(c.n?` — ${c.n}`:'')});
   }
 
+  /* Each debt's projected payoff, read live from Projections — a date typed
+     into a reminder goes stale the first week the plan moves. */
+  {const pk=currentWeek(),sim=baseProjection(pk);
+    if(sim)for(const d of sim.debts){if(d.paidOff==null||d.paidOff<=1||d.grace)continue;
+      const on=addWeeks(pk,d.paidOff);
+      put(on,{rank:2,cls:'ev-note ev-proj',name:`${d.name} projected paid off`,amt:0,
+        title:`${d.name} projected paid off ${longDate(on)} — from Projections (${({avalanche:'avalanche',snowball:'snowball',custom:'your order'})[UI.strategy]||UI.strategy}). Moves as the sheets do.`})}}
+
   const inMonth=d=>d>=first&&d<=last;
   const paydays=[];for(let k=weekStartOf(parseISO(first));k<=last;k=addWeeks(k,1))if(inMonth(k))paydays.push(k);
   const dueSum=r2(Object.entries(byDay).filter(([d])=>inMonth(d))
@@ -4868,7 +4900,9 @@ function viewPlan(el){
   const P=S.plan;
   const today=thisWeek(),weekEnd=addWeeks(paydayOf(k),1);
   const cal=[...P.calendar].sort((a,b)=>a.d.localeCompare(b.d));
-  const overdue=cal.filter(c=>!c.done&&c.d<today);
+  /* a reminder a week past its date has had its moment — it stays in the
+     dated list below to tick off, but stops shouting at the top */
+  const overdue=cal.filter(c=>!c.done&&c.d<today&&c.d>=addDays(today,-7));
   const soon=cal.filter(c=>!c.done&&c.d>=today&&c.d<addDays(today,28));
   const later=cal.filter(c=>!c.done&&c.d>=addDays(today,28));
   const done=cal.filter(c=>c.done);
@@ -4895,7 +4929,7 @@ function viewPlan(el){
   el.innerHTML=`<main class="page">
   <header class="masthead">
     <div><h1 class="page-title">Plan</h1>
-      ${P.source?`<div class="dateline">${esc(P.source)}</div>`:''}</div>
+      <div class="dateline">Reminders, upcoming changes and payoff order</div></div>
     <div class="controls">
       <button class="ctl" data-act="addcal">+ Date</button>
       <button class="ctl" data-act="addopen">+ Open item</button>
@@ -4912,17 +4946,21 @@ function viewPlan(el){
   <section class="band${nowRows.length?'':' tight'}" aria-labelledby="chg-h">
     <h2 class="sect-label" id="chg-h">Upcoming changes<span class="count">what Projections plans around</span>
       <button class="ctl sect-action" data-act="addchg">+ Change</button></h2>
-    <p class="lede muted">Projections runs every week after this sheet as a typical one. These move it on their date.
-      A change already reached is on the sheet itself, so it only matters for a debt, whose weekly is not read off the sheet.</p>
-    ${chg.length?`<ul class="plan-list dated chg-list">${chg.map(c=>{const a=acct(c.acct),past=c.from<=k;
+    <p class="lede muted">A row's weekly amount changing on a set date. Each new sheet picks it up on that date,
+      and Projections plans around it.</p>
+    ${(()=>{const row=c=>{const a=acct(c.acct),past=c.from<=k;
       return `<li class="${past?'is-past':''}">
       <span><button class="chg-del" data-chgdel="${c.id}" aria-label="Remove ${esc(c.label)}" title="Remove">×</button></span>
       <span class="pd"><input type="date" data-chg="${c.id}:from" value="${c.from}" aria-label="Sheet it starts on"></span>
       <span><div class="pt"><input class="chg-in" data-chg="${c.id}:label" value="${esc(c.label)}" aria-label="What changes"></div>
         <div class="pn">${a?esc(a.name):'missing account'} — ${c.type==='move'
           ?`$<input class="chg-in" inputmode="decimal" data-chg="${c.id}:amount" value="${n0(c.amount).toFixed(2)}" aria-label="Amount"> moved onto it from savings, once`
-          :`$<input class="chg-in" inputmode="decimal" data-chg="${c.id}:weekly" value="${n0(c.weekly).toFixed(2)}" aria-label="Weekly amount">/wk from the ${weekLabel(c.from)} sheet`}${past?' · reached':''}</div></span></li>`}).join('')}</ul>`
-      :'<p class="lede muted">None — every week after this one looks like this sheet.</p>'}
+          :`$<input class="chg-in" inputmode="decimal" data-chg="${c.id}:weekly" value="${n0(c.weekly).toFixed(2)}" aria-label="Weekly amount">/wk from the ${weekLabel(c.from)} sheet`}${past?' · reached':''}</div></span></li>`};
+      const ahead=chg.filter(c=>c.from>k),gone=chg.filter(c=>c.from<=k);
+      return (ahead.length?`<ul class="plan-list dated chg-list">${ahead.map(row).join('')}</ul>`
+        :'<p class="lede muted">Nothing coming up — every week after this one looks like this sheet.</p>')
+        +(gone.length?`<details class="chg-past"><summary class="lede muted">Already reached (${gone.length}) — on the sheets now</summary>
+          <ul class="plan-list dated chg-list">${gone.map(row).join('')}</ul></details>`:'');})()}
   </section>
 
   <section class="band" aria-labelledby="subs-h">
