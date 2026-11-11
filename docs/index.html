@@ -1229,6 +1229,27 @@ html[data-look="ledger"] input,html[data-look="ledger"] select,html[data-look="l
 .h-use i{position:absolute;left:0;top:0;bottom:0}
 .h-foot{margin-top:10px;font-size:12px;color:var(--ink-absent)}
 
+/* ── Roadmap (ledger look) ────────────────────────────────────────── */
+.r-ms{border-top:1px solid var(--rule-strong)}
+.r-row{display:grid;grid-template-columns:96px 1fr 160px;gap:28px;padding:22px 0;border-bottom:1px solid var(--rule);align-items:baseline}
+.r-when{font-family:var(--font-figures);font-size:14px;color:var(--ink-muted);line-height:1.35}
+.r-when b{display:block;color:var(--ink);font-size:17px;font-weight:400}
+.r-t{font-family:var(--font-display);font-size:19px}
+.r-tag{font-family:var(--font-sans);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--positive);margin-right:10px;vertical-align:3px}
+.r-w{color:var(--ink-muted);font-size:14px;margin-top:4px}
+.r-x{text-align:right}
+.r-amt{font-family:var(--font-figures);font-size:20px}
+.r-amt small{font-size:12px;color:var(--ink-muted)}
+.r-dl{font-family:var(--font-figures);font-size:12px;margin-top:2px}
+.r-dl.is-up{color:var(--positive)}.r-dl.is-down{color:var(--attention)}
+.r-to{font-size:12px;color:var(--ink-muted);margin-top:2px}
+.r-row.is-free{border-top:2px solid var(--ox,var(--negative));border-bottom:0}
+.r-row.is-free .r-t{font-size:34px;color:var(--ox,var(--negative))}
+.r-right{position:sticky;top:24px}
+.r-details{margin:-24px 0 64px}
+.r-details summary{display:inline-block;margin-bottom:24px;font-size:14px}
+.r-extras .band{padding-top:0}
+
 /* ── Shell ────────────────────────────────────────────────────────
    Book tabs. The body is the passbook's cover; a slim strip across its
    top carries the brand, the week's numbers, sync and backup. The page
@@ -4684,33 +4705,67 @@ function viewProjections(el){
   const evW=new Set(events.map(e=>e.w).filter(w=>w<span));
   const idx=[...Array(span).keys()].filter(i=>i%step===0||i===span-1||evW.has(i));
 
-  el.innerHTML=`<main class="page">
-  <header class="masthead">
-    <div><h1 class="page-title">Projections</h1>
-      <div class="dateline">From the ${weekLabel(k)} sheet · assumes nothing new goes on the cards</div></div>
-    <div class="controls">${stratSeg(UI.strategy)}</div>
-  </header>
+  /* Roadmap, in the ledger look. The milestones are the same events the old
+     table listed, with the fund wobbles (a renewing fund refilling or taking
+     its weekly back) left out — they net out and read as noise. */
+  const NOISE=/is refilled — its weekly returns|renews — its weekly goes back/;
+  const target=w=>{const o=sim.debts.filter(d=>!d.grace&&(d.paidOff==null||d.paidOff>w)).sort((a,b)=>(a.paidOff??1e9)-(b.paidOff??1e9))[0];return o?o.name:''};
+  const stratName={avalanche:'highest rate first',snowball:'smallest balance first',custom:'your payoff order'}[UI.strategy]||UI.strategy;
+  const ms=[];let prevX=attackAt(1);
+  ms.push({d:when(1),t:'Where it starts',w:'',x:prevX,to:target(1)});
+  for(const e of events){
+    const items=e.here.filter(x=>!NOISE.test(x.what));if(!items.length)continue;
+    const paid=items.filter(x=>/ paid off — /.test(x.what)).map(x=>x.what.split(' paid off')[0]);
+    const rest=items.filter(x=>!/ paid off — /.test(x.what));
+    const x=e.after,dl=r2(x-prevX);prevX=x;
+    ms.push({d:when(e.w),paid:paid.length?paid.join(' and '):null,
+      t:paid.length?paid.join(' and '):rest[0].what.replace(/ — .*$/,''),
+      w:(paid.length?rest:rest.slice(1)).map(r=>r.once?`${r.what.replace(/ — .*$/,'')}: +${money(r.gain)} once`:r.what.replace(/ — .*$/,'')).join(' · '),
+      x,dl,to:target(e.w)});
+  }
+  const owedNow=r2(debts.reduce((t,d)=>t+n0(d.balance),0));
+  const mdy=d=>{const x=parseISO(d);return{md:dueLabel(d),y:x.getFullYear()}};
 
-  <div class="strip">
-    <div class="metric"><div class="m-label">Debt free</div>
-      <span class="m-value">${never?'Not at this rate':longDate(sim.debtFreeDate)}</span>
-      <div class="m-note">${never?`${money(budget)}/wk can't outrun the interest`:monthsLabel(weeksToMonths(sim.weeks))+' from this sheet'}</div></div>
-    <div class="metric"><div class="m-label">To debt each week</div>
-      <span class="m-value">${money(budget)}</span>
-      <div class="m-note">in a typical week, on a ${money(TW.pay)} paycheck${Math.abs(firstBudget-budget)>0.005?` · this sheet sends ${money(firstBudget)}`:''}${sim.endBudget>budget+0.005?` · ${money(sim.endBudget)} once the changes land`:''}</div></div>
-    <div class="metric"><div class="m-label">Interest along the way</div>
-      <span class="m-value">${never?'—':money0(sim.totalInterest)}</span></div>
+  el.innerHTML=`<main class="page h-page r-page">
+  <div class="h-dateline">
+    <div class="h-d">From the ${weekLabel(k)} sheet, ${stratName} — assumes nothing new goes on the cards</div>
+    <div class="h-act">${stratSeg(UI.strategy)}</div>
   </div>
 
-  ${events.length?`<section class="band" aria-labelledby="nu-h">
-    <h2 class="sect-label" id="nu-h">Coming up${events.length>NEXT_UP?`<span class="count">next ${NEXT_UP} of ${events.length} · all of them under the chart</span>`:''}</h2>
-    <ol class="next-up">${events.slice(0,NEXT_UP).map(e=>{const d=when(e.w),n=Math.max(0,Math.round(daysBetween(iso(new Date()),d)/7));
-      return `<li><div class="nu-when"><span class="nu-n">${e.n}</span>${dayYear(d)}
-          <span class="nu-in">${n===0?'this week':n===1?'in 1 week':`in ${n} weeks`}</span></div>
-        <ul class="nu-what">${e.here.map(x=>`<li>${esc(x.what)} <span class="${x.gain<0?'down':'up'}">${x.gain<0?'−':'+'}${money(Math.abs(x.gain))}${x.once?' once':'/wk'}</span></li>`).join('')}</ul>
-        <div class="nu-after">Attack then <b>${money(e.after)}</b>/wk</div></li>`}).join('')}</ol>
-  </section>`:''}
+  <div class="h-strip">
+    <div class="h-fig"><div class="h-cap">Debt free</div><div class="h-v">${never?'Not at this rate':longDate(sim.debtFreeDate)}</div>
+      <div class="h-n">${never?`${money(budget)}/wk can't outrun the interest`:monthsLabel(weeksToMonths(sim.weeks))+' from this sheet'}</div></div>
+    <div class="h-fig"><div class="h-cap">Owed today</div><div class="h-v">${money0(owedNow)}</div>
+      <div class="h-n">${debts.length} cards &amp; loans</div></div>
+    <div class="h-fig"><div class="h-cap">Extra to debt now</div><div class="h-v is-brass">${money0(attackAt(1))}</div>
+      <div class="h-n">beyond minimums · <b>${money0(budget)}</b>/wk to debt in all</div></div>
+    <div class="h-fig"><div class="h-cap">Interest still ahead</div><div class="h-v">${never?'—':money0(sim.totalInterest)}</div>
+      <div class="h-n">if every week goes to plan${refN?` · includes ${money0(refOwed)} reffing pay owed`:''}</div></div>
+  </div>
 
+  <div class="h-cols">
+    <div>
+      <section class="h-sec">
+        <h2 class="h-h2">How it plays out</h2>
+        <p class="h-lede">Each line is a week your extra-to-debt changes. The figure on the right is what goes beyond minimums from then on, and where it's aimed.</p>
+        <div class="r-ms">${ms.map(m=>{const D=mdy(m.d);return `<div class="r-row${m.paid?' is-paid':''}">
+          <div class="r-when"><b>${D.md}</b>${D.y}</div>
+          <div><div class="r-t">${m.paid?'<span class="r-tag">Paid off</span>':''}${esc(m.t)}</div>${m.w?`<div class="r-w">${esc(m.w)}</div>`:''}</div>
+          <div class="r-x"><div class="r-amt">${money0(m.x)}<small> /wk</small></div>
+            ${m.dl&&Math.abs(m.dl)>=1?`<div class="r-dl ${m.dl>0?'is-up':'is-down'}">${m.dl>0?'+':'−'}${money0(Math.abs(m.dl))}</div>`:''}
+            ${m.to?`<div class="r-to">→ ${esc(m.to)}</div>`:''}</div></div>`}).join('')}
+          ${never?'':`<div class="r-row is-free"><div class="r-when"><b>${mdy(sim.debtFreeDate).md}</b>${mdy(sim.debtFreeDate).y}</div>
+            <div><div class="r-t">Debt free</div><div class="r-w">${money0(sim.totalInterest)} of interest paid getting here.</div></div><div></div></div>`}
+        </div>
+        <div class="h-foot">Left out: savings funds pausing and refilling around a renewal — they even out.</div>
+      </section>
+
+      <section class="h-sec">
+        <h2 class="h-h2">Total owed</h2>
+        <div class="chart" id="projTotal"></div>
+      </section>
+
+      <section class="h-sec r-extras">
   <section class="band tight whatif" aria-labelledby="wi-h">
     <h2 class="sect-label" id="wi-h">What if</h2>
     <div class="wi-row">
@@ -4758,16 +4813,9 @@ function viewProjections(el){
 
   ${retireBand(k,C)}
 
-  <section class="band" aria-labelledby="pt-h">
-    <h2 class="sect-label" id="pt-h">All loans and cards</h2>
-    <p class="lede muted">Starts from this sheet exactly as entered. Every week after it uses your usual
-      ${money(TW.pay)} paycheck (the middle of your last ${USUAL_PAY_WEEKS}), gives each bucket and savings row what
-      this sheet does, pays each loan its weekly amount, and sends the rest to debt in the order you picked above.
-      Changes on the Plan page kick in on their dates.${refN?` Includes <b>${money(refOwed)}</b> of reffing pay
-      still owed for ${refN} game${refN===1?'':'s'}, going to the cards two weeks after each game.`:''}</p>
-    <div class="chart" id="projTotal"></div>
-  </section>
+      </section>
 
+      <details class="r-details"><summary class="h-link">Every change, week by week, and each account's own chart</summary>
   ${events.length?`<section class="band" aria-labelledby="pe-h">
     <h2 class="sect-label" id="pe-h">When attack money frees up</h2>
     <p class="lede muted">Attack is what is left each week after every open debt gets its minimum. Numbers match the marks on the chart above.</p>
@@ -4792,6 +4840,23 @@ function viewProjections(el){
       <div class="proj-meta">${money(debts.find(x=>x.id===d.id).balance)} now · ${money0(d.interest)} interest</div>
       <div class="chart" id="projA${i}"></div></div>`).join('')}</div>
   </section>
+      </details>
+    </div>
+
+    <div class="r-right">
+      <section class="h-sec">
+        <h2 class="h-h2">Payoff order</h2>
+        <table class="h-tbl"><thead><tr><th></th><th>Debt</th><th class="r">Owed</th><th class="r">Rate</th><th class="r">Clears</th></tr></thead><tbody>
+        ${accts.map((d,j)=>{const b=n0((debts.find(x=>x.id===d.id)||{}).balance),lim=(acct(d.id)||{}).limit,u=lim?b/lim:0;
+          return `<tr class="${j===0&&!d.grace?'is-now':''}"><td class="h-ix">${d.grace?'—':String(j+1).padStart(2,'0')}</td>
+          <td>${esc(d.name)}${(acct(d.id)||{}).kind==='card'&&u>0.5?`<span class="h-use"><i style="width:${Math.min(100,u*100)}%;background:${u>0.95?'var(--ox,var(--negative))':'var(--brass,var(--attention))'}"></i></span>`:''}</td>
+          <td class="r h-num">${money0(b)}</td><td class="r h-num">${d.grace?'0%':pct(n0((acct(d.id)||{}).apr),2)}</td>
+          <td class="r">${d.paidOff==null?'—':(()=>{const D=mdy(when(d.paidOff));return D.md+(D.y!==new Date().getFullYear()?` ’${String(D.y).slice(2)}`:'')})()}</td></tr>`}).join('')}
+        </tbody></table>
+        <div class="h-foot">The line after a card is how full it is.</div>
+      </section>
+    </div>
+  </div>
 </main>`;
 
   requestAnimationFrame(()=>{
@@ -4800,7 +4865,7 @@ function viewProjections(el){
     if(tot)lineChart(tot,idx.map(i=>{const p=sim.series[i],e=evAt[p.w];return{x:shortMY(when(p.w)),t:(e?e.n+' · ':'')+dayYear(when(p.w)),v:p.total,
       rows:[['All debt',money0(p.total)],...(e?e.here.map(x=>[x.what,(x.gain<0?'−':'+')+money(Math.abs(x.gain))]):[]),
         ...(e?[['Attack each week',money(e.after)]]:[])]}}),
-      {h:240,label:'All loans and cards',marks:events.filter(e=>evW.has(e.w)).map(e=>({i:idx.indexOf(e.w),n:e.n}))});
+      {h:220,label:'All loans and cards'});
     accts.forEach((d,i)=>{
       const c=$('#projA'+i);if(!c)return;
       lineChart(c,idx.map(j=>{const p=sim.series[j],v=n0(p.by&&p.by[d.id]);
