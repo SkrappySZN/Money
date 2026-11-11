@@ -2817,14 +2817,15 @@ function runChecks(k,rows,T){
   /* The shortfall loop above skips anything with no minimum recorded, so a
      card sitting at $0 produces no check at all — silence exactly where the
      sheet knows least. It cannot know the figure, but it does know when the
-     statement closes, which is when you find out. Asked for only in the week
-     a statement closes, or the week after if it is still missing, so it is a
-     prompt at the right moment rather than a standing complaint. */
+     statement closes, which is when you find out. Asked for only once the
+     statement has closed, and only on a sheet whose window it closes in, so it
+     is a prompt at the right moment rather than a standing complaint. */
   for(const r of rows){
     if(!KIND_DEBT(r.a.kind)||r.balance<=0.005||n0(r.minAmt)||!r.close)continue;
     if(r.close<k||r.close>=addWeeks(pay,1))continue;
-    const already=r.close<today;
-    out.push({s:'warn',t:`<b>${esc(r.a.name)} ${already?`closed ${dueLabel(r.close)}`:`closes ${dueLabel(r.close)}`} `
+    /* nothing to enter until the statement exists */
+    if(r.close>today)continue;
+    out.push({s:'warn',t:`<b>${esc(r.a.name)} closed ${dueLabel(r.close)} `
       +`and has no minimum recorded.</b> Put it in Min due /mo — until it is there nothing can tell you `
       +`if it goes unpaid, and the payoff date assumes you are paying it nothing.`});
   }
