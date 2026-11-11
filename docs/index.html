@@ -1329,7 +1329,7 @@ html[data-look="ledger"] .legacy .card{border-radius:2px}
 
 /* ── Plan (ledger look) ───────────────────────────────────────────── */
 .p-rows{border-top:1px solid var(--rule-strong)}
-.p-chg{display:grid;grid-template-columns:120px minmax(0,1fr) 190px 28px;gap:24px;padding:20px 0;border-bottom:1px solid var(--rule);align-items:baseline}
+.p-chg{display:grid;grid-template-columns:136px minmax(0,1fr) 190px 28px;gap:24px;padding:20px 0;border-bottom:1px solid var(--rule);align-items:baseline}
 .p-chg .p-t{font-family:var(--font-display);font-size:19px;width:100%}
 .p-w{color:var(--ink-muted);font-size:14px;margin-top:4px}
 .p-x{text-align:right;white-space:nowrap}
@@ -1342,7 +1342,7 @@ html[data-look="ledger"] .legacy .card{border-radius:2px}
 .p-chg.is-past:hover,.p-chg.is-past:focus-within{opacity:1}
 .p-past{margin-top:24px}
 .p-past summary{display:inline-block;font-size:14px;margin-bottom:16px;cursor:pointer}
-.p-rem{display:grid;grid-template-columns:22px 120px minmax(0,1fr);gap:20px;padding:15px 0;border-bottom:1px solid var(--rule);align-items:baseline}
+.p-rem{display:grid;grid-template-columns:22px 136px minmax(0,1fr);gap:20px;padding:15px 0;border-bottom:1px solid var(--rule);align-items:baseline}
 .p-rem .p-rt{font-size:16px}
 .p-rem .p-rn{color:var(--ink-muted);font-size:13px;margin-top:2px}
 .p-rem.is-late .l-in[type=date]{color:var(--negative)}
@@ -5283,10 +5283,10 @@ function viewPlan(el){
   const chgRow=c=>{const a=acct(c.acct),past=c.from<=k,mv=c.type==='move',f=mv?'amount':'weekly',v=n0(c[f]).toFixed(2);
     return `<div class="p-chg${past?' is-past':''}${mv?' is-move':''}">
       <span><input type="date" class="l-in" data-chg="${c.id}:from" value="${c.from}" aria-label="Sheet it starts on"></span>
-      <span><input class="l-in chg-in p-t" data-chg="${c.id}:label" value="${esc(c.label)}" aria-label="What changes">
+      <span><input class="l-in p-t" data-chg="${c.id}:label" value="${esc(c.label)}" aria-label="What changes">
         <div class="p-w">${a?esc(a.name):'missing account'} · ${mv?'moved onto it from savings, once':`from the ${weekLabel(c.from)} sheet`}${past?' · reached':''}</div></span>
-      <span class="p-x"><span class="p-amt">$<input class="l-in chg-in" inputmode="decimal" data-chg="${c.id}:${f}" value="${v}"
-        style="${figureWidth(v)}" aria-label="${mv?'Amount':'Weekly amount'}">${mv?'<small>once</small>':'<small>/wk</small>'}</span></span>
+      <span class="p-x"><span class="p-amt">$<input class="l-in" inputmode="decimal" data-chg="${c.id}:${f}" value="${v}"
+        style="width:${v.length+0.6}ch" aria-label="${mv?'Amount':'Weekly amount'}">${mv?'<small>once</small>':'<small>/wk</small>'}</span></span>
       <span class="p-x"><button class="l-btn is-del" data-chgdel="${c.id}" aria-label="Remove ${esc(c.label)}" title="Remove">×</button></span></div>`};
   const ahead=chg.filter(c=>c.from>k),gone=chg.filter(c=>c.from<=k);
   const late=nowRows.filter(x=>x.late).length;
@@ -5330,10 +5330,10 @@ function viewPlan(el){
       <section class="h-sec" aria-labelledby="chg-h">
         <h2 class="h-h2" id="chg-h">Upcoming changes <button class="h-link h-cap" data-act="addchg">+ change</button></h2>
         <p class="h-lede">A row's weekly amount changing on a set date. Each new sheet picks it up on that date, and Projections plans around it.</p>
-        ${ahead.length?`<div class="p-rows chg-list">${ahead.map(chgRow).join('')}</div>`
+        ${ahead.length?`<div class="p-rows">${ahead.map(chgRow).join('')}</div>`
           :'<p class="h-empty">Nothing coming up — every week after this one looks like this sheet.</p>'}
-        ${gone.length?`<details class="p-past chg-past"><summary class="h-link">Already reached (${gone.length}) — on the sheets now</summary>
-          <div class="p-rows chg-list">${gone.map(chgRow).join('')}</div></details>`:''}
+        ${gone.length?`<details class="p-past"><summary class="h-link">Already reached (${gone.length}) — on the sheets now</summary>
+          <div class="p-rows">${gone.map(chgRow).join('')}</div></details>`:''}
       </section>
 
       <section class="h-sec" aria-labelledby="pcal-h">
