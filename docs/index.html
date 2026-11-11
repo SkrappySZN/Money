@@ -1143,12 +1143,16 @@ html[data-look="ledger"]{color-scheme:dark;--paper:#141210;--paper-deep:#1b1916;
   --cover:#100e0c;--cover-ink:#ece5d8;--cover-ink-muted:#9b9284;--cover-gilt:#d6a64f;--cover-rule:rgba(214,166,79,0.3);
   --brass:#d6a64f;--sage:#8fb08a;--steel:#7f9bb3;--rust:#d27a3c;--ox:#c4574b}
 html[data-look="ledger"] #view.keep-paper{color-scheme:light;--paper:#F1E9D6;--paper-deep:#E9DFC8;--paper-deeper:#E0D4BA;--ink:#2A2118;--ink-secondary:#54473A;--ink-muted:#716148;--ink-absent:#B3A68C;--paper-stripe:#EBE2CD;--band:rgba(122,98,60,0.09);--cell-rule:rgba(42,33,24,0.20);--attention-tint:#E9D9B5;--accent:#2E5E8C;--accent-pressed:#234A70;--accent-on:#F6EFE0;--negative:#9A3324;--negative-wash:rgba(154,51,36,0.08);--positive:#3D6B45;--positive-wash:rgba(61,107,69,0.08);--positive-tint:#D6D6C0;--positive-tint-deep:#C9CDB6;--attention:#8A5A12;--attention-wash:rgba(138,90,18,0.09);--rule:rgba(42,33,24,0.14);--rule-strong:rgba(42,33,24,0.30);--rule-faint:rgba(42,33,24,0.09);--veil:rgba(42,33,24,0.32);--data-ink:#2E5E8C;--fill-emphasis:#2E5E8C;--fill-strong:#5B7FA3;--fill-mid:#97ABBF;--fill-faint:#CBD1CF;--spark-better:#3D6B45;--spark-worse:#8A5A12;--axis:rgba(42,33,24,0.14);--gridline:rgba(42,33,24,0.08);--bar-track:rgba(42,33,24,0.10);--font-sans:"Libre Caslon Text", Georgia, "Times New Roman", serif;}
+html[data-look="ledger"] #view.keep-paper{color:var(--ink);font-family:var(--font-sans);background:var(--paper)}
 html[data-look="ledger"] body{background:var(--paper)}
+html[data-look="ledger"] .cover-bar .brand span{text-transform:none}
+.brand .wm{font-style:normal}
+html[data-look="ledger"] .brand .wm{color:var(--ox)}
 html[data-look="ledger"] .shell{background:var(--paper)}
 /* masthead: wordmark, then the sections as a row of text tabs */
 html[data-look="ledger"] .cover-bar{background:var(--cover);border-bottom:1px solid var(--rule);height:56px;padding:0 var(--space-6)}
 html[data-look="ledger"] .cover-bar .logo{display:none}
-html[data-look="ledger"] .cover-bar .brand span{font-family:var(--font-display);font-size:26px;color:var(--ink);letter-spacing:.02em}
+html[data-look="ledger"] .cover-bar .brand span{font-family:var(--font-display);font-size:26px;color:var(--ink);letter-spacing:.02em;font-weight:400}
 html[data-look="ledger"] .book{flex-direction:column;align-items:stretch;padding:0}
 html[data-look="ledger"] .tabs{order:-1;position:static;flex-direction:row;align-items:flex-end;gap:var(--space-4);
   padding:0 var(--space-6);border-bottom:1px solid var(--rule);background:var(--cover)}
@@ -1568,7 +1572,7 @@ tr.tot th,tr.tot td{border-top:var(--rule-double)}
 <body>
 <div class="shell">
   <header class="cover-bar">
-    <div class="brand"><svg class="logo" aria-hidden="true" viewBox="0 0 64 64"><rect x="6" y="8" width="52" height="50" rx="3" fill="var(--paper)" stroke="var(--cover-gilt)" stroke-width="2"/><circle cx="17" cy="24" r="2.8" fill="none" stroke="var(--ink)" stroke-width="1.3"/><circle cx="47" cy="24" r="2.8" fill="none" stroke="var(--ink)" stroke-width="1.3"/><path d="M9 8h46a3 3 0 0 1 3 3v13H6V11a3 3 0 0 1 3-3z" fill="var(--cover)" stroke="var(--cover-gilt)" stroke-width="2"/><text x="32" y="20.5" text-anchor="middle" font-family="var(--font-display)" font-weight="700" font-size="10.5" letter-spacing="1" fill="var(--cover-ink)">FRI</text><text x="32" y="51.5" text-anchor="middle" font-family="var(--font-display)" font-weight="700" font-size="27" fill="var(--ink)">$</text></svg><span>Payday</span></div>
+    <div class="brand"><svg class="logo" aria-hidden="true" viewBox="0 0 64 64"><rect x="6" y="8" width="52" height="50" rx="3" fill="var(--paper)" stroke="var(--cover-gilt)" stroke-width="2"/><circle cx="17" cy="24" r="2.8" fill="none" stroke="var(--ink)" stroke-width="1.3"/><circle cx="47" cy="24" r="2.8" fill="none" stroke="var(--ink)" stroke-width="1.3"/><path d="M9 8h46a3 3 0 0 1 3 3v13H6V11a3 3 0 0 1 3-3z" fill="var(--cover)" stroke="var(--cover-gilt)" stroke-width="2"/><text x="32" y="20.5" text-anchor="middle" font-family="var(--font-display)" font-weight="700" font-size="10.5" letter-spacing="1" fill="var(--cover-ink)">FRI</text><text x="32" y="51.5" text-anchor="middle" font-family="var(--font-display)" font-weight="700" font-size="27" fill="var(--ink)">$</text></svg><span>Pay<em class="wm">day</em></span></div>
     <div class="railstat" id="railstat"></div>
     <div class="cover-end">
       <div id="syncbox"></div>
