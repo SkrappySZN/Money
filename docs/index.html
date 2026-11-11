@@ -1501,6 +1501,13 @@ html[data-look="ledger"] .legacy .card{border-radius:2px}
 .a-btns{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
 .a-reset{color:var(--ox,var(--negative))!important;margin-left:auto}
 
+/* The Allocation sheet under the ledger masthead: the masthead and tab row
+   are 105px, not the old 48px cover strip, and the ledger page padding was
+   winning over the sheet's tight padding — together they left the grid
+   ~550px tall and fitSheet shrank the type to 11px. */
+html[data-look="ledger"] .shell .page.sheet-page{padding:14px 28px 0;height:calc(100vh - 105px);max-width:none}
+html[data-look="ledger"] .sheet-page .sheet-grid{overflow:auto}
+
 /* ── Shell ────────────────────────────────────────────────────────
    Book tabs. The body is the passbook's cover; a slim strip across its
    top carries the brand, the week's numbers, sync and backup. The page
@@ -3315,11 +3322,13 @@ function fitSheet(){
   const t=document.querySelector('.sheet-grid > table');
   if(!t)return;
   const w=t.parentElement;
-  let fs=17;
+  /* Fit the width only. Fitting the height too drove the type down to 11px
+     on a 900px-tall window and still scrolled; the sheet reads better large,
+     with every column across and the rows scrolling under the header. */
+  let fs=19;
   t.style.fontSize=fs+'px';
-  /* both ways: every column across, and the Total row above the fold */
-  const over=()=>w.scrollWidth>w.clientWidth||w.scrollHeight>w.clientHeight;
-  while(over()&&fs>11){fs-=0.25;t.style.fontSize=fs+'px'}
+  const over=()=>w.scrollWidth>w.clientWidth;
+  while(over()&&fs>12){fs-=0.25;t.style.fontSize=fs+'px'}
 }
 
 /* The empty state. It threw for months: it set `#statusdot`, and the brand
