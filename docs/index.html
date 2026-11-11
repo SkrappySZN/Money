@@ -2788,7 +2788,13 @@ function niceTicks(min,max,n=4){
 /* single-series line + area over time; crosshair tooltip by default */
 function lineChart(el,pts,{h=210,fmt=money0,label='',accent='var(--s1)',zeroFloor=true,xTicks=7,marks=[]}={}){
   if(pts.length<2){el.innerHTML='<div class="empty">Not enough history yet.</div>';return}
-  const W=el.clientWidth||760,PL=54,PR=14,PT=12,PB=26;
+  const W=el.clientWidth||760,PL=54,PR=14,PB=26;
+  /* Marks bunched together stack their numbers upward a row each. The top
+     padding grows to hold the tallest stack, so the numbers stay inside the
+     chart instead of climbing into the text above it. */
+  const lifts=[];{let lastX=-1e9,lift=0;
+    for(const m of marks){const x=PL+(W-PL-PR)*(m.i/(pts.length-1));lift=x-lastX<18?lift+1:0;lastX=x;lifts.push(lift)}}
+  const extra=(lifts.length?Math.max(...lifts):0)*12,PT=12+extra+(marks.length?12:0);h+=extra+(marks.length?12:0);
   const vals=pts.map(p=>p.v);
   let lo=Math.min(...vals),hi=Math.max(...vals);
   if(zeroFloor)lo=Math.min(lo,0);
@@ -2807,11 +2813,10 @@ function lineChart(el,pts,{h=210,fmt=money0,label='',accent='var(--s1)',zeroFloo
     <path class="chartline" d="${line}"/>
     <g class="hov" style="opacity:0"><line class="crosshair" y1="${PT}" y2="${h-PB}"/>
       <circle class="chartdot" r="4"/></g>
-    ${(()=>{let lastX=-1e9,lift=0;
+    ${(()=>{
       /* Numbered event marks, drawn over the hover layer so the one being read
          is never hidden by it. A label within reach of the last steps up a row. */
-      return marks.map(m=>{const x=X(m.i),y=Y(pts[m.i].v);
-        lift=x-lastX<18?lift+1:0;lastX=x;
+      return marks.map((m,j)=>{const x=X(m.i),y=Y(pts[m.i].v),lift=lifts[j];
         return `<g class="mark" data-i="${m.i}"><circle class="markdot" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4"/>`
           +`<text class="marknum" x="${x.toFixed(1)}" y="${(y-9-lift*12).toFixed(1)}" text-anchor="middle">${esc(m.n)}</text></g>`}).join('')})()}
     ${pts.map((p,i)=>i%Math.ceil(pts.length/xTicks)===0||i===pts.length-1
@@ -5290,8 +5295,9 @@ function viewAccounts(el){
   </div>
   <div class="card">
     <div class="cap">Data</div>
-    <p class="sub" style="margin:8px 0 14px;max-width:70ch">Everything lives in this browser's local storage — nothing is uploaded.
-      Export a backup before you clear site data, switch browsers, or move to another machine.</p>
+    <p class="sub" style="margin:8px 0 14px;max-width:70ch">${SESSION?'Saved in this browser and synced to your account, so every device you sign in on sees the same ledger.'
+      :'Saved in this browser only until you sign in — then it syncs to your account.'}
+      An exported backup is still worth keeping now and then.</p>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn" data-act="export">Export backup</button>
       <button class="btn" data-act="import">Import backup</button>
