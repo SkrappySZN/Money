@@ -1557,6 +1557,8 @@ html[data-type="mac"] #view{font-family:var(--font-sans)}
 html[data-type="mac"] .h-v,html[data-type="mac"] .page-title,html[data-type="mac"] .h-title,html[data-type="mac"] .r-t,html[data-type="mac"] .h-h2{font-weight:600}
 html[data-type="mac"] .h-d,html[data-type="mac"] .dateline{font-style:normal}
 
+html.no-scroll,html.no-scroll body{overflow:hidden}
+
 /* ── Shell ────────────────────────────────────────────────────────
    Book tabs. The body is the passbook's cover; a slim strip across its
    top carries the brand, the week's numbers, sync and backup. The page
@@ -3358,6 +3360,8 @@ function renderInner(){
   const fn={week:viewWeek,sheet:viewAllocation,calendar:viewCalendar,attack:viewAttack,projections:viewProjections,reffing:viewReffing,payoff:viewPayoff,
             plan:viewPlan,subs:viewSubs,history:viewHistory,accounts:viewAccounts}[UI.tab]||viewWeek;
   document.documentElement.dataset.look='ledger';
+  /* Allocation fits the window by design; the page itself never scrolls there */
+  document.documentElement.classList.toggle('no-scroll',UI.tab==='sheet');
   if(CONVERTED.has(UI.tab)){
     v.className=''; fn(v);
     /* On Allocation the sheet's controls ride in the tab row, so the grid
