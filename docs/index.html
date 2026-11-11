@@ -1277,6 +1277,24 @@ html[data-look="ledger"] .ctl{border-radius:2px}
 html[data-look="ledger"] .seg button{font-size:14px}
 html[data-look="ledger"] .seg button[aria-pressed="true"]{border-bottom-color:var(--brass,var(--ink))}
 
+/* Accounts and the other pages still on the old stylesheet: give its tokens
+   the ledger's warm dark values so they sit in the same site. */
+html[data-look="ledger"] .legacy{color-scheme:dark;
+  --plane:#141210;--surface:#1b1916;--surface-2:#24211d;--surface-3:#2e2a25;
+  --ink:#ece5d8;--ink-2:#c9c0b2;--muted:#9b9284;
+  --hair:rgba(236,229,216,.10);--hair-2:rgba(236,229,216,.20);--row-hair:rgba(236,229,216,.06);
+  --axis:#3d3830;--scrim:rgba(0,0,0,.65);
+  --accent:#c4574b;--accent-2:#a8463b;--accent-ink:#e39a90;--accent-bg:rgba(196,87,75,.14);--accent-line:rgba(196,87,75,.35);
+  --good:#8fb08a;--good-ink:#a9c6a4;--good-bg:rgba(143,176,138,.13);--good-line:rgba(143,176,138,.30);
+  --warn:#d6a64f;--warn-ink:#e3bd72;--warn-bg:rgba(214,166,79,.13);--warn-line:rgba(214,166,79,.32);
+  --bad:#d0645a;--bad-ink:#e38a81;--bad-bg:rgba(208,100,90,.12);--bad-line:rgba(208,100,90,.30);
+  --attack:#d6a64f;--attack-bg:rgba(214,166,79,.13);--attack-line:rgba(214,166,79,.32);
+  --s1:#d6a64f;--s2:#d27a3c;--s3:#8fb08a;--s4:#7f9bb3;--spark-down:#8fb08a;--spark-up:#d6a64f;
+  --sh-1:none;--sh-2:none;--sh-3:0 24px 56px -20px rgba(0,0,0,.6);
+  background:var(--plane);color:var(--ink);font-family:"Avenir Next Condensed","Avenir Next","Helvetica Neue",system-ui,sans-serif}
+html[data-look="ledger"] .legacy h1{font-family:var(--font-display);font-weight:400;font-size:40px;letter-spacing:-.01em}
+html[data-look="ledger"] .legacy .card{border-radius:2px}
+
 /* ── Shell ────────────────────────────────────────────────────────
    Book tabs. The body is the passbook's cover; a slim strip across its
    top carries the brand, the week's numbers, sync and backup. The page
