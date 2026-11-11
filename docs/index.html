@@ -5580,7 +5580,8 @@ function newWeek(){
    the next — at whatever the Plan's upcoming changes say it is by now, and a
    loan paid through a bucket has that amount put in the bucket's Other
    instead. Any other row with a change starting on this sheet gets the new
-   weekly, in the column its money sat in last week. Returns what it set. */
+   weekly, in the column its money sat in last week, and a card with a change
+   starting on this sheet gets it as its Attack. Returns what it set. */
 function applyPlanToNewWeek(prev,nk,C,entries){
   const ch=((S.plan&&S.plan.changes)||[]).filter(c=>c.type!=='move').sort((a,b)=>a.from.localeCompare(b.from));
   const said=[];
@@ -5597,6 +5598,15 @@ function applyPlanToNewWeek(prev,nk,C,entries){
         if(be.otherSet==null||Math.abs(n0(be.otherSet)-weekly)>0.005){be.otherSet=weekly;said.push(`${b.a.name} ${money(weekly)}`)}
         e.min=0;
       }else if(Math.abs(n0(e.min)-weekly)>0.005){e.min=weekly;said.push(`${a.name} ${money(weekly)}`)}
+      continue;
+    }
+    /* A card's dated change is extra paid on top of its minimum, so it lands
+       in Attack on the sheet it starts. Until the next change, the Attack
+       carries like any other; a card already cleared keeps nothing. */
+    if(a.kind==='card'){
+      let c=null;for(const x of ch)if(x.acct===a.id&&x.from>prev&&x.from<=nk)c=x;
+      if(c&&n0(e.balance)>0.005){const w=r2(n0(c.weekly));
+        if(Math.abs(n0(e.attack)-w)>0.005){e.attack=w;said.push(`${a.name} attack ${money(w)}`)}}
       continue;
     }
     if(KIND_DEBT(a.kind)||(a.autoOut&&(acct(a.autoOut)||{}).kind==='loan'))continue;
