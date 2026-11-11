@@ -1250,6 +1250,33 @@ html[data-look="ledger"] input,html[data-look="ledger"] select,html[data-look="l
 .r-details summary{display:inline-block;margin-bottom:24px;font-size:14px}
 .r-extras .band{padding-top:0}
 
+/* ── Ledger look for the pages built on the shared parts (Plan,
+   Subscriptions, Calendar, Reffing, Accounts, the month view) ─────────
+   Same rules Home and the Roadmap were drawn with: a big serif title,
+   an italic date line, figures in a ruled strip, sentence-case section
+   heads in the serif, and room between sections. */
+html[data-look="ledger"] .page{max-width:1480px}
+html[data-look="ledger"] .masthead{border-bottom:2px solid var(--ink);padding-bottom:var(--space-3);margin-bottom:var(--space-5);align-items:flex-end}
+html[data-look="ledger"] .page-title{font-size:40px;line-height:1.05;letter-spacing:-.01em}
+html[data-look="ledger"] .dateline{font-family:var(--font-display);font-style:italic;text-transform:none;letter-spacing:0;font-size:16px;font-weight:400;margin-top:var(--space-1)}
+html[data-look="ledger"] .strip{border-top:0;border-bottom:1px solid var(--rule);padding:0 0 var(--space-3)}
+html[data-look="ledger"] .metric{padding:0 32px}
+html[data-look="ledger"] .metric:first-child{padding-left:0}
+html[data-look="ledger"] .m-label{font-size:11px;letter-spacing:.14em;text-transform:uppercase}
+html[data-look="ledger"] .m-value{font-family:var(--font-display);font-size:36px;line-height:1.1;margin:10px 0 8px}
+html[data-look="ledger"] .m-note{font-size:13px}
+html[data-look="ledger"] .band{margin-top:64px}
+html[data-look="ledger"] .band.tight,html[data-look="ledger"] .masthead + .band{margin-top:40px}
+html[data-look="ledger"] .sect-label{font-family:var(--font-display);font-size:24px;text-transform:none;letter-spacing:0;font-weight:400;
+  color:var(--ink);border-top:0;padding-top:0;margin-bottom:var(--space-2);display:flex;align-items:baseline;gap:var(--space-2)}
+html[data-look="ledger"] .sect-label .count{font-family:var(--font-sans);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-muted)}
+html[data-look="ledger"] .sect-label .sect-action{margin-left:auto;font-family:var(--font-sans);font-size:13px}
+html[data-look="ledger"] .lede{font-size:15px}
+html[data-look="ledger"] .lede.muted{font-size:14px;margin-bottom:var(--space-3)}
+html[data-look="ledger"] .ctl{border-radius:2px}
+html[data-look="ledger"] .seg button{font-size:14px}
+html[data-look="ledger"] .seg button[aria-pressed="true"]{border-bottom-color:var(--brass,var(--ink))}
+
 /* ── Shell ────────────────────────────────────────────────────────
    Book tabs. The body is the passbook's cover; a slim strip across its
    top carries the brand, the week's numbers, sync and backup. The page
