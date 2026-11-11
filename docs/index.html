@@ -2750,11 +2750,17 @@ function simulate(debts,{strategy='avalanche',budget=0,firstBudget=null,fromWeek
     }else{
       const live=order();
       pool=Math.max(0,budget+extra+delta+raise)+lump;
-      /* a grace balance is cleared in full or not at all — never partially */
-      for(const d of live){if(!d.grace||d.balance<=0.005)continue;
-        if(pool+0.005>=d.balance){pool-=d.balance;d.balance=0}}
+      /* Every minimum and loan payment comes first: an interest-free card was
+         clearing its whole balance before a loan's weekly, and on 11/10 that
+         skipped an Affirm payment and left it owing until debt free. */
       for(const d of live){if(d.grace)continue;
         const p=Math.min(minAt(d,w),d.balance,pool);d.balance-=p;pool-=p}
+      /* a grace balance is cleared in full or not at all — unless the Plan
+         schedules it, in which case it gets that amount each week, the way
+         the sheets pay it */
+      for(const d of live){if(!d.grace||d.balance<=0.005)continue;
+        const per=(d.sched&&d.sched.length)?n0(minAt(d,w)):0,due=per>0.005?Math.min(per,d.balance):d.balance;
+        if(due>0.005&&pool+0.005>=due){pool-=due;d.balance-=due}}
       for(const d of live){if(pool<=0.005)break;if(d.grace)continue;
         const p=Math.min(pool,d.balance);d.balance-=p;pool-=p}
     }
