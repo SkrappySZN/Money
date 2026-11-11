@@ -1508,6 +1508,14 @@ html[data-look="ledger"] .legacy .card{border-radius:2px}
 html[data-look="ledger"] .shell .page.sheet-page{padding:14px 28px 0;height:calc(100vh - 105px);max-width:none}
 html[data-look="ledger"] .sheet-page .sheet-grid{overflow:auto}
 
+/* Allocation header: one slim line. The week is already in the picker, so
+   the big title and the date line under it were the same thing twice. */
+html[data-look="ledger"] .sheet-page .sheet-masthead{padding-bottom:6px;margin-bottom:6px;border-bottom:1px solid var(--rule);flex-wrap:nowrap}
+html[data-look="ledger"] .sheet-page .sheet-masthead .page-title{font-size:20px;line-height:1.2}
+html[data-look="ledger"] .sheet-page .sheet-masthead .dateline{display:none}
+html[data-look="ledger"] .sheet-page .sheet-tally .t-value{font-size:16px}
+html[data-look="ledger"] .shell .page.sheet-page{padding:8px 20px 0}
+
 /* ── Shell ────────────────────────────────────────────────────────
    Book tabs. The body is the passbook's cover; a slim strip across its
    top carries the brand, the week's numbers, sync and backup. The page
@@ -3325,10 +3333,13 @@ function fitSheet(){
   /* Fit the width only. Fitting the height too drove the type down to 11px
      on a 900px-tall window and still scrolled; the sheet reads better large,
      with every column across and the rows scrolling under the header. */
+  /* Whole sheet on screen, no scrolling either way: the largest type at
+     which every column fits across and every row through Total fits down.
+     The header above it is kept to one slim line so the rows get the room. */
   let fs=19;
   t.style.fontSize=fs+'px';
-  const over=()=>w.scrollWidth>w.clientWidth;
-  while(over()&&fs>12){fs-=0.25;t.style.fontSize=fs+'px'}
+  const over=()=>w.scrollWidth>w.clientWidth||w.scrollHeight>w.clientHeight;
+  while(over()&&fs>9){fs-=0.25;t.style.fontSize=fs+'px'}
 }
 
 /* The empty state. It threw for months: it set `#statusdot`, and the brand
