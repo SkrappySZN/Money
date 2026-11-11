@@ -1549,19 +1549,12 @@ html[data-look="ledger"] .sheet-page table.grid th,html[data-look="ledger"] .she
    colour blindness. They take brass, the ledger's "money to debt" colour. */
 html[data-look="ledger"] input.cell.is-attack:not(.is-zero){color:var(--brass);font-weight:700}
 
-/* Type sets — chosen from the picker in the top bar and kept per browser.
-   All are fonts already on a Mac, so nothing extra loads. */
-.typepick{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--cover-ink-muted)}
-.typepick select{background:transparent;color:var(--cover-ink);border:1px solid var(--rule);border-radius:2px;font:inherit;padding:2px 4px}
-html[data-type="mac"]{--font-display:-apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif;--font-sans:-apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif;--font-figures:Menlo,monospace}
-html[data-type="avenir"]{--font-display:"Avenir Next",Avenir,sans-serif;--font-sans:"Avenir Next",Avenir,sans-serif;--font-figures:Menlo,monospace}
-html[data-type="futura"]{--font-display:Futura,"Avenir Next",sans-serif;--font-sans:"Avenir Next",Avenir,sans-serif;--font-figures:Menlo,monospace}
-html[data-type="book"]{--font-display:"Iowan Old Style",Palatino,Georgia,serif;--font-sans:"Helvetica Neue",Helvetica,sans-serif;--font-figures:Menlo,monospace}
-html[data-type="mono"]{--font-display:"American Typewriter",Georgia,serif;--font-sans:"Helvetica Neue",Helvetica,sans-serif;--font-figures:"Courier Prime",Courier,monospace}
-html[data-type="mac"] #view,html[data-type="avenir"] #view,html[data-type="futura"] #view,html[data-type="book"] #view,html[data-type="mono"] #view{font-family:var(--font-sans)}
-html[data-type="futura"] .h-v,html[data-type="futura"] .page-title,html[data-type="futura"] .h-h2,html[data-type="futura"] .r-t{font-weight:500}
-html[data-type="mac"] .h-v,html[data-type="mac"] .page-title,html[data-type="mac"] .h-title{font-weight:600}
-html[data-type="avenir"] .h-v,html[data-type="avenir"] .page-title,html[data-type="avenir"] .h-title{font-weight:600}
+/* Type: the Mac's own fonts — San Francisco for headings and text, Menlo for
+   figures. Already on every Mac, so nothing extra loads. */
+html[data-type="mac"]{--font-display:-apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif;--font-sans:-apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif;--font-figures:Menlo,"SF Mono",monospace}
+html[data-type="mac"] #view{font-family:var(--font-sans)}
+html[data-type="mac"] .h-v,html[data-type="mac"] .page-title,html[data-type="mac"] .h-title,html[data-type="mac"] .r-t,html[data-type="mac"] .h-h2{font-weight:600}
+html[data-type="mac"] .h-d,html[data-type="mac"] .dateline{font-style:normal}
 
 /* ── Shell ────────────────────────────────────────────────────────
    Book tabs. The body is the passbook's cover; a slim strip across its
@@ -1974,11 +1967,6 @@ tr.tot th,tr.tot td{border-top:var(--rule-double)}
     <div class="brand"><svg class="logo" aria-hidden="true" viewBox="0 0 64 64"><rect x="6" y="8" width="52" height="50" rx="3" fill="var(--paper)" stroke="var(--cover-gilt)" stroke-width="2"/><circle cx="17" cy="24" r="2.8" fill="none" stroke="var(--ink)" stroke-width="1.3"/><circle cx="47" cy="24" r="2.8" fill="none" stroke="var(--ink)" stroke-width="1.3"/><path d="M9 8h46a3 3 0 0 1 3 3v13H6V11a3 3 0 0 1 3-3z" fill="var(--cover)" stroke="var(--cover-gilt)" stroke-width="2"/><text x="32" y="20.5" text-anchor="middle" font-family="var(--font-display)" font-weight="700" font-size="10.5" letter-spacing="1" fill="var(--cover-ink)">FRI</text><text x="32" y="51.5" text-anchor="middle" font-family="var(--font-display)" font-weight="700" font-size="27" fill="var(--ink)">$</text></svg><span>Pay<em class="wm">day</em></span></div>
     <div class="railstat" id="railstat"></div>
     <div class="cover-end">
-      <label class="typepick" title="Change the site's fonts — saved in this browser">Type
-        <select id="typePick" aria-label="Site fonts">
-          <option value="caslon">Current</option><option value="mac">Mac</option><option value="avenir">Avenir</option>
-          <option value="futura">Futura</option><option value="book">Book</option><option value="mono">Typewriter</option>
-        </select></label>
       <div id="syncbox"></div>
       <div class="railact">
         <button id="btnExport">Export backup</button>
@@ -3352,12 +3340,9 @@ function render(){
   RENDERING=true;
   try{renderInner();saveUI()}finally{RENDERING=false}
 }
-const TYPEKEY='ccb.type';
-function applyType(t){document.documentElement.dataset.type=t||'caslon';try{localStorage.setItem(TYPEKEY,t)}catch(e){}}
-try{applyType(localStorage.getItem(TYPEKEY)||'caslon')}catch(e){applyType('caslon')}
-document.addEventListener('change',e=>{if(e.target&&e.target.id==='typePick'){applyType(e.target.value);render()}});
+/* Mac system fonts everywhere (chosen 2026-11-11). */
+document.documentElement.dataset.type='mac';
 function renderInner(){
-  {const tp=document.getElementById('typePick');if(tp)tp.value=document.documentElement.dataset.type||'caslon'}
   /* a copy published without seed data starts here — nothing personal ships in the page */
   if(!S.accounts.length||!weekKeys().length){renderWelcome();return}
   if((TABS.find(t=>t.id===UI.tab)||{}).hidden)UI.tab='week';   /* a remembered tab that is no longer in the nav */
