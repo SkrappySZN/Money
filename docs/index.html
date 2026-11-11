@@ -1537,8 +1537,9 @@ html[data-look="ledger"] .tabs .in-nav .controls{gap:4px;flex-wrap:nowrap}
 html[data-look="ledger"] .shell .page.sheet-page{padding-top:10px;height:calc(100vh - 107px)}
 /* the tab row carries the sheet controls too, so everything in it tightens
    on this page to keep it one line */
-html[data-look="ledger"] .tabs:has(.in-nav){gap:18px;padding-right:20px}
-html[data-look="ledger"] .tabs:has(.in-nav) > button{font-size:14px}
+/* the same tab row on every page, so it never shifts between tabs */
+html[data-look="ledger"] .tabs{gap:18px;padding-right:20px;min-height:49px}
+html[data-look="ledger"] .tabs > button{font-size:14px}
 html[data-look="ledger"] .tabs .in-nav{gap:10px}
 html[data-look="ledger"] .tabs .in-nav button{padding:5px 6px;font-size:13px}
 html[data-look="ledger"] .tabs .in-nav .seg{gap:8px}
