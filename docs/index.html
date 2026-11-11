@@ -1329,7 +1329,10 @@ html[data-look="ledger"] .legacy .card{border-radius:2px}
 
 /* ── Plan (ledger look) ───────────────────────────────────────────── */
 .p-rows{border-top:1px solid var(--rule-strong)}
-.p-chg{display:grid;grid-template-columns:136px minmax(0,1fr) 190px 28px;gap:24px;padding:20px 0;border-bottom:1px solid var(--rule);align-items:baseline}
+.p-top{margin-top:64px}
+.p-top .h-note{max-width:820px}
+.p-top + .h-cols{margin-top:0}
+.p-chg{display:grid;grid-template-columns:136px minmax(0,1fr) 200px 28px;gap:28px;padding:20px 0;border-bottom:1px solid var(--rule);align-items:baseline}
 .p-chg .p-t{font-family:var(--font-display);font-size:19px;width:100%}
 .p-w{color:var(--ink-muted);font-size:14px;margin-top:4px}
 .p-x{text-align:right;white-space:nowrap}
@@ -5286,7 +5289,7 @@ function viewPlan(el){
       <span><input class="l-in p-t" data-chg="${c.id}:label" value="${esc(c.label)}" aria-label="What changes">
         <div class="p-w">${a?esc(a.name):'missing account'} · ${mv?'moved onto it from savings, once':`from the ${weekLabel(c.from)} sheet`}${past?' · reached':''}</div></span>
       <span class="p-x"><span class="p-amt">$<input class="l-in" inputmode="decimal" data-chg="${c.id}:${f}" value="${v}"
-        style="width:${v.length+0.6}ch" aria-label="${mv?'Amount':'Weekly amount'}">${mv?'<small>once</small>':'<small>/wk</small>'}</span></span>
+        style="width:${v.length+0.15}ch" aria-label="${mv?'Amount':'Weekly amount'}">${mv?'<small>once</small>':'<small>/wk</small>'}</span></span>
       <span class="p-x"><button class="l-btn is-del" data-chgdel="${c.id}" aria-label="Remove ${esc(c.label)}" title="Remove">×</button></span></div>`};
   const ahead=chg.filter(c=>c.from>k),gone=chg.filter(c=>c.from<=k);
   const late=nowRows.filter(x=>x.late).length;
@@ -5317,8 +5320,7 @@ function viewPlan(el){
       <div class="h-n">${openDone.length?`${openDone.length} done`:'nothing ticked off yet'}</div></div>
   </div>
 
-  <div class="h-cols">
-    <div>
+  <div class="p-top">
       ${nowRows.length?`<section class="h-sec" aria-labelledby="now-h">
         <h2 class="h-h2" id="now-h">Needs you now</h2>
         <p class="h-lede">Reminders dated this week, and any from the last seven days not ticked off.</p>
@@ -5328,14 +5330,18 @@ function viewPlan(el){
       </section>`:''}
 
       <section class="h-sec" aria-labelledby="chg-h">
-        <h2 class="h-h2" id="chg-h">Upcoming changes <button class="h-link h-cap" data-act="addchg">+ change</button></h2>
-        <p class="h-lede">A row's weekly amount changing on a set date. Each new sheet picks it up on that date, and Projections plans around it.</p>
-        ${ahead.length?`<div class="p-rows">${ahead.map(chgRow).join('')}</div>`
-          :'<p class="h-empty">Nothing coming up — every week after this one looks like this sheet.</p>'}
-        ${gone.length?`<details class="p-past"><summary class="h-link">Already reached (${gone.length}) — on the sheets now</summary>
-          <div class="p-rows">${gone.map(chgRow).join('')}</div></details>`:''}
-      </section>
+    <h2 class="h-h2" id="chg-h">Upcoming changes <span class="h-cap">what Projections plans around</span></h2>
+    <p class="h-lede">A row's weekly amount changing on a set date. Each new sheet picks it up on that date, and Projections plans around it.</p>
+    ${ahead.length?`<div class="p-rows">${ahead.map(chgRow).join('')}</div>`
+      :'<p class="h-empty">Nothing coming up — every week after this one looks like this sheet.</p>'}
+    ${gone.length?`<details class="p-past"><summary class="h-link">Already reached (${gone.length}) — on the sheets now</summary>
+      <div class="p-rows">${gone.map(chgRow).join('')}</div></details>`:''}
+  </section>
 
+  </div>
+
+  <div class="h-cols">
+    <div>
       <section class="h-sec" aria-labelledby="pcal-h">
         <h2 class="h-h2" id="pcal-h">Reminders <span class="h-cap">on the Calendar</span></h2>
         ${soon.length?`<div class="h-cap h-sub">Next four weeks</div><div class="p-rows">${soon.map(calRow).join('')}</div>`:''}
