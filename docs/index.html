@@ -6251,7 +6251,7 @@ function newWeek(){
        taken care of — its minimum paid, or the card paid off — the date that
        matters is the next statement's, a month on. It used to wait for the old
        date to pass, so a card read the old due date a week after it was paid. */
-    if(a.kind==='card'&&r.due&&e.due===r.due&&r.close&&r.due>r.close){
+    if(a.kind==='card'&&r.due&&e.due===r.due){
       const met=n0(r.minAmt)>0.005&&paidSinceClose(last,r)+0.005>=n0(r.minAmt);
       const clear=n0(r.balance)>0.005&&n0(r.after)<=0.005;
       if(met||clear)e.due=nextDue(r.due,a);
