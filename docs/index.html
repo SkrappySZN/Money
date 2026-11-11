@@ -3095,7 +3095,7 @@ function renderInner(){
             plan:viewPlan,subs:viewSubs,history:viewHistory,accounts:viewAccounts}[UI.tab]||viewWeek;
   document.documentElement.dataset.look='ledger';
   if(CONVERTED.has(UI.tab)){
-    v.className=UI.tab==='sheet'?'keep-paper':''; fn(v); fitSheet();
+    v.className=''; fn(v); fitSheet();
   }else{
     /* not restyled yet: render into the old shell, scoped so the old CSS applies */
     v.className='legacy';
