@@ -1377,6 +1377,59 @@ html[data-look="ledger"] .legacy .card{border-radius:2px}
 .s-wh span{font-family:var(--font-figures);font-size:12px;color:var(--ink-secondary)}
 .s-none{color:var(--ink-absent)}
 
+/* ── Calendar (ledger look) ───────────────────────────────────────── */
+.c-tbl td{vertical-align:baseline}
+.c-meta{display:block;font-size:12px;color:var(--ink-muted);margin-top:3px;white-space:normal}
+.c-sk.is-yes{color:var(--sage,var(--positive))}
+.c-sk.is-short{color:var(--attention)}
+.c-sk.is-late{color:var(--ox,var(--negative))}
+.c-cal .cal-hd{font-size:11px;letter-spacing:.14em;color:var(--ink-muted);padding:0 12px 12px;border-bottom:1px solid var(--rule-strong);font-weight:500}
+.c-cal .cal-hd:first-child{padding-left:0}
+.c-cal{border-top:0}
+.c-cal .cal-day{min-height:8.5rem;padding:12px 12px 14px;border-bottom:1px solid var(--rule);border-left:1px solid var(--rule-faint)}
+.c-cal .cal-day.is-wkstart{border-left:0;padding-left:0}
+.c-cal .cal-day.is-out{background:none}
+.c-cal .cal-day.is-out .cal-n,.c-cal .cal-day.is-out .ev{opacity:.45}
+.c-cal .cal-day.is-today{box-shadow:inset 0 2px 0 var(--ox,var(--negative))}
+.c-cal .cal-day.is-today .cal-n{color:var(--ox,var(--negative));font-weight:400}
+.c-cal .cal-top{margin-bottom:8px}
+.c-cal .cal-n{font-family:var(--font-figures);font-size:15px;color:var(--ink)}
+.c-cal .cal-pay{font-family:var(--font-sans);font-size:10px;letter-spacing:.16em;color:var(--brass,var(--attention));font-weight:500}
+.c-cal button.cal-pay:hover{color:var(--ink)}
+.c-cal .ev{font-size:12.5px;line-height:1.35;gap:7px;padding:2px 0;color:var(--ink-secondary)}
+.c-cal .ev .mk{width:6px;height:6px;border:0;background:none;flex:0 0 auto;transform:translateY(-1px)}
+.c-cal .ev .ea{font-family:var(--font-figures);font-size:11px;color:var(--ink-muted)}
+.c-cal .ev-due{color:var(--ink);font-weight:400}
+.c-cal .ev-due .mk{background:var(--brass,var(--attention))}
+.c-cal .ev-due .ea{color:var(--brass,var(--attention))}
+.c-cal .ev-close .mk{border:1px solid var(--steel,var(--accent));width:5px;height:5px}
+.c-cal .ev-close{color:var(--ink-muted)}
+.c-cal .ev-sub{color:var(--ink-muted)}
+.c-cal .ev-sub .mk{width:4px;height:4px;border-radius:50%;background:var(--ink-muted)}
+.c-cal .ev-sub .mk::before{content:none}
+.c-cal .ev-note{color:var(--steel,var(--accent))}
+.c-cal .ev-note .mk{border-radius:50%;background:var(--steel,var(--accent))}
+.c-cal .ev-proj{color:var(--sage,var(--positive));font-style:italic}
+.c-cal .ev-proj .mk{border-radius:50%;background:none;border:1px solid var(--sage,var(--positive))}
+.c-cal .ev-paid{color:var(--sage,var(--positive));font-weight:400}
+.c-cal .ev-paid .mk{background:var(--sage,var(--positive))}
+.c-cal .ev-paid .ea{color:var(--sage,var(--positive))}
+.c-cal .ev.is-done{color:var(--ink-absent)}
+.c-cal .ev.is-done .mk{opacity:.5}
+.c-cal .ev.is-done .ea{color:var(--ink-absent)}
+.c-cal .ev.is-late,.c-cal .ev.is-late .ea{color:var(--ox,var(--negative))}
+.c-cal .ev.is-late .mk{background:var(--ox,var(--negative))}
+.c-legend{display:flex;flex-wrap:wrap;gap:8px 28px;margin-top:16px;font-size:12px;color:var(--ink-muted)}
+.c-legend span{display:inline-flex;align-items:center;gap:8px}
+.c-mk{display:inline-block;width:6px;height:6px}
+.c-mk.is-due{background:var(--brass,var(--attention))}
+.c-mk.is-paid{background:var(--sage,var(--positive))}
+.c-mk.is-close{border:1px solid var(--steel,var(--accent));width:5px;height:5px}
+.c-mk.is-sub{width:4px;height:4px;border-radius:50%;background:var(--ink-muted)}
+.c-mk.is-note{border-radius:50%;background:var(--steel,var(--accent))}
+.c-mk.is-proj{border-radius:50%;border:1px solid var(--sage,var(--positive));width:5px;height:5px}
+.c-lp{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--brass,var(--attention))}
+
 /* ── Shell ────────────────────────────────────────────────────────
    Book tabs. The body is the passbook's cover; a slim strip across its
    top carries the brand, the week's numbers, sync and backup. The page
@@ -5200,63 +5253,70 @@ function viewCalendar(el){
   const loans=rows.filter(r=>r.a.kind==='loan'&&r.due&&n0(r.minAmt)>0&&!statedWeekly(r.a))
     .map(r=>({r,k:skipCheck(r,today)})).sort((a,b)=>a.k.due.localeCompare(b.k.due));
   const skipCell=({k})=>{
-    if(k.late)return `<td class="sk-late">Due date passed<span class="sk-meta">move it forward on the sheet</span></td>`;
-    if(k.short)return `<td class="sk-short">Short ${money(k.short)}<span class="sk-meta">every payday is needed</span></td>`;
-    if(k.canSkip)return `<td class="sk-yes">${k.canSkip} payday${k.canSkip>1?'s':''}`
-      +`<span class="sk-meta">earliest ${dueLabel(k.first.f)}, the ${weekLabel(k.first.sheet)} sheet · ${money(k.spare)} spare after</span></td>`;
-    return `<td>None<span class="sk-meta">${k.skipped?`${k.skipped} already skipped · `:''}${money(k.spare)} spare</span></td>`;
+    if(k.late)return `<td class="c-sk is-late">Due date passed<span class="c-meta">move it forward on the sheet</span></td>`;
+    if(k.short)return `<td class="c-sk is-short">Short ${money(k.short)}<span class="c-meta">every payday is needed</span></td>`;
+    if(k.canSkip)return `<td class="c-sk is-yes">${k.canSkip} payday${k.canSkip>1?'s':''}`
+      +`<span class="c-meta">earliest ${dueLabel(k.first.f)}, the ${weekLabel(k.first.sheet)} sheet · ${money(k.spare)} spare after</span></td>`;
+    return `<td class="c-sk">None<span class="c-meta">${k.skipped?`${k.skipped} already skipped · `:''}${money(k.spare)} spare</span></td>`;
   };
 
-  el.innerHTML=`<main class="page">
-  <header class="masthead">
-    <div><h1 class="page-title">Calendar</h1>
-      <div class="dateline">${monthLabel(ym)}</div></div>
-    <div class="controls">
+  /* Calendar, in the ledger look: the month as a ruled grid with no boxes,
+     each event a small colored mark and a line of text. */
+  el.innerHTML=`<main class="page h-page">
+  <div class="h-top">
+    <div><h1 class="h-title">Calendar</h1>
+      <div class="h-d">${monthLabel(ym)} — due dates, statements, subscriptions and reminders</div></div>
+    <div class="h-act">
       <button class="ctl" data-cgo="prev" aria-label="Previous month">←</button>
       <button class="ctl" data-cgo="today" ${ym===monthOf(today)?'disabled':''}>Today</button>
       <button class="ctl" data-cgo="next" aria-label="Next month">→</button>
     </div>
-  </header>
-
-  <div class="strip">
-    <div class="metric"><div class="m-label">Paydays</div>
-      <span class="m-value">${paydays.length}</span>
-      <div class="m-note">${paydays.map(dueLabel).join(' · ')}</div></div>
-    <div class="metric"><div class="m-label">Minimums still due</div>
-      <span class="m-value">${money(dueSum)}</span></div>
-    <div class="metric"><div class="m-label">Subscriptions</div>
-      <span class="m-value">${money(subSum)}</span></div>
   </div>
 
-  ${loans.length?`<section class="band" aria-labelledby="skip-h">
-    <h2 class="sect-label" id="skip-h">Can a payday be skipped?</h2>
-    <p class="lede muted">Counts the paydays left before each due date against what is still owed on it.
+  <div class="h-strip is-3">
+    <div class="h-fig"><div class="h-cap">Paydays</div>
+      <div class="h-v">${paydays.length}</div>
+      <div class="h-n">${paydays.map(dueLabel).join(' · ')}</div></div>
+    <div class="h-fig"><div class="h-cap">Minimums still due</div>
+      <div class="h-v is-brass">${money(dueSum)}</div>
+      <div class="h-n">in ${monthLabel(ym)}, not yet moved past on the sheet</div></div>
+    <div class="h-fig"><div class="h-cap">Subscriptions</div>
+      <div class="h-v">${money(subSum)}</div>
+      <div class="h-n">billing in ${monthLabel(ym)}</div></div>
+  </div>
+
+  ${loans.length?`<section class="h-sec c-skip" aria-labelledby="skip-h">
+    <h2 class="h-h2" id="skip-h">Can a payday be skipped?</h2>
+    <p class="h-lede">Counts the paydays left before each due date against what is still owed on it.
       Each payday reads the sheet for the week that just ended, so a $0 Min entered there shows up here.</p>
-    <div class="cmp-wrap"><table class="cmp">
-      <thead><tr><th>Loan</th><th>Due</th><th>Amount</th><th>Per week</th><th>Paydays left</th><th>Can skip</th></tr></thead>
+    <table class="h-tbl c-tbl">
+      <thead><tr><th>Loan</th><th>Due</th><th class="r">Amount</th><th class="r">Per week</th><th>Paydays left</th><th>Can skip</th></tr></thead>
       <tbody>${loans.map(x=>{const k=x.k;return `<tr>
         <td>${esc(x.r.a.name)}</td>
-        <td>${dueLabel(k.due)}</td>
-        <td>${money(k.amount)}</td>
-        <td>${money(k.weekly)}</td>
-        <td>${k.future.length}${k.last?`<span class="sk-meta">last ${dueLabel(k.last)}${k.setAside?` · ${money(k.setAside)} set aside`:''}</span>`:''}</td>
+        <td class="h-num">${dueLabel(k.due)}</td>
+        <td class="r h-num">${money(k.amount)}</td>
+        <td class="r h-num">${money(k.weekly)}</td>
+        <td><span class="h-num">${k.future.length}</span>${k.last?`<span class="c-meta">last ${dueLabel(k.last)}${k.setAside?` · ${money(k.setAside)} set aside`:''}</span>`:''}</td>
         ${skipCell(x)}</tr>`}).join('')}</tbody>
-    </table></div>
+    </table>
   </section>`:''}
 
-  <section class="band" aria-labelledby="cal-h">
-    <h2 class="sect-label" id="cal-h">${monthLabel(ym)}</h2>
-    <div class="cal">${grid}</div>
-    <div class="legend cal-legend">
-      <span class="k"><span class="mk fill"></span>Due</span>
-      <span class="k paid"><span class="mk fill"></span>Paid in full</span>
-      <span class="k"><span class="mk"></span>Statement closes</span>
-      <span class="k"><span class="mk dot"></span>Reminder from Plan</span>
-      <span class="k">· Subscription</span>
+  <section class="h-sec" aria-labelledby="cal-h">
+    <h2 class="h-h2" id="cal-h">${monthLabel(ym)} <span class="h-cap">Sunday to Saturday · paydays on their Fridays</span></h2>
+    <div class="cal c-cal">${grid}</div>
+    <div class="c-legend">
+      <span><i class="c-mk is-due"></i>Due</span>
+      <span><i class="c-mk is-paid"></i>Paid in full</span>
+      <span><i class="c-mk is-close"></i>Statement closes</span>
+      <span><i class="c-mk is-sub"></i>Subscription</span>
+      <span><i class="c-mk is-note"></i>Reminder from Plan</span>
+      <span><i class="c-mk is-proj"></i>Projected payoff</span>
+      <span class="c-lp">Payday</span>
     </div>
   </section>
 </main>`;
 }
+
 </script>
 <script>
 "use strict";
