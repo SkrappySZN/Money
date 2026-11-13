@@ -6261,7 +6261,12 @@ function newWeek(){
     if(a.kind==='card'&&r.due&&e.due===r.due){
       const met=n0(r.minAmt)>0.005&&paidSinceClose(last,r)+0.005>=n0(r.minAmt);
       const clear=n0(r.balance)>0.005&&n0(r.after)<=0.005;
-      if(met||clear)e.due=nextDue(r.due,a);
+      /* No minimum typed (a card paid by its statement balance): a payment on
+         the last sheet counts as handling that statement — but only once the
+         statement is out, i.e. the next close is already past this due date.
+         A due whose statement has not closed yet stays put. */
+      const paidNoMin=!(n0(r.minAmt)>0.005)&&r.close&&r.close>r.due&&sentOn(last,a.id)>0.005;
+      if(met||clear||paidNoMin)e.due=nextDue(r.due,a);
     }
     entries[a.id]=e;
   }
