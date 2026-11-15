@@ -4470,18 +4470,24 @@ const refGames=()=>((S.reffing=S.reffing||{games:[]}).games=S.reffing.games||[])
 const LAHOA_RATES={season:'2026–27',source:'lahoa.com/rates',groups:[
   {id:'scaha',name:'SCAHA & CAHA',league:'SCAHA',fee:20,rows:[
     {div:'8u (Cross & Half-Ice)',ref:62,lines:null,noFee:true,note:'each'},
-    {div:'10u A/B/BB',ref:60,lines:44},{div:'12u A/B/BB',ref:60,lines:44},{div:'12u AA',ref:58,lines:42},
+    {div:'10u A/B/BB',ref:60,lines:44},{div:'12u A/B/BB',ref:60,lines:44},{div:'12u AA',ref:70,lines:50},
     {div:'11u/12u AAA',ref:72,lines:52,noFee:true},{div:'14u A/B',ref:70,lines:50},{div:'14u AA',ref:72,lines:52},
     {div:'13u/14u AAA',ref:75,lines:55,noFee:true},{div:'16u/18u A/B',ref:72,lines:52},{div:'16u/18u AA',ref:75,lines:55},
     {div:'15u/16u/18u AAA',ref:110,lines:90,noFee:true}]},
   {id:'caha',name:'CAHA weekends & state championships',league:'CAHA',fee:0,rows:[
-    {div:'14u AA',ref:75,lines:55},{div:'13u/14u AAA',ref:80,lines:60},{div:'16u/18u AA',ref:80,lines:60},
-    {div:'15u/16u/18u AAA',ref:110,lines:90},{div:'High School 1A & 2A',ref:90,lines:70}]},
+    {div:'14u AA',ref:77,lines:57},{div:'13u/14u AAA',ref:82,lines:62},{div:'16u/18u AA',ref:82,lines:62},
+    {div:'15u/16u/18u AAA',ref:112,lines:92},{div:'High School 1A & 2A',ref:90,lines:70},
+    {div:'Girls 12u/14u AA & AAA',ref:77,lines:57},{div:'Girls 16u/19u AA & AAA',ref:82,lines:62}]},
   {id:'hs',name:'High school, ACHA & USPHL',league:'',fee:0,rows:[
-    {div:'ADHSHL Varsity 1',ref:80,lines:60,fee:10},{div:'ADHSHL Varsity 2 & 3',ref:75,lines:60,fee:10},
-    {div:'ADHSHL JV',ref:70,lines:55,fee:10},{div:'LAKHSHL Varsity',ref:75,lines:57,fee:15},
+    {div:'ADHSHL Varsity 1',ref:85,lines:65,fee:10},{div:'ADHSHL Varsity 2 & 3',ref:80,lines:65,fee:10},
+    {div:'ADHSHL JV',ref:75,lines:60,fee:10},{div:'LAKHSHL Varsity',ref:75,lines:57,fee:15},
     {div:'LAKHSHL JV',ref:72,lines:55,fee:15},{div:'ACHA',ref:150,lines:110},
-    {div:'USPHL – Premier',ref:175,lines:120},{div:'USPHL – NCDC',ref:null,lines:null}]}],
+    {div:'USPHL – Premier',ref:180,lines:125},{div:'USPHL – NCDC',ref:165,lines:135}]},
+  /* appended, never inserted: games point at rows by group:row index */
+  {id:'rinks',name:'The Rinks in-house youth',league:'The Rinks',fee:5,rows:[
+    {div:'Youth 6u/8u Cross Ice',ref:27,lines:null},{div:'Youth 10u',ref:30,lines:null},
+    {div:'Youth 12u',ref:33,lines:null},{div:'Youth 14u/17u',ref:42,lines:null},
+    {div:'Youth 16u/JV/JV-D',ref:48,lines:null}]}],
   notes:['2-official games pay the referee rate.',
     'Single game fee: for each single game when at different rinks or more than 1.5 hours apart; two single games 0.5–1.5 hours apart at the same rink earn one fee. Not for AAA, 8 & under, or CAHA weekends.',
     'SCAHA & CAHA travel: federal mileage after 90 miles, capped at 200 miles round trip — Santa Barbara, Bakersfield and Palm Springs only. LAKHSHL: Santa Barbara & Bakersfield $100, Mammoth $200 + one hotel night.']};
