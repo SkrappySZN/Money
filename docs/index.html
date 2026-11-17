@@ -1483,6 +1483,9 @@ html[data-look="ledger"] .legacy .card{border-radius:2px}
 .f-taxtop{margin-bottom:24px}
 .f-taxtop .h-h2{margin:0}
 .f-exp{margin-top:28px}
+.f-mih{margin:56px 0 0;display:flex;align-items:baseline;gap:16px}
+.f-mi{margin-top:20px}
+.f-rd{margin-top:8px;max-width:520px}
 
 /* ── Accounts (ledger look) ───────────────────────────────────────── */
 .a-sec{margin-top:64px}
@@ -4519,11 +4522,32 @@ const seasonLabel=y=>`${y}–${String(y+1).slice(2)}`;
 const REF_EXP_CATS=['Registration & certification','Background check','Gear & uniform','Mileage & travel','Other'];
 const refExpenses=()=>{const R=S.reffing=S.reffing||{games:[]};return R.expenses=R.expenses||[]};
 const refRecvDate=g=>g.paidOn||g.date;
+/* IRS business standard mileage rate, by the date it took effect. 2026 changed
+   mid-year: 72.5¢ to June, 76¢ from July 1 (Announcement 2026-11). Add a line
+   when the IRS publishes a new one; a date past the last line uses the last. */
+const IRS_MILE_RATES=[{from:'2025-01-01',r:0.70},{from:'2026-01-01',r:0.725},{from:'2026-07-01',r:0.76}];
+const mileRateOn=d=>{let r=IRS_MILE_RATES[0].r;for(const x of IRS_MILE_RATES)if(d>=x.from)r=x.r;return r};
+const refRinkMiles=()=>{const R=S.reffing=S.reffing||{games:[]};return R.rinkMiles=R.rinkMiles||{}};
+const refTripMiles=()=>{const R=S.reffing=S.reffing||{games:[]};return R.tripMiles=R.tripMiles||{}};
+/* One trip a day: the rinks reffed that day, each as a round trip from home
+   unless the day's miles were typed in (a two-rink day is usually shorter). */
+function refTrips(y){
+  const by={},rm=refRinkMiles(),tm=refTripMiles();
+  for(const g of refGames())if(g.date.startsWith(y+''))(by[g.date]=by[g.date]||new Set()).add(g.rink||'');
+  return Object.keys(by).sort().map(date=>{
+    const rinks=[...by[date]],known=rinks.every(r=>r&&rm[r]!=null);
+    const auto=known?r2(rinks.reduce((t,r)=>t+n0(rm[r]),0)):null;
+    const miles=tm[date]!=null?n0(tm[date]):auto,rate=mileRateOn(date);
+    return{date,rinks,auto,miles,manual:tm[date]!=null,rate,amount:miles==null?0:r2(miles*rate)};
+  });
+}
 function refTaxYear(y){
   const recv=refGames().filter(g=>g.paid&&refRecvDate(g).startsWith(y+'')).sort((a,b)=>refRecvDate(a).localeCompare(refRecvDate(b)));
   const exp=refExpenses().filter(e=>(e.date||'').startsWith(y+'')).sort((a,b)=>a.date.localeCompare(b.date)||a.id.localeCompare(b.id));
-  const income=r2(recv.reduce((t,g)=>t+n0(g.rate),0)),spent=r2(exp.reduce((t,e)=>t+n0(e.amount),0));
-  return{recv,exp,income,spent,net:r2(income-spent)};
+  const trips=refTrips(y),mileage=r2(trips.reduce((t,x)=>t+x.amount,0)),miles=r2(trips.reduce((t,x)=>t+n0(x.miles),0));
+  const other=r2(exp.reduce((t,e)=>t+n0(e.amount),0)),spent=r2(other+mileage);
+  const income=r2(recv.reduce((t,g)=>t+n0(g.rate),0));
+  return{recv,exp,trips,mileage,miles,other,income,spent,net:r2(income-spent),missing:trips.filter(x=>x.miles==null).length};
 }
 function viewReffing(el){
   const games=refGames();
@@ -4607,14 +4631,32 @@ function viewReffing(el){
       <div class="h-fig"><div class="h-cap">Pay received</div><div class="h-v">${money(T.income)}</div>
         <div class="h-n">${T.recv.length} game${T.recv.length===1?'':'s'} paid in ${ty}</div></div>
       <div class="h-fig"><div class="h-cap">Expenses</div><div class="h-v">${money(T.spent)}</div>
-        <div class="h-n">${T.exp.length} item${T.exp.length===1?'':'s'}</div></div>
+        <div class="h-n">${money(T.mileage)} mileage · ${money(T.other)} in ${T.exp.length} item${T.exp.length===1?'':'s'}</div></div>
       <div class="h-fig"><div class="h-cap">Net</div><div class="h-v">${money(T.net)}</div>
         <div class="h-n">pay received less expenses</div></div>
     </div>
     ${T.exp.length?`<table class="h-tbl f-tbl f-exp">
       <thead><tr><th>Date</th><th>What</th><th>Category</th><th class="r">Amount</th><th>Note</th><th></th></tr></thead>
       <tbody>${T.exp.map(erow).join('')}</tbody></table>`
-      :`<p class="h-empty">No expenses in ${ty} yet. Add registration, background checks, gear and mileage with <b>+ Expense</b>.</p>`}
+      :`<p class="h-empty">No expenses in ${ty} yet. Add registration, background checks, gear, parking and tolls with <b>+ Expense</b>.</p>`}
+
+    <h3 class="h-h2 f-mih">Mileage <span class="h-cap">${T.miles.toLocaleString("en-US")} miles · ${money(T.mileage)}${T.missing?` · <span class="f-owed">${T.missing} day${T.missing===1?'':'s'} need${T.missing===1?'s':''} miles</span>`:''}</span></h3>
+    ${T.trips.length?`<table class="h-tbl f-tbl f-mi">
+      <thead><tr><th>Date</th><th>Rinks</th><th class="r">Miles</th><th class="r">Rate</th><th class="r">Deduction</th></tr></thead>
+      <tbody>${T.trips.map(x=>`<tr class="${x.miles==null?'is-owed':''}">
+        <td class="h-num">${dueLabel(x.date)}</td><td>${esc(x.rinks.map(r=>r||'no rink').join(' + '))}</td>
+        <td class="r"><input class="l-in f-rate" data-rtm="${x.date}" inputmode="decimal" value="${x.manual?x.miles:''}" placeholder="${x.auto!=null?x.auto:'—'}" title="${x.manual?'Typed for this day — clear it to use the rink distances':'From the rink distances — type to set this day by hand'}" aria-label="Miles"></td>
+        <td class="r f-note">${(x.rate*100).toFixed(1).replace(/\.0$/,'')}¢</td>
+        <td class="r h-num">${x.miles==null?'—':money(x.amount)}</td></tr>`).join('')}</tbody></table>`
+      :`<p class="h-empty">No games in ${ty}, so no trips.</p>`}
+    ${(()=>{const rinks=[...new Set(games.map(g=>g.rink).filter(Boolean))].sort(),rm=refRinkMiles(),gaps=rinks.filter(r=>rm[r]==null).length;
+      return `<details class="f-det ref-miles" ${gaps&&T.trips.length?'open':''}>
+      <summary><span class="h-h2">Rink distances</span><span class="h-cap">round trip from home${gaps?` · ${gaps} to fill in`:''}</span></summary>
+      <table class="h-tbl f-tbl f-rd"><tbody>${rinks.map(r=>`<tr><td>${esc(r)}</td>
+        <td class="r"><input class="l-in f-rate" data-rkm="${esc(r)}" inputmode="decimal" value="${rm[r]!=null?rm[r]:''}" placeholder="miles" aria-label="Round-trip miles to ${esc(r)}"></td></tr>`).join('')}</tbody></table>
+      <ul class="f-notes"><li>Miles at the IRS business rate for the day driven: ${IRS_MILE_RATES.map(x=>`${(x.r*100).toFixed(1).replace(/\.0$/,'')}¢ from ${dueLabel(x.from)} ${x.from.slice(0,4)}`).join(', ')}.</li>
+        <li>A day at two rinks counts each as its own round trip; type the day's real miles over it in the table above.</li></ul>
+    </details>`})()}
   </section>`})()}
 
   <details class="f-det">
@@ -4664,7 +4706,11 @@ function exportRefTax(y){
     `Total pay received,,,,,${T.income.toFixed(2)}`,'',
     'EXPENSES','Date,What,Category,Amount,Note',
     ...T.exp.map(e=>[e.date,q(e.what),q(e.cat),n0(e.amount).toFixed(2),q(e.note)].join(',')),
-    `Total expenses,,,${T.spent.toFixed(2)}`,'',
+    `Total other expenses,,,${T.other.toFixed(2)}`,'',
+    'MILEAGE','Date,Rinks,Miles,Rate per mile,Deduction',
+    ...T.trips.map(x=>[x.date,q(x.rinks.join(' + ')),x.miles==null?'':x.miles,x.rate.toFixed(3),x.amount.toFixed(2)].join(',')),
+    `Total mileage,,${T.miles},,${T.mileage.toFixed(2)}`,'',
+    `Total expenses incl. mileage,,,${T.spent.toFixed(2)}`,'',
     ...REF_EXP_CATS.map(c=>{const t=r2(T.exp.filter(e=>e.cat===c).reduce((s,e)=>s+n0(e.amount),0));return t?`${q(c)},,,${t.toFixed(2)}`:null}).filter(Boolean),
     '',`Net,,,${T.net.toFixed(2)}`];
   download(`reffing-taxes-${y}.csv`,L.join('\n'),'text/csv');
@@ -6597,6 +6643,14 @@ document.addEventListener('change',e=>{
        from rink to level drops the caret on the floor. */
     setTimeout(()=>{const ae=document.activeElement,key=ae&&ae.dataset?ae.dataset.rf:null;
       render();if(key){const n=document.querySelector(`[data-rf="${CSS.escape(key)}"]`);if(n)n.focus({preventScroll:true})}},0);
+    return;
+  }
+  if(d.rkm!=null||d.rtm!=null){
+    const m=d.rkm!=null?refRinkMiles():refTripMiles(),k=d.rkm!=null?d.rkm:d.rtm,v=String(t.value).replace(/[,mi ]/g,'').trim();
+    pushUndo(null);if(v==='')delete m[k];else m[k]=r2(n0(v));save();
+    setTimeout(()=>{const ae=document.activeElement,a=ae&&ae.dataset?(ae.dataset.rkm!=null?['rkm',ae.dataset.rkm]:ae.dataset.rtm!=null?['rtm',ae.dataset.rtm]:null):null;
+      render();const det=document.querySelector('.ref-miles');if(det&&d.rkm!=null)det.open=true;
+      if(a){const n=document.querySelector(`[data-${a[0]}="${CSS.escape(a[1])}"]`);if(n)n.focus({preventScroll:true})}},0);
     return;
   }
   if(d.rx){
