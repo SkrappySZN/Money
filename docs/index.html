@@ -4674,8 +4674,11 @@ function refDivFor(level,league){
   }
   if(/USPHL/.test(L+' '+G))return find('hs',r=>has(r.div,'USPHL')&&(/NCDC/.test(L)?has(r.div,'NCDC'):has(r.div,'PREMIER')));
   if(/\bACHA\b/.test(L+' '+G))return find('hs',r=>r.div.toUpperCase()==='ACHA');
-  const m=L.replace(/\s+/g,'').match(/(\d{1,2})U(AAA|AA|BB|A|B)?/);
-  if(!m||!/SCAHA|CAHA/.test(L+' '+G))return'';
+  /* the tier must end at a word break, so "10U A Doughty" is A and
+     "10U AA Avalanche" is AA. A youth level with no league named (the portal
+     often leaves it off) is read as SCAHA, the league these games mostly are. */
+  const m=L.match(/(\d{1,2})\s*U\s*(AAA|AA|BB|A|B)?\b/);
+  if(!m)return'';
   const age=+m[1],tier=m[2]||'';
   const fits=r=>{const d=r.div.toUpperCase().replace(/\(.*\)/,'');
     const ages=[...d.matchAll(/(\d{1,2})U/g)].map(x=>+x[1]);if(!ages.includes(age))return false;
