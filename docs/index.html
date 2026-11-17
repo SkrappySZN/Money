@@ -1479,6 +1479,10 @@ html[data-look="ledger"] .legacy .card{border-radius:2px}
 .f-note,.f-fee{color:var(--ink-muted);font-size:12px}
 .f-notes{margin:24px 0 0;padding-left:1.2em;color:var(--ink-muted);font-size:13px;max-width:80ch}
 .f-notes li{margin-bottom:4px}
+.f-tax{margin-top:64px;border-top:1px solid var(--rule-strong);padding-top:20px}
+.f-taxtop{margin-bottom:24px}
+.f-taxtop .h-h2{margin:0}
+.f-exp{margin-top:28px}
 
 /* ── Accounts (ledger look) ───────────────────────────────────────── */
 .a-sec{margin-top:64px}
@@ -4508,6 +4512,19 @@ const refFeeFor=key=>{const x=rateRow(key);return !x||x.r.noFee?0:n0(x.r.fee!=nu
 const refLevelName=key=>{const x=rateRow(key);return x?`${x.g.league?x.g.league+' ':''}${x.r.div}`:''};
 const seasonOf=d=>{const y=+d.slice(0,4),m=+d.slice(5,7);return m>=9?y:y-1};
 const seasonLabel=y=>`${y}–${String(y+1).slice(2)}`;
+/* Tax records. Taxes run on the calendar year, not the season, and count pay
+   when it arrives — so a game counts in the year it was paid (the day its box
+   was ticked; the game date when that was never recorded). Expenses are what
+   the reffing cost: registration, background checks, gear, mileage. */
+const REF_EXP_CATS=['Registration & certification','Background check','Gear & uniform','Mileage & travel','Other'];
+const refExpenses=()=>{const R=S.reffing=S.reffing||{games:[]};return R.expenses=R.expenses||[]};
+const refRecvDate=g=>g.paidOn||g.date;
+function refTaxYear(y){
+  const recv=refGames().filter(g=>g.paid&&refRecvDate(g).startsWith(y+'')).sort((a,b)=>refRecvDate(a).localeCompare(refRecvDate(b)));
+  const exp=refExpenses().filter(e=>(e.date||'').startsWith(y+'')).sort((a,b)=>a.date.localeCompare(b.date)||a.id.localeCompare(b.id));
+  const income=r2(recv.reduce((t,g)=>t+n0(g.rate),0)),spent=r2(exp.reduce((t,e)=>t+n0(e.amount),0));
+  return{recv,exp,income,spent,net:r2(income-spent)};
+}
 function viewReffing(el){
   const games=refGames();
   const today=iso(new Date());
@@ -4565,6 +4582,41 @@ function viewReffing(el){
     <datalist id="refLevels">${[...new Set(games.map(g=>g.level).filter(Boolean))].map(x=>`<option value="${esc(x)}">`).join('')}</datalist>
   </section>
 
+  ${(()=>{const cy=+today.slice(0,4);
+    const years=[...new Set([cy,...games.filter(g=>g.paid).map(g=>+refRecvDate(g).slice(0,4)),...refExpenses().map(e=>+(e.date||today).slice(0,4))])].sort((a,b)=>a-b);
+    const ty=UI.refTaxYear!=null&&years.includes(+UI.refTaxYear)?+UI.refTaxYear:cy,j=years.indexOf(ty),T=refTaxYear(ty);
+    const erow=e=>`<tr>
+      <td><input class="l-in" type="date" data-rx="${e.id}:date" value="${e.date}" aria-label="Date"></td>
+      <td><input class="l-in f-tx" data-rx="${e.id}:what" value="${esc(e.what||'')}" aria-label="What"></td>
+      <td><select class="f-sel" data-rx="${e.id}:cat" aria-label="Category">${REF_EXP_CATS.map(c=>`<option ${c===e.cat?'selected':''}>${esc(c)}</option>`).join('')}</select></td>
+      <td class="r"><input class="l-in f-rate" data-rx="${e.id}:amount" inputmode="decimal" value="${money(n0(e.amount))}" aria-label="Amount"></td>
+      <td><input class="l-in f-tx" data-rx="${e.id}:note" value="${esc(e.note||'')}" placeholder="receipt, confirmation #" aria-label="Note"></td>
+      <td class="r"><button class="l-btn is-del" data-rxdel="${e.id}" title="Remove this expense — ⌘Z undoes it" aria-label="Remove expense">×</button></td></tr>`;
+    return `<section class="h-sec f-tax">
+    <div class="h-top f-taxtop">
+      <div><h2 class="h-h2">Taxes</h2>
+        <div class="h-d">${ty} tax year · January to December · pay counts when it arrives</div></div>
+      <div class="h-act">
+        <button class="ctl" data-reftaxyear="${years[j-1]??''}" aria-label="Previous year" ${j<=0?'disabled':''}>←</button>
+        <button class="ctl" data-reftaxyear="${years[j+1]??''}" aria-label="Next year" ${j>=years.length-1?'disabled':''}>→</button>
+        <button class="ctl" data-act="addrefexp">+ Expense</button>
+        <button class="ctl" data-act="reftaxcsv" data-y="${ty}">Download ${ty}</button>
+      </div>
+    </div>
+    <div class="h-strip is-3">
+      <div class="h-fig"><div class="h-cap">Pay received</div><div class="h-v">${money(T.income)}</div>
+        <div class="h-n">${T.recv.length} game${T.recv.length===1?'':'s'} paid in ${ty}</div></div>
+      <div class="h-fig"><div class="h-cap">Expenses</div><div class="h-v">${money(T.spent)}</div>
+        <div class="h-n">${T.exp.length} item${T.exp.length===1?'':'s'}</div></div>
+      <div class="h-fig"><div class="h-cap">Net</div><div class="h-v">${money(T.net)}</div>
+        <div class="h-n">pay received less expenses</div></div>
+    </div>
+    ${T.exp.length?`<table class="h-tbl f-tbl f-exp">
+      <thead><tr><th>Date</th><th>What</th><th>Category</th><th class="r">Amount</th><th>Note</th><th></th></tr></thead>
+      <tbody>${T.exp.map(erow).join('')}</tbody></table>`
+      :`<p class="h-empty">No expenses in ${ty} yet. Add registration, background checks, gear and mileage with <b>+ Expense</b>.</p>`}
+  </section>`})()}
+
   <details class="f-det">
     <summary><span class="h-h2">Paste games</span><span class="h-cap">from the portal or the spreadsheet</span></summary>
     <textarea id="refPaste" class="f-paste" placeholder="Paste the games table from the LAHOA portal (timetoscore), or rows from the old spreadsheet — date, rink, level, rate and the payment checkbox. Headings and blank rows are skipped, and a game already here is never added twice."></textarea>
@@ -4587,6 +4639,37 @@ function viewReffing(el){
 </main>`;
 }
 
+function addRefExpense(){
+  modal(`<h3>Add a reffing expense</h3>
+    <div class="f2"><div class="fieldrow"><label for="reD">Date</label><input type="date" id="reD" value="${iso(new Date())}"></div>
+      <div class="fieldrow"><label for="reA">Amount</label><input id="reA" inputmode="decimal" placeholder="0.00"></div></div>
+    <div class="fieldrow"><label for="reW">What</label><input id="reW" placeholder="e.g. USA Hockey registration"></div>
+    <div class="fieldrow"><label for="reC">Category</label><select id="reC">${REF_EXP_CATS.map(c=>`<option>${esc(c)}</option>`).join('')}</select></div>
+    <div class="fieldrow"><label for="reN">Note</label><input id="reN" placeholder="receipt, confirmation number, where it's saved"></div>`,
+    'Add expense',()=>{
+      const date=$('#reD').value,amount=r2(n0(String($('#reA').value).replace(/[$,]/g,'')));
+      if(!date){toast('Needs a date');return false}
+      if(!$('#reW').value.trim()){toast('Say what it was');return false}
+      pushUndo(null);const es=refExpenses();
+      es.push({id:nextId(es,'x'),date,what:$('#reW').value.trim(),cat:$('#reC').value,amount,note:$('#reN').value.trim()});
+      UI.refTaxYear=+date.slice(0,4);save();render();toast('Expense added — ⌘Z to undo');
+    });
+}
+/* one file for whoever does the taxes: every game paid that year, every expense, the totals */
+function exportRefTax(y){
+  const T=refTaxYear(y),q=v=>`"${String(v??'').replace(/"/g,'""')}"`;
+  const L=[`Reffing — ${y} tax year`,'',
+    'PAY RECEIVED','Received,Game date,Rink,Level,Role,Amount',
+    ...T.recv.map(g=>[refRecvDate(g),g.date,q(g.rink),q(g.level),g.role==='lines'?'Linesperson':'Referee',n0(g.rate).toFixed(2)].join(',')),
+    `Total pay received,,,,,${T.income.toFixed(2)}`,'',
+    'EXPENSES','Date,What,Category,Amount,Note',
+    ...T.exp.map(e=>[e.date,q(e.what),q(e.cat),n0(e.amount).toFixed(2),q(e.note)].join(',')),
+    `Total expenses,,,${T.spent.toFixed(2)}`,'',
+    ...REF_EXP_CATS.map(c=>{const t=r2(T.exp.filter(e=>e.cat===c).reduce((s,e)=>s+n0(e.amount),0));return t?`${q(c)},,,${t.toFixed(2)}`:null}).filter(Boolean),
+    '',`Net,,,${T.net.toFixed(2)}`];
+  download(`reffing-taxes-${y}.csv`,L.join('\n'),'text/csv');
+  toast(`${y} tax records downloaded`);
+}
 /* the rate a level paid last time — at this rink if it has been reffed here */
 function refRateFor(rink,level){
   const g=refGames().filter(x=>x.level===level).sort((a,b)=>b.date.localeCompare(a.date));
@@ -6516,6 +6599,17 @@ document.addEventListener('change',e=>{
       render();if(key){const n=document.querySelector(`[data-rf="${CSS.escape(key)}"]`);if(n)n.focus({preventScroll:true})}},0);
     return;
   }
+  if(d.rx){
+    const[eid,field]=d.rx.split(':'),e=refExpenses().find(x=>x.id===eid);if(!e)return;
+    pushUndo(null);
+    if(field==='amount')e.amount=r2(n0(String(t.value).replace(/[$,]/g,'')));
+    else if(field==='date'){if(t.value)e.date=t.value}
+    else e[field]=t.value.trim();
+    save();
+    setTimeout(()=>{const ae=document.activeElement,key=ae&&ae.dataset?ae.dataset.rx:null;
+      render();if(key){const n=document.querySelector(`[data-rx="${CSS.escape(key)}"]`);if(n)n.focus({preventScroll:true})}},0);
+    return;
+  }
   if(d.wi){
     S.plan.whatIf=S.plan.whatIf||{};
     const car=S.plan.whatIf.carSale=S.plan.whatIf.carSale||{on:false,amount:12000,date:''};
@@ -6606,6 +6700,9 @@ document.addEventListener('click',e=>{
       const pay=g.div&&!g.rateManual?refPay(g.div,role,g.fee):null;if(pay!=null)g.rate=pay;
       save();render();toast(`${role==='ref'?'Referee':'Linesperson'} — ${money(n0(g.rate))}${pay==null&&g.rateManual?' (your rate kept)':''}`)}
     return}
+  if(d.reftaxyear!=null){if(d.reftaxyear!==''){UI.refTaxYear=+d.reftaxyear;render()}return}
+  if(d.rxdel){const es=refExpenses(),j=es.findIndex(e=>e.id===d.rxdel);
+    if(j>=0){pushUndo(null);es.splice(j,1);save();render();toast('Expense removed — ⌘Z to undo')}return}
   if(d.refdel){const gs=refGames(),j=gs.findIndex(g=>g.id===d.refdel);
     if(j>=0){pushUndo(null);gs.splice(j,1);save();render();toast('Game removed — ⌘Z to undo')}return}
   if(d.strat){UI.strategy=d.strat;render();return}
@@ -6654,6 +6751,8 @@ document.addEventListener('click',e=>{
     case'addacct':addAccount();break;
     case'addref':addRefGame();break;
     case'refimport':importRefGames();break;
+    case'addrefexp':addRefExpense();break;
+    case'reftaxcsv':exportRefTax(+d.y);break;
     case'refratesreset':confirmModal('Reset pay rates',`Every rate goes back to LAHOA's published ${LAHOA_RATES.season} figures. Games already logged keep what they were paid. ⌘Z undoes it.`,
       'Reset rates',()=>{pushUndo(null);S.reffing.rates=JSON.parse(JSON.stringify(LAHOA_RATES));save();render();toast('Rates reset')});break;
     case'export':exportBackup();break;
