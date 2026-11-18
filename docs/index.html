@@ -1176,9 +1176,10 @@ html[data-look="ledger"] input,html[data-look="ledger"] select,html[data-look="l
 .h-d{font-family:var(--font-display);font-style:italic;color:var(--ink-muted);font-size:16px}
 .h-act{display:flex;gap:10px;align-items:center}
 .h-strip{display:grid;grid-template-columns:1.25fr 1fr 1fr 1.1fr;border-top:2px solid var(--ink);border-bottom:1px solid var(--rule)}
-.h-fig{padding:28px 32px 30px 0;border-right:1px solid var(--rule);min-width:0}
+.h-fig{padding:28px 32px 30px 0;border-right:1px solid var(--rule);min-width:0;container-type:inline-size}
 .h-fig+.h-fig{padding-left:32px}.h-fig:last-child{border-right:0}
-.h-v{font-family:var(--font-display);font-size:46px;line-height:1.05;margin:14px 0 12px;letter-spacing:-.01em;display:flex;align-items:baseline;white-space:nowrap}
+/* shrinks with its column, so a narrow window never runs one figure into the next */
+.h-v{font-family:var(--font-display);font-size:min(46px,17cqi);line-height:1.05;margin:14px 0 12px;letter-spacing:-.01em;display:flex;align-items:baseline;white-space:nowrap}
 .h-v.is-brass{color:var(--brass,var(--attention))}
 .h-mark{font-size:46px}
 .h-in{font:inherit;color:inherit;background:none;border:0;border-bottom:1px dashed transparent;padding:0;min-width:3ch}
@@ -3528,7 +3529,7 @@ function viewWeek(el){
   <div class="h-strip">
     <div class="h-fig"><div class="h-cap">This paycheck</div>
       <div class="h-v"><span class="h-mark">$</span><input data-k="income" class="h-in"
-        style="${figureWidth(n0(S.weeks[k].income).toFixed(2))}" value="${n0(S.weeks[k].income).toFixed(2)}" aria-label="Paycheck in"></div>
+        style="width:${(chSpan(n0(S.weeks[k].income).toFixed(2))+1).toFixed(2)}ch;field-sizing:content" value="${n0(S.weeks[k].income).toFixed(2)}" aria-label="Paycheck in"></div>
       <div class="h-n">${off<0.005?'<span class="h-stamp is-ok">Balanced</span> every dollar has a job'
         :T.unallocated>0?`<span class="h-stamp is-warn">${money(off)} unassigned</span>`
         :`<span class="h-stamp is-bad">Over by ${money(off)}</span>`}</div></div>
@@ -7109,14 +7110,34 @@ async function sb(path,opts={},auth=true){
   if(auth&&SESSION)h.Authorization='Bearer '+SESSION.access_token;
   return fetch(base()+path,{...opts,headers:h});
 }
+/* Refresh tokens rotate: each refresh retires the one it used. Two tabs (or
+   two calls in one tab) refreshing with the same token used to make the loser
+   sign every tab out, and so did any server or network hiccup. Now one refresh
+   runs at a time across tabs, a tab first takes a newer session another tab
+   already stored, and only a real rejection of the newest token signs out. */
+const storedSession=()=>{try{return JSON.parse(localStorage.getItem(SESSKEY)||'null')}catch(e){return null}};
 async function ensureToken(){
   if(!SESSION)return false;
   if(Date.now()<SESSION.expires_at-60000)return true;
-  const r=await sb('/auth/v1/token?grant_type=refresh_token',
-    {method:'POST',body:JSON.stringify({refresh_token:SESSION.refresh_token})},false);
-  if(!r.ok){SESSION=null;saveSession();return false}
-  setSession(await r.json());return true;
+  const run=async()=>{
+    const fresh=storedSession();
+    if(fresh&&fresh.refresh_token&&fresh.refresh_token!==SESSION.refresh_token){
+      SESSION=fresh;if(Date.now()<SESSION.expires_at-60000)return true}
+    let r;
+    try{r=await sb('/auth/v1/token?grant_type=refresh_token',
+      {method:'POST',body:JSON.stringify({refresh_token:SESSION.refresh_token})},false)}
+    catch(e){return true}                                  /* offline: keep the session */
+    if(r.ok){setSession(await r.json());return true}
+    const again=storedSession();
+    if(again&&again.refresh_token&&again.refresh_token!==SESSION.refresh_token){SESSION=again;return true}
+    if(r.status!==400&&r.status!==401)return true;         /* server trouble, not a bad token */
+    try{localStorage.setItem('ccb.authlog',JSON.stringify({at:new Date().toISOString(),status:r.status,body:(await r.text()).slice(0,300)}))}catch(e){}
+    SESSION=null;saveSession();return false;
+  };
+  return navigator.locks?navigator.locks.request('ccb-auth-refresh',run):run();
 }
+/* a session refreshed or ended in another tab is this tab's too */
+window.addEventListener('storage',e=>{if(e.key===SESSKEY)loadSession()});
 /* a magic link comes back with the tokens in the URL fragment */
 function consumeAuthHash(){
   if(!location.hash||location.hash.indexOf('access_token=')<0)return false;
