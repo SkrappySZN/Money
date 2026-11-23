@@ -6408,11 +6408,20 @@ function newWeek(){
       const met=n0(r.minAmt)>0.005&&paidSinceClose(last,r)+0.005>=n0(r.minAmt);
       const clear=n0(r.balance)>0.005&&n0(r.after)<=0.005;
       /* No minimum typed (a card paid by its statement balance): a payment on
-         the last sheet counts as handling that statement — but only once the
-         statement is out, i.e. the next close is already past this due date.
-         A due whose statement has not closed yet stays put. */
-      const paidNoMin=!(n0(r.minAmt)>0.005)&&r.close&&r.close>r.due&&sentOn(last,a.id)>0.005;
-      if(met||clear||paidNoMin)e.due=nextDue(r.due,a);
+         the last sheet counts as handling that statement. */
+      const paidNoMin=!(n0(r.minAmt)>0.005)&&sentOn(last,a.id)>0.005;
+      /* Whatever the reason, the due date only moves once the statement it
+         belongs to has closed. The last close on or before that sheet's payday
+         is the statement just out; a due within a month after it is that
+         statement's. A due further out belongs to a statement still open
+         (typed ahead for a card paid in full), and paying the card off before
+         it closes must not push it another month. */
+      let closed=true;
+      if(r.close){
+        const pay=paydayOf(last),prev=r.close<=pay?r.close:shiftMonth(r.close,-1);
+        const gap=daysBetween(prev,r.due);closed=gap>0&&gap<=31;
+      }
+      if((met||clear||paidNoMin)&&closed)e.due=nextDue(r.due,a);
     }
     entries[a.id]=e;
   }
