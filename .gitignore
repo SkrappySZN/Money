@@ -16,3 +16,5 @@
 *.backup.json
 money-backup-*.json
 money-*.csv
+# Personal records (insurance confirmations, etc.). Never commit.
+/records/
