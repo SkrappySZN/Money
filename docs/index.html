@@ -3093,8 +3093,18 @@ function stepFireWeek(st,fromWeek){
     /* `targetShort` is measured after this week's contribution, and week 0 of
        a simulation is this week — so the contributions still needed fill weeks
        1..n, and the money frees in the week after the last of them. Returning
-       n freed it a week early, while that week's deposit was still owed. */
-    if(r&&r.total>0)return Math.ceil(r.targetShort/r.total-1e-9)+1;
+       n freed it a week early, while that week's deposit was still owed.
+       Those weeks are paid at what the Plan tab says the fund gets from each
+       date, not this sheet's figure: a fund paused at $0 on the sheet and
+       restarted by a dated change was read as never filling, and on
+       2026-11-25 that dropped the buffer's $50/wk from the projection for good
+       and moved debt free from Jun to Jul 2028. */
+    if(!r)return null;
+    const TW=typicalWeek(fromWeek);
+    const at=w=>TW?n0(TW.at(tr.acct,w)):n0(r.total);
+    let short=n0(r.targetShort);
+    if(short<=0.005)return 1;
+    for(let w=1;w<=1040;w++){short-=at(w);if(short<=0.005)return w+1}
     return null;
   }
   return null;
