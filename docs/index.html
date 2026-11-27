@@ -6421,7 +6421,15 @@ function newWeek(){
         const pay=paydayOf(last),prev=r.close<=pay?r.close:shiftMonth(r.close,-1);
         const gap=daysBetween(prev,r.due);closed=gap>0&&gap<=31;
       }
-      if((met||clear||paidNoMin)&&closed)e.due=nextDue(r.due,a);
+      if((met||clear||paidNoMin)&&closed){
+        e.due=nextDue(r.due,a);
+        /* The Min carried from last week paid the statement just handled. The
+           next statement has not closed, so nothing is owed on it yet: carrying
+           the payment asked for the same minimum twice, and clearing Min /mo by
+           hand to stop it left the projection with no minimum on the card. Min
+           /mo stays as the estimate until the next statement's figure is typed. */
+        e.min=0;
+      }
     }
     entries[a.id]=e;
   }
